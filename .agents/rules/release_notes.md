@@ -19,20 +19,15 @@ trigger: always_on
 ```
 ### Install
 
-If you are on an older version that doesn't have built-in updates or you haven't tried it yet, get it here: https://github.com/ultimatejimmy/koreader-xray-plugin
+If you are on an older version that doesn't have built-in updates or you haven't tried it yet, get it here: https://github.com/cjtqntbmv2-arch/koreader-xray
 
-Here's the direct link the releases: https://github.com/ultimatejimmy/koreader-xray-plugin/releases
+Here's the direct link the releases: https://github.com/cjtqntbmv2-arch/koreader-xray/releases
 
 ### Feedback
 
 I'm always open to feedback. If you have ideas or issues, you can let me know. GitHub is ideal so things don't get missed:
 
-- [GitHub issue tracker](https://github.com/ultimatejimmy/koreader-xray-plugin/issues)
-- [GitHub ideas](https://github.com/ultimatejimmy/koreader-xray-plugin/discussions/categories/ideas)
+- [GitHub issue tracker](https://github.com/cjtqntbmv2-arch/koreader-xray/issues)
 
-I will also respond on Reddit or via Reddit chats. 
-
-### Support me
-
-I do this work for free, but if you want, you can support me via [liberapay](https://liberapay.com/ultimatejimmy) or [Buy me a coffee](https://www.buymeacoffee.com/ultimatejimmy)
+I will also respond on Reddit or via Reddit chats.
 ```

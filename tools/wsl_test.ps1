@@ -27,7 +27,7 @@ $SyntaxScript = "tools/check_syntax.py"
 $SquashPath = ""
 $UserNameLower = $env:USERNAME.ToLower()
 $ProbedPaths = @(
-    "/home/jimmy/squashfs-root",
+    "/home/user/squashfs-root",
     "/home/$env:USERNAME/squashfs-root",
     "/home/$UserNameLower/squashfs-root",
     "/mnt/c/Users/$env:USERNAME/squashfs-root",
@@ -41,7 +41,7 @@ foreach ($path in $ProbedPaths) {
     }
 }
 if (-not $SquashPath) {
-    $SquashPath = "/home/jimmy/squashfs-root"
+    $SquashPath = "/home/user/squashfs-root"
 }
 Write-Host "Using KOReader installation path: $SquashPath" -ForegroundColor Yellow
 

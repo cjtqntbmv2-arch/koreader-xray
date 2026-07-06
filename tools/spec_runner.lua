@@ -1,4 +1,4 @@
-local squashfs_root = os.getenv("SQUASHFS_ROOT") or "/home/jimmy/squashfs-root"
+local squashfs_root = os.getenv("SQUASHFS_ROOT") or "/home/user/squashfs-root"
 package.path = package.path .. ";" .. squashfs_root .. "/usr/lib/koreader/common/?.lua;" .. squashfs_root .. "/usr/lib/koreader/?.lua;xray.koplugin/?.lua;?.lua"
 
 local stats = { passed = 0, failed = 0, errors = {} }

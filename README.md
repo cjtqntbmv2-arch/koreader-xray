@@ -1,14 +1,10 @@
 # X-Ray Plugin for KOReader
 
+![version](https://img.shields.io/badge/version-26.7.4-blue)
 ![Platform](https://img.shields.io/badge/platform-KOReader-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-yellow.svg)
 
 This plugin brings Kindle-style X-Ray features to KOReader. It uses AI to track characters, build plot timelines, and provide insights while you read.
-
-<p align="center">
-  <img src="https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/img/menu_main.png" width="45%" />
-  <img src="https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/img/character_detail.png" width="45%" />
-</p>
 
 ## What it does
 
@@ -24,24 +20,18 @@ This plugin brings Kindle-style X-Ray features to KOReader. It uses AI to track 
 - **X-Ray Mode & Inline Fetching**: Get instant lookups by tapping the "X-Ray" button in dictionary or selection popups. If an entity is missing, the plugin can fetch it on-the-fly using AI without requiring a full book scan.
 - **Silent Weekly Updates**: Automatically checks for new plugin versions in the background once a week.
 - **Offline First**: You only need internet to fetch the data. After that, it's saved locally.
-- **Multilingual**: Available in English, German, French, Spanish, Brazilian Portuguese, Russian, Ukrainian, Turkish, Simplified Chinese, Indonesian, Arabic, and Italian.
+- **Multilingual**: Available in English, Arabic, Dutch, French, German, Hungarian, Indonesian, Italian, Polish, Brazilian Portuguese, Russian, Serbian, Simplified Chinese, Spanish, Turkish, and Ukrainian.
 
-## Documentation
+## Installation
 
-For full setup instructions and a deep dive into features, check out the **[GitHub Wiki](https://github.com/ultimatejimmy/koreader-xray-plugin/wiki)**.
+1. Download `xray.koplugin.zip` from the [latest release](https://github.com/cjtqntbmv2-arch/koreader-xray/releases/latest).
+2. Extract it into KOReader's `plugins/` folder, so you end up with `plugins/xray.koplugin/`.
+3. Restart KOReader.
 
-- **[Get Started](https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/1.-Get-Started)**: Installation and API key setup.
-- **[Core Content & Features](https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/2.-Core-Features)**: Characters, Timeline, Glossary, and Series recap.
-- **[Lookups & Navigation](https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/3.-Lookups-&-Navigation)**: In-text lookups, footnote popup UI, Gestures, and Mention scanning.
-- **[Data Management & Settings](https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/4.-Data-Management)**: Merging duplicates, verbosity settings, and language localization.
-- **[AI Providers & Models](https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/5.-AI-Providers-&-Models)**: Supported APIs, models, and reasoning effort.
-- **[Spoiler Protection](https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/6.-Spoiler-Protection)**: How we keep the story safe.
-- **[Fetching Data](https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/7.-Fetching)**: Background fetching, manual fetching, and targeted lookups.
-- **[Advanced Configuration & Maintenance](https://github.com/ultimatejimmy/koreader-xray-plugin/wiki/Advanced-Usage)**: Custom endpoints, config files, formats, logs, and maintenance tools.
+## Setup
 
-## Support me
+Open a book and pick X-Ray from the reader menu. On first use the plugin walks you through storing an API key for your preferred AI provider (Gemini, OpenAI, DeepSeek, Claude, or a custom OpenAI/Anthropic-compatible endpoint). Keys are stored on-device in `xray_config.lua` and survive plugin updates.
 
-[liberapay](https://liberapay.com/ultimatejimmy) ![liberapay](https://img.shields.io/liberapay/patrons/ultimatejimmy.svg?logo=liberapay) 
+## Credits
 
-[Buy me a coffee](https://www.buymeacoffee.com/ultimatejimmy)
-
+Based on [koreader-xray-plugin](https://github.com/ultimatejimmy/koreader-xray-plugin) by Jimmy Pautz (MIT).
