@@ -181,6 +181,20 @@ function M:startOfflinePrefetch(is_silent)
     self:_prefetchNext()
 end
 
+-- Auto mode (D3, opt-in via setting): silently start the prefetch when the
+-- book is not fully prepared yet. Called from onReaderReady and
+-- onNetworkConnected; at most one attempt per book and session. Network and
+-- API-key guards live in startOfflinePrefetch.
+function M:maybeStartAutoPrefetch()
+    local s = self.ai_helper and self.ai_helper.settings or {}
+    if s.offline_prefetch_auto ~= true then return end
+    if self.auto_prefetch_attempted then return end
+    if self.prefetch_active or self.bg_fetch_active or self.bg_fetch_pending then return end
+    if self:isPrefetchComplete() then return end
+    self.auto_prefetch_attempted = true
+    self:startOfflinePrefetch(true)
+end
+
 -- Find the first open checkpoint: no snapshot file yet AND its page lies above
 -- the already fetched data boundary. Checkpoints at or below the boundary can
 -- no longer be snapshotted without a context leak (the merged data already

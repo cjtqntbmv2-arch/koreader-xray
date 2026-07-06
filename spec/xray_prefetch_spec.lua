@@ -294,6 +294,57 @@ describe("xray_prefetch", function()
         end)
     end)
 
+    describe("maybeStartAutoPrefetch", function()
+        local function makeAutoPlugin()
+            local plugin = createMockPlugin()
+            for k, v in pairs(prefetch) do
+                plugin[k] = v
+            end
+            plugin.book_data = {}
+            plugin._spec_starts = {}
+            plugin.startOfflinePrefetch = function(self, silent)
+                table.insert(self._spec_starts, silent)
+            end
+            plugin.ai_helper = { settings = { offline_prefetch_auto = true } }
+            return plugin
+        end
+
+        it("does nothing when the setting is off", function()
+            local plugin = makeAutoPlugin()
+            plugin.ai_helper.settings.offline_prefetch_auto = nil
+            plugin:maybeStartAutoPrefetch()
+            assert.are.equal(0, #plugin._spec_starts)
+        end)
+
+        it("does nothing when the prefetch is already complete", function()
+            local plugin = makeAutoPlugin()
+            plugin.book_data.prefetch = { checkpoints = {}, completed = true }
+            plugin:maybeStartAutoPrefetch()
+            assert.are.equal(0, #plugin._spec_starts)
+        end)
+
+        it("does nothing while a fetch or prefetch is running", function()
+            local plugin = makeAutoPlugin()
+            plugin.bg_fetch_active = true
+            plugin:maybeStartAutoPrefetch()
+            assert.are.equal(0, #plugin._spec_starts)
+        end)
+
+        it("runs at most once per book and session", function()
+            local plugin = makeAutoPlugin()
+            plugin:maybeStartAutoPrefetch()
+            plugin:maybeStartAutoPrefetch()
+            assert.are.equal(1, #plugin._spec_starts)
+        end)
+
+        it("starts a silent prefetch when all guards pass", function()
+            local plugin = makeAutoPlugin()
+            plugin:maybeStartAutoPrefetch()
+            assert.are.equal(1, #plugin._spec_starts)
+            assert.is_true(plugin._spec_starts[1])
+        end)
+    end)
+
     describe("snapshot resolution", function()
         local function makeViewPlugin(existing)
             local plugin = createMockPlugin()

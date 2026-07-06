@@ -533,6 +533,12 @@ msgstr "Обслуговування"
 msgid "menu_mentions_settings"
 msgstr "Налаштування згадок"
 
+msgid "menu_prefetch_auto"
+msgstr "Auto-prepare for offline when online"
+
+msgid "menu_prefetch_offline"
+msgstr "Prepare book for offline reading"
+
 msgid "menu_primary_ai_model"
 msgstr "Основна модель ШІ"
 
@@ -676,6 +682,39 @@ msgstr "ШІ знайшов %d потенційних дублікатів з м
 
 msgid "plugin_description"
 msgstr "Перетворіть свій досвід читання за допомогою аналізу книг на основі ШІ, як в Amazon Kindle X-Ray!"
+
+msgid "prefetch_already_done"
+msgstr "This book is already prepared for offline reading."
+
+msgid "prefetch_busy"
+msgstr "A fetch is already running. Try again in a moment."
+
+msgid "prefetch_cancelled_msg"
+msgstr "Cancelled. %d of %d checkpoints kept - will resume next time."
+
+msgid "prefetch_done"
+msgstr "Book is ready for offline reading."
+
+msgid "prefetch_failed"
+msgstr "Could not analyze the book structure."
+
+msgid "prefetch_no_key"
+msgstr "No API key configured."
+
+msgid "prefetch_offline"
+msgstr "No internet connection."
+
+msgid "prefetch_partial"
+msgstr "Interrupted. %d of %d checkpoints done - will resume next time."
+
+msgid "prefetch_position_covered"
+msgstr "This position is already covered by offline X-Ray data. Clear the cache to re-fetch."
+
+msgid "prefetch_progress"
+msgstr "Preparing for offline reading - checkpoint %d of %d"
+
+msgid "prefetch_progress_hint"
+msgstr "You can keep reading. Cancel stops after the current checkpoint."
 
 msgid "quick_menu_title"
 msgstr "Швидке меню X-Ray"

@@ -335,6 +335,12 @@ function XRayPlugin:onReaderReady()
         self:checkSeriesContext()
     end)
 
+    -- Auto offline-prefetch (opt-in setting, D3)
+    UIManager:scheduleIn(20, function()
+        if self.destroyed then return end
+        if self.maybeStartAutoPrefetch then self:maybeStartAutoPrefetch() end
+    end)
+
     -- Enforce X-Ray as the first item in the Tools menu for all KOReader versions
     UIManager:scheduleIn(1, function()
         if self.destroyed then return end
@@ -360,6 +366,11 @@ function XRayPlugin:onNetworkConnected()
     UIManager:scheduleIn(2, function()
         if self.destroyed then return end
         self:checkSeriesContext()
+    end)
+    -- Auto offline-prefetch: WiFi just appeared mid-session (D3)
+    UIManager:scheduleIn(4, function()
+        if self.destroyed then return end
+        if self.maybeStartAutoPrefetch then self:maybeStartAutoPrefetch() end
     end)
 end
 
@@ -859,6 +870,21 @@ function XRayPlugin:getSubMenuItems()
                                 callback = function() self:showAutoDupeCheckSettings() end,
                             },
                         }
+                    },
+                    {
+                        text = self.loc:t("menu_prefetch_offline") or "Prepare book for offline reading",
+                        callback = function() self:startOfflinePrefetch(false) end,
+                    },
+                    {
+                        text = self.loc:t("menu_prefetch_auto") or "Auto-prepare for offline when online",
+                        keep_menu_open = true,
+                        checked_func = function()
+                            return (self.ai_helper.settings and self.ai_helper.settings.offline_prefetch_auto) == true
+                        end,
+                        callback = function()
+                            local cur = (self.ai_helper.settings and self.ai_helper.settings.offline_prefetch_auto) == true
+                            self.ai_helper:saveSettings({ offline_prefetch_auto = not cur })
+                        end,
                     },
                     {
                         text = self.loc:t("menu_book_mode") or "Book Type",
