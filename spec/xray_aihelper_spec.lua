@@ -236,4 +236,29 @@ describe("AIHelper", function()
             assert.is_nil(decoded.also_delete_me)
         end)
     end)
+
+    describe("createPrompt character rules", function()
+        setup(function()
+            -- Templates HART laden (Runner läuft im Repo-Root): createPrompt hat keinen
+            -- loadLanguage-Guard; mit `or` hinge der Testausgang an der Spec-Reihenfolge
+            -- (Crash statt sauberem Fail, wenn .prompts noch nil ist).
+            AIHelper.prompts = dofile("xray.koplugin/prompts/en.lua")
+        end)
+
+        it("appends completeness and name disambiguation rules for comprehensive_xray", function()
+            local prompt = AIHelper:createPrompt("T", "A", { book_text = "text", reading_percent = 50 }, "comprehensive_xray")
+            assert.is_true(prompt:find("CHARACTER COMPLETENESS RULES", 1, true) ~= nil)
+            assert.is_true(prompt:find("NAME DISAMBIGUATION RULES", 1, true) ~= nil)
+        end)
+
+        it("does not append segment mode without the flag", function()
+            local prompt = AIHelper:createPrompt("T", "A", { book_text = "text", reading_percent = 50 }, "comprehensive_xray")
+            assert.is_true(prompt:find("SEGMENT COMPLETENESS MODE", 1, true) == nil)
+        end)
+
+        it("does not append character rules for other sections", function()
+            local prompt = AIHelper:createPrompt("T", "A", { book_text = "text", reading_percent = 50 }, "more_terms")
+            assert.is_true(prompt:find("CHARACTER COMPLETENESS RULES", 1, true) == nil)
+        end)
+    end)
 end)

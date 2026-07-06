@@ -1401,6 +1401,17 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
     if section_name == "comprehensive_xray" or section_name == "more_terms" then
         extra_context = extra_context .. "\n- For each term, provide up to 3 alternative names, acronyms, or synonyms in an 'aliases' array. CRITICAL: These aliases MUST be variations or names that actually appear in the provided book text; do not hallucinate external synonyms."
     end
+    if section_name == "comprehensive_xray" then
+        extra_context = extra_context
+            .. "\n\nCHARACTER COMPLETENESS RULES:"
+            .. "\n- A character is ANY figure who speaks or acts in the provided text, explicitly including minor characters with only a single scene."
+            .. "\n- Do NOT create entries for figures that appear only in enumerations, genealogies, family trees, or passing mentions."
+            .. "\n- If output space runs short, prioritize by importance and shorten minor characters' descriptions first."
+            .. "\n\nNAME DISAMBIGUATION RULES:"
+            .. "\n- Different characters may share the same name (dynasties, relatives). ALWAYS use a distinguishing canonical name for each (numeral, epithet, or seat, e.g. \"Aegon II Targaryen\", \"Walder Frey, Lord of the Crossing\")."
+            .. "\n- NEVER list the bare shared name as an alias for any of these characters (this overrides the general guidance to include the common first name as an alias)."
+            .. "\n- Treat a newly found character as an already-known one ONLY if the text clearly refers to the same person; otherwise create a separate, disambiguated entry."
+    end
     if not success then final_prompt = string.format("Extract %s data.", section_name) end
     if #extra_context > 0 then
         final_prompt = final_prompt .. extra_context .. (self.prompts and self.prompts.context_footer or "")
