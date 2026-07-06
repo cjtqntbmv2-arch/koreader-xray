@@ -178,6 +178,22 @@ describe("fetchSingleWord snapshot guard", function()
         assert.are.equal(1, info_shown)
         assert.is_false(network_called)
     end)
+
+    it("runs the lookup fetch when no snapshot view is active", function()
+        local fetch = require("xray_fetch")
+        local plugin = createMockPlugin()
+        for k, v in pairs(fetch) do plugin[k] = v end
+        plugin.active_snapshot_index = nil
+        local info_shown = 0
+        plugin.showPrefetchInfo = function() info_shown = info_shown + 1 end
+        local network_called = false
+        package.loaded["ui/network/manager"] = {
+            runWhenOnline = function(_, cb) network_called = true end,
+        }
+        plugin:fetchSingleWord("Gandalf")
+        assert.are.equal(0, info_shown)
+        assert.is_true(network_called)
+    end)
 end)
 
 describe("manual fetch concurrency guard", function()

@@ -884,6 +884,9 @@ msgstr "Ошибка загрузки: %s"
 msgid "updater_err_extract"
 msgstr "Ошибка распаковки: %s"
 
+msgid "updater_err_zip"
+msgstr "Corrupted update file: %s"
+
 msgid "updater_error_checking"
 msgstr "Ошибка при проверке обновлений."
 

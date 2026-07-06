@@ -449,7 +449,7 @@ local function _applyUpdate(download_url, new_version)
         local test_ret = os.execute(string.format("unzip -tqq %q >/dev/null 2>&1", tmp_zip))
         if test_ret ~= 0 and test_ret ~= true then
             os.remove(tmp_zip)
-            return { success = false, stage = "download", err = "corrupted download (zip integrity test failed)" }
+            return { success = false, stage = "zip", err = "corrupted download (zip integrity test failed)" }
         end
 
         -- 3. Extract (overwrites xray_config.lua with the default one)
@@ -503,6 +503,8 @@ local function _applyUpdate(download_url, new_version)
             logger.err("xray updater: failed at", stage, "-", err)
             if stage == "download" then
                 _toast(t("updater_err_download", tostring(err)))
+            elseif stage == "zip" then
+                _toast(t("updater_err_zip", tostring(err)))
             else
                 _toast(t("updater_err_extract", tostring(err)))
             end

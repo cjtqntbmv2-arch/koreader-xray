@@ -241,6 +241,7 @@ function Localization:t(key, ...)
             updater_btn_download = "Download and install",
             updater_downloading = "Downloading X-Ray %s...",
             updater_err_download = "Download error: %s",
+            updater_err_zip = "Corrupted update file: %s",
             updater_err_extract = "Extraction error: %s",
             updater_success_restart = "X-Ray %s successfully installed.\n\nRestart KOReader to apply the update?",
             updater_btn_restart = "Restart",
