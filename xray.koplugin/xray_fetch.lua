@@ -65,6 +65,7 @@ function M:updateFromAI()
 end
 
 function M:fetchSingleWord(text, pos0, pos1)
+    if self:guardSnapshotViewActive() then return end
     require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / (self.ui.document:getPageCount() or 1)) * 100)
@@ -210,24 +211,10 @@ function M:fetchSingleWord(text, pos0, pos1)
                         table.insert(target_list, item)
                     end
                     
-                    -- Sort and save cache
+                    -- Sort and save via the D4 displayed-dataset rule: a
+                    -- snapshot view must never overwrite the main cache.
                     self:sortDataByFrequency(target_list, book_text, "name")
-                    if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
-                    
-                    if not self.book_data then
-                        self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
-                    end
-                    local updated = self.book_data
-                    updated.characters = self.characters
-                    updated.locations = self.locations
-                    updated.historical_figures = self.historical_figures
-                    updated.terms = self.terms
-                    updated.timeline = self.timeline
-                    updated.book_type = self.book_type or updated.book_type
-                    updated.author_info = self.author_info or updated.author_info
-                    updated.last_fetch_page = updated.last_fetch_page
-                    
-                    self.cache_manager:asyncSaveCache(self.ui.document.file, updated)
+                    self:persistDisplayedEntities()
                 end
                 
                 -- Always show result if it's valid, even if it didn't merge into a target_list
