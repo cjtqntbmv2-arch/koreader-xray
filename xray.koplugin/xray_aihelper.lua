@@ -401,9 +401,11 @@ function AIHelper:buildComprehensiveRequest(title, author, context, prompt_overr
                 body = json.encode(req_body)
             end
             table.insert(requests, { url = url, headers = headers, body = body, provider = ai.provider, model = ai.model })
+        else
+            self:log("AIHelper: Skipping provider " .. tostring(ai.provider) .. " - no API key configured")
         end
     end
-    
+
     if #requests > 0 then
         return requests
     end

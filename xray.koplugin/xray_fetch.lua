@@ -273,6 +273,11 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
     local title = sanitizeMetadata(props.title)
     local author = sanitizeMetadata(props.authors)
 
+    self._fetch_started_at = os.time()
+    local fetch_kind = prefetch_page and "prefetch" or (is_silent and "auto" or (is_update and "update" or "full"))
+    self:log(string.format("XRayPlugin: Fetch START type=%s book=%s percent=%s last_fetch_page=%s",
+        fetch_kind, title, tostring(reading_percent), tostring(last_fetch_page)))
+
     -- For manual (non-silent) fetches, show a ButtonDialog with a Cancel button.
     -- We use the async path for ALL fetches so we never need Trapper:dismissableRunInSubprocess
     -- (which requires an InfoMessage widget and breaks with ButtonDialog).
@@ -833,11 +838,11 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         self:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
     end)
 
-    if is_silent then
-        self:log(string.format("XRayPlugin: Silent merge complete - Chars: %d, Locs: %d, Events: %d, Cache: %s",
-            #self.characters, #self.locations, #self.timeline,
-            cache_saved and "saved" or "failed"))
-    else
+    local fetch_duration = self._fetch_started_at and (os.time() - self._fetch_started_at) or -1
+    self:log(string.format("XRayPlugin: Fetch OK in %ds - Chars: %d, Locs: %d, Events: %d, Terms: %d, Cache: %s",
+        fetch_duration, #self.characters, #self.locations, #self.timeline, #self.terms,
+        cache_saved and "saved" or "failed"))
+    if not is_silent then
         local fetch_complete = self.loc:t("ai_fetch_complete_msg") or "AI Fetch Complete!"
         local cache_success = self.loc:t("cache_save_success") or "✓ Cache updated."
         local cache_fail = self.loc:t("cache_save_failed") or "✗ Cache failed."
