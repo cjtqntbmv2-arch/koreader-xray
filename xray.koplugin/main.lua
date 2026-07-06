@@ -525,13 +525,16 @@ function XRayPlugin:onPageUpdate(pageno)
 
     local unique_id = chapter_title .. "_" .. tostring(chapter_page)
 
+    -- Cheap session-level short-circuits FIRST: within one chapter every page
+    -- after the first is a no-op; skip the timeline string scan (E-Ink battery).
+    if self.chapters_fetched[unique_id] then return end
+    if unique_id == self.last_auto_chapter then return end
+
     -- Skip non-narrative chapters (Frontmatter/Backmatter)
-    if self:isNonNarrativeChapter(chapter_title) then 
-        if not self.chapters_fetched[unique_id] then
-            self:log("XRayPlugin: Skipping non-narrative chapter: " .. tostring(chapter_title) .. " (page " .. tostring(chapter_page) .. ")")
-            self.chapters_fetched[unique_id] = true
-        end
-        return 
+    if self:isNonNarrativeChapter(chapter_title) then
+        self:log("XRayPlugin: Skipping non-narrative chapter: " .. tostring(chapter_title) .. " (page " .. tostring(chapter_page) .. ")")
+        self.chapters_fetched[unique_id] = true
+        return
     end
 
     -- Check if it's already populated in the timeline data
@@ -549,9 +552,7 @@ function XRayPlugin:onPageUpdate(pageno)
     end
 
     if is_populated then
-        if not self.chapters_fetched[unique_id] then
-            self:log("XRayPlugin: Chapter already populated in data: " .. tostring(chapter_title) .. " (page " .. tostring(chapter_page) .. ")")
-        end
+        self:log("XRayPlugin: Chapter already populated in data: " .. tostring(chapter_title) .. " (page " .. tostring(chapter_page) .. ")")
         self.chapters_fetched[unique_id] = true
         return
     end
@@ -564,13 +565,6 @@ function XRayPlugin:onPageUpdate(pageno)
         return
     end
 
-    -- Already fetched this chapter this session?
-    if self.chapters_fetched[unique_id] then 
-        return 
-    end
-
-    -- Same chapter as before (no change)?
-    if unique_id == self.last_auto_chapter then return end
     self.last_auto_chapter = unique_id
 
     -- Debounce: ignore if a fetch is already scheduled

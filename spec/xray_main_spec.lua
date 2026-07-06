@@ -48,3 +48,26 @@ describe("xray_main lifecycle", function()
         assert.is_false(plugin.fetch_abort_requested)
     end)
 end)
+
+describe("onPageUpdate battery short-circuit", function()
+    it("does no timeline string work on later pages of an already handled chapter", function()
+        local plugin = mkPlugin()
+        plugin.auto_fetch_enabled = true
+        plugin.ai_helper = { settings = {} }
+        plugin.chapters_fetched = {}
+        plugin.ui.document.getToc = function()
+            return { { page = 1, title = "Chapter 1" }, { page = 50, title = "Chapter 2" } }
+        end
+        plugin.timeline = { { chapter = "Chapter 1", page = 1 } }
+        local normalize_calls = 0
+        plugin.normalizeChapterName = function(_, name)
+            normalize_calls = normalize_calls + 1
+            return (name or ""):lower()
+        end
+        plugin:onPageUpdate(5)
+        local after_first = normalize_calls
+        assert.is_true(after_first > 0) -- first page of the chapter does the populated-scan
+        plugin:onPageUpdate(6)
+        assert.are.equal(after_first, normalize_calls) -- every later page must be string-work-free
+    end)
+end)
