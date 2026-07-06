@@ -266,5 +266,18 @@ describe("AIHelper", function()
             assert.is_true(prompt:find("SEGMENT COMPLETENESS MODE", 1, true) ~= nil)
             assert.is_true(prompt:find("applies to NEW characters", 1, true) ~= nil)
         end)
+
+        it("appends a name collision warning to the duplicate check prompt", function()
+            local captured
+            local orig = AIHelper.executeUnifiedRequest
+            AIHelper.executeUnifiedRequest = function(self, prompt)
+                captured = prompt
+                return { duplicate_pairs = {} }
+            end
+            AIHelper:findDuplicates("T", "A", { { name = "Aegon Targaryen" } }, "characters", 50)
+            AIHelper.executeUnifiedRequest = orig
+            assert.is_true(captured ~= nil)
+            assert.is_true(captured:find("NAME COLLISION WARNING", 1, true) ~= nil)
+        end)
     end)
 end)

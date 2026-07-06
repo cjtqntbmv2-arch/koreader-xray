@@ -2023,6 +2023,10 @@ function AIHelper:setUnifiedModel(type, provider, model)
     return true
 end
 
+local DUPE_NAME_GUARD = "\n\nNAME COLLISION WARNING:"
+    .. "\n- An identical or similar name does NOT prove the same entity -- dynasties and families reuse names across different people."
+    .. "\n- Compare roles and descriptions before flagging a pair. Only flag when they clearly describe the same person or place; when in doubt, do NOT flag."
+
 function AIHelper:findDuplicates(title, author, entities, entity_type_label, reading_percent)
     if not self.prompts then self:loadLanguage() end
     local template = self.prompts.find_duplicates
@@ -2050,6 +2054,7 @@ function AIHelper:findDuplicates(title, author, entities, entity_type_label, rea
         p, entity_type_label or "entities",
         table.concat(lines, "\n"), p
     )
+    prompt = prompt .. DUPE_NAME_GUARD
     prompt = self:sanitize_utf8(prompt)
 
     local result, err_code, err_msg = self:executeUnifiedRequest(prompt)
@@ -2084,6 +2089,7 @@ function AIHelper:findDuplicatesAsync(title, author, entities, entity_type_label
         p, entity_type_label or "entities",
         table.concat(lines, "\n"), p
     )
+    prompt = prompt .. DUPE_NAME_GUARD
     prompt = self:sanitize_utf8(prompt)
 
     local requests, error_code, error_msg = self:buildComprehensiveRequest(nil, nil, nil, prompt)
