@@ -215,6 +215,9 @@ msgstr "短"
 msgid "desc_len_v_detailed"
 msgstr "非常详细"
 
+msgid "desc_length_count_hint"
+msgstr "Note: Longer descriptions reduce how many entries each AI fetch returns."
+
 msgid "dont_ask_again"
 msgstr "不再询问此书"
 

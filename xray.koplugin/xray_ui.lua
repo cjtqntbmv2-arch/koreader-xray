@@ -2710,6 +2710,7 @@ function M:showEntityLengthPresets(setting_key, entity_name, is_timeline)
 
         info_dialog = ButtonDialog:new{
             title = entity_name .. " — " .. (self.loc:t("menu_desc_length_settings") or "Description Length"),
+            text = (not is_timeline) and (self.loc:t("desc_length_count_hint") or "Note: Longer descriptions reduce how many entries each AI fetch returns.") or nil,
             buttons = buttons,
         }
         UIManager:show(info_dialog)

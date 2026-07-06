@@ -215,6 +215,9 @@ msgstr "Curta"
 msgid "desc_len_v_detailed"
 msgstr "Muito Detalhada"
 
+msgid "desc_length_count_hint"
+msgstr "Note: Longer descriptions reduce how many entries each AI fetch returns."
+
 msgid "dont_ask_again"
 msgstr "Não perguntar novamente"
 

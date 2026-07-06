@@ -215,6 +215,9 @@ msgstr "Kurz"
 msgid "desc_len_v_detailed"
 msgstr "Sehr detailliert"
 
+msgid "desc_length_count_hint"
+msgstr "Hinweis: Längere Beschreibungen verringern, wie viele Einträge pro KI-Abruf erfasst werden."
+
 msgid "dont_ask_again"
 msgstr "Für dieses Buch nicht mehr fragen"
 

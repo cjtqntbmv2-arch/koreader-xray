@@ -215,6 +215,9 @@ msgstr "Kısa"
 msgid "desc_len_v_detailed"
 msgstr "Çok Detaylı"
 
+msgid "desc_length_count_hint"
+msgstr "Note: Longer descriptions reduce how many entries each AI fetch returns."
+
 msgid "dont_ask_again"
 msgstr "Bu kitap için bir daha sorma"
 
