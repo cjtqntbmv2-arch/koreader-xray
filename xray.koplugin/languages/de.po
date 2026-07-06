@@ -1,0 +1,865 @@
+msgid ""
+msgstr ""
+"Language-Team: German\n"
+"Language: de\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "about"
+msgstr "Über"
+
+msgid "ai_error"
+msgstr "KI-Fehler: "
+
+msgid "ai_fetch_complete"
+msgstr "Erfolgreich von %s abgerufen!\n\nBuch: %s\nAutor: %s\n\nCharaktere: %d\nOrte: %d\nThemen: %d\nTimeline-Ereignisse: %d\nHistorische Personen: %d\n\n%s\n\nZUSAMMENFASSUNG:\n%s"
+
+msgid "ai_fetch_complete_msg"
+msgstr "KI-Abruf abgeschlossen!"
+
+msgid "ai_key_required"
+msgstr "Ein KI-API-Schlüssel ist erforderlich."
+
+msgid "ai_merge_confirm_title"
+msgstr "KI-Duplikat erkannt"
+
+msgid "ai_merged_n"
+msgstr "%d Paar(e) erfolgreich zusammengeführt."
+
+msgid "ai_scan"
+msgstr "AI Scan"
+
+msgid "ai_scanning_duplicates"
+msgstr "KI sucht nach Duplikaten..."
+
+msgid "auto_dupe_check_disabled"
+msgstr "Deaktiviert"
+
+msgid "auto_dupe_check_enabled"
+msgstr "Aktiviert"
+
+msgid "auto_dupe_check_preference_desc"
+msgstr "Wählen Sie Ihre Einstellung für die automatische KI-Duplikatserkennung:"
+
+msgid "auto_dupe_check_setting_desc"
+msgstr "Wenn aktiviert, fordert X-Ray die KI nach jedem Datenabruf automatisch auf, nach doppelten Charakteren und Orten zu suchen. Wenn Duplikate erkannt werden, werden Sie gefragt, ob Sie diese überprüfen und zusammenführen möchten.\n\nDas Deaktivieren stoppt alle Hintergrund-Duplikatsprüfungen. Sie können Duplikate weiterhin manuell über das Menü 'Charaktere' oder 'Orte' zusammenführen.\n\nHinweis: Jede Prüfung verbraucht einen KI-API-Aufruf. Benutzer mit kostenlosen Kontingenten oder begrenzten Plänen möchten dies möglicherweise deaktivieren."
+
+msgid "auto_dupe_check_setting_title"
+msgstr "Duplikatsprüfung"
+
+msgid "auto_fetch_page_interval_prompt"
+msgstr "Seitenintervall"
+
+msgid "auto_update_aggressive"
+msgstr "Aggressiv: prüft jedes neue Kapitel"
+
+msgid "auto_update_balanced"
+msgstr "Ausgewogen: prüft max. alle 5 Min."
+
+msgid "auto_update_disabled"
+msgstr "Deaktiviert"
+
+msgid "auto_update_economical"
+msgstr "Sparsam: prüft max. alle 15 Min."
+
+msgid "auto_update_freq_about"
+msgstr "Auto-Update prüft im Hintergrund auf neue Kapiteldaten, während Sie lesen.\n\nLIMITS & PERFORMANCE\nHäufige Hintergrundanfragen können den AKKU belasten und API-LIMITS erreichen (besonders bei Pro-Modellen).\n\nMODI\n• Ultra: Prüft alle N Seiten, die Sie konfigurieren (mitten im Kapitel)\n• Aggressiv: Prüft bei jedem neuen Kapitel\n• Ausgewogen: Prüft höchstens alle 5 Minuten (empfohlen)\n• Sparsam: Prüft höchstens alle 15 Minuten\n• Selten: Prüft höchstens alle 30 Minuten\n• Deaktiviert: Keine Hintergrundanfragen\n\nHinweis: Wenn ein Kapitel aufgrund von Limits übersprungen wird, wird X-Ray es automatisch beim nächsten Hintergrundabruf einbeziehen."
+
+msgid "auto_update_freq_label"
+msgstr "Hintergrund-Abrufhäufigkeit:"
+
+msgid "auto_update_sparse"
+msgstr "Selten: prüft max. alle 30 Min."
+
+msgid "auto_update_ultra"
+msgstr "Ultra: prüft alle %d Seiten"
+
+msgid "back_to_reading"
+msgstr "Zurück zum Lesen"
+
+msgid "beta_channel_desc"
+msgstr "Der Beta Channel ermöglicht es Ihnen, Vorabversionen des X-Ray-Plugins zu erhalten. Diese Versionen enthalten die neuesten Funktionen und Fehlerbehebungen, sind jedoch möglicherweise weniger stabil als die reguläre Version."
+
+msgid "beta_disabled"
+msgstr "Stable Channel (Empfohlen)"
+
+msgid "beta_enabled"
+msgstr "Beta Channel aktiviert"
+
+msgid "beta_preference_desc"
+msgstr "Wählen Sie Ihren bevorzugten Update-Kanal:"
+
+msgid "book_mode_auto"
+msgstr "Automatisch"
+
+msgid "book_mode_desc"
+msgstr "Wählen Sie den Modus für dieses Buch."
+
+msgid "book_mode_fiction"
+msgstr "Belletristik"
+
+msgid "book_mode_nonfiction"
+msgstr "Sachbuch"
+
+msgid "book_mode_saved"
+msgstr "Buchmodus gespeichert!"
+
+msgid "book_type_about"
+msgstr "Der Buchtyp bestimmt, welche KI-Extraktionsstrategie verwendet wird und welche Funktionen verfügbar sind.\n\n- Belletristik: Konzentriert sich auf Handlung, Charaktere und Zeitleiste.\n- Sachbuch: Konzentriert sich auf Begriffe, Konzepte und historische Persönlichkeiten.\n\n'Auto-Detect' lässt die KI nach dem ersten Abruf entscheiden."
+
+msgid "book_type_auto"
+msgstr "Auto-Erkennung"
+
+msgid "book_type_fiction"
+msgstr "Belletristik"
+
+msgid "book_type_nonfiction"
+msgstr "Sachbuch"
+
+msgid "book_type_saved"
+msgstr "Buchtyp gespeichert!"
+
+msgid "cache_cleared"
+msgstr "Cache geleert!\n\nSie können jetzt neue Daten abrufen:\nMenü → X-Ray → KI-Daten abrufen"
+
+msgid "cache_save_failed"
+msgstr "Speichern im Cache fehlgeschlagen"
+
+msgid "cache_save_success"
+msgstr "✓ Cache aktualisiert."
+
+msgid "cache_saved"
+msgstr "Im Cache gespeichert!"
+
+msgid "cancel"
+msgstr "Abbrechen"
+
+msgid "character_not_found"
+msgstr "Kein Charakter gefunden, der auf '%s' passt"
+
+msgid "close"
+msgstr "Schließen"
+
+msgid "config_api_key_label"
+msgstr "%s API-Key: "
+
+msgid "config_default_gemini"
+msgstr "  Standard (Gemini)"
+
+msgid "config_model"
+msgstr "  Modell: "
+
+msgid "config_provider"
+msgstr "  Anbieter: "
+
+msgid "config_status_not_set"
+msgstr "NICHT GESETZT"
+
+msgid "config_status_set"
+msgstr "GESETZT"
+
+msgid "current_language"
+msgstr "de"
+
+msgid "current_mode"
+msgstr "Aktuell: "
+
+msgid "custom_api_endpoint_hint"
+msgstr "z.B. https://openrouter.ai/api/v1/chat/completions"
+
+msgid "custom_api_endpoint_title"
+msgstr "Benutzerdefinierte API %d — Endpunkt-URL"
+
+msgid "custom_api_is_reasoning"
+msgstr "Ist ein Denkmodell (z. B. DeepSeek-R1)"
+
+msgid "custom_api_key_title"
+msgstr "Benutzerdefinierte API %d — API-Schlüssel"
+
+msgid "custom_api_model_hint"
+msgstr "z.B. google/gemini-2.5-flash oder openai/gpt-4o"
+
+msgid "custom_api_model_title"
+msgstr "Benutzerdefinierte API %d — Standardmodell"
+
+msgid "custom_api_name"
+msgstr "Benutzerdefinierte API %d (OpenAI-kompatibel)"
+
+msgid "custom_api_not_configured"
+msgstr "(nicht konfiguriert — zum Einrichten tippen)"
+
+msgid "custom_api_saved"
+msgstr "Custom API %d Konfiguration gespeichert."
+
+msgid "desc_len_about_chars"
+msgstr "CHARAKTERBESCHREIBUNGEN\n\n• Kurz (~80 Zeichen): Name, Rolle und eine kurze Notiz.\n• Standard (~200 Zeichen): Standardanalyse.\n• Detailliert (~350 Zeichen): Reichhaltige Charakterstudie mit Eigenschaften und Motivationen.\n• Sehr detailliert (~500 Zeichen): Tiefgehende Analyse.\n\nTRADE-OFF\nLängere Beschreibungen → weniger Charaktere werden bei den ersten/vollständigen Abrufen zurückgegeben. Spätere Abrufe ('Fetch More') sind davon unbeeinflusst."
+
+msgid "desc_len_about_hist"
+msgstr "BIOGRAFIEN HISTORISCHER PERSÖNLICHKEITEN\n\n• Kurz (~50 Zeichen): Name und Hauptrolle.\n• Standard (~100 Zeichen): Standardbiografie.\n• Detailliert (~200 Zeichen): Leben, Bedeutung und Buchkontext.\n• Sehr detailliert (~300 Zeichen): Umfassende Biografie.\n\nTRADE-OFF\nLängere Biografien → weniger historische Persönlichkeiten werden bei den ersten/vollständigen Abrufen zurückgegeben."
+
+msgid "desc_len_about_locs"
+msgstr "ORTSBESCHREIBUNGEN\n\n• Kurz (~50 Zeichen): Ortsname und einzeiliger Kontext.\n• Standard (~100 Zeichen): Standardbeschreibung.\n• Detailliert (~200 Zeichen): Atmosphäre, Bedeutung und Ereignisse.\n• Sehr detailliert (~300 Zeichen): Vollständige Beschreibung.\n\nTRADE-OFF\nLängere Beschreibungen → weniger Orte werden bei den ersten/vollständigen Abrufen zurückgegeben."
+
+msgid "desc_len_about_timeline"
+msgstr "ZEITLEISTE — IMMER EIN EREIGNIS PRO KAPITEL\n\nDie Zeitleiste hat immer genau einen Eintrag pro Kapitel. Diese Einstellung beeinflusst nur, wie viele Details in jeder Zusammenfassung enthalten sind.\n\n• Kurz (~50 Zeichen): Kurze Zusammenfassung in einem Satz.\n• Standard (~80 Zeichen): Standardmäßige Zusammenfassung.\n• Detailliert (~150 Zeichen): Enthält Kontext und Konsequenzen.\n• Sehr detailliert (~200 Zeichen): Ausführliche narrative Beschreibung.\n\nFür die Zeitleiste gibt es keinen Trade-Off bei der Anzahl der Einträge."
+
+msgid "desc_len_default"
+msgstr "Standard"
+
+msgid "desc_len_detailed"
+msgstr "Detailliert"
+
+msgid "desc_len_short"
+msgstr "Kurz"
+
+msgid "desc_len_v_detailed"
+msgstr "Sehr detailliert"
+
+msgid "dont_ask_again"
+msgstr "Für dieses Buch nicht mehr fragen"
+
+msgid "entity_label_characters"
+msgstr "Charaktere"
+
+msgid "entity_label_locations"
+msgstr "Orte"
+
+msgid "entity_not_found"
+msgstr "'%s' wurde nicht als Charakter oder Ort gefunden."
+
+msgid "entity_ui_style_both"
+msgstr "Modernes Popup (Beide)"
+
+msgid "entity_ui_style_classic"
+msgstr "Klassischer Dialog"
+
+msgid "entity_ui_style_desc"
+msgstr "Wählen Sie, wann die neue moderne Popup-Benutzeroberfläche anstelle des klassischen Dialogs für Entitätsbeschreibungen verwendet werden soll."
+
+msgid "entity_ui_style_in_text"
+msgstr "Modernes Popup (nur In-Text)"
+
+msgid "entity_ui_style_menu"
+msgstr "Modernes Popup (nur Menü)"
+
+msgid "error_api_key_desc"
+msgstr "Der bereitgestellte API-Schlüssel wurde abgelehnt. Bitte überprüfen Sie Ihre Einstellungen und stellen Sie sicher, dass der Schlüssel korrekt ist."
+
+msgid "error_api_key_title"
+msgstr "Ungültiger API Key"
+
+msgid "error_extract_text"
+msgstr "Fehler: Buchtext konnte nicht extrahiert werden."
+
+msgid "error_model_access_desc"
+msgstr "Ihr API Key hat keinen Zugriff auf das ausgewählte Modell. Sie müssen möglicherweise ein anderes Modell oder einen anderen Anbieter verwenden."
+
+msgid "error_model_access_title"
+msgstr "Zugriff verweigert"
+
+msgid "error_model_not_found_desc"
+msgstr "Das ausgewählte AI-Modell ist nicht verfügbar oder die Endpunkt-URL ist inkorrekt."
+
+msgid "error_model_not_found_title"
+msgstr "Modell nicht gefunden"
+
+msgid "error_no_api_key"
+msgstr "error_no_api_key"
+
+msgid "error_parse_desc"
+msgstr "Die AI hat eine Antwort zurückgegeben, die nicht verarbeitet werden konnte. Dies könnte ein vorübergehender Fehler sein."
+
+msgid "error_parse_title"
+msgstr "Datenfehler"
+
+msgid "error_quota_desc"
+msgstr "Ihre API-Credits sind aufgebraucht oder Sie haben das Nutzungslimit erreicht. Bitte überprüfen Sie Ihren Abrechnungsstatus oder warten Sie eine Weile, bevor Sie es erneut versuchen."
+
+msgid "error_quota_title"
+msgstr "Kontingent überschritten"
+
+msgid "error_service_down_desc"
+msgstr "Der AI-Dienst ist vorübergehend nicht verfügbar oder überlastet. Bitte versuchen Sie es in wenigen Minuten erneut."
+
+msgid "error_service_down_title"
+msgstr "Dienst nicht verfügbar"
+
+msgid "error_timeout_desc"
+msgstr "Die Anfrage hat zu lange gedauert. Dies kann bei komplexen Büchern oder langsamen Netzwerkverbindungen passieren."
+
+msgid "error_timeout_title"
+msgstr "Verbindungszeitüberschreitung"
+
+msgid "error_unknown_desc"
+msgstr "Ein unerwarteter Fehler ist aufgetreten: %s"
+
+msgid "error_unknown_title"
+msgstr "Abruf fehlgeschlagen"
+
+msgid "extracting_more_characters"
+msgstr "Extrahiere zusätzliche Charaktere..."
+
+msgid "extracting_more_terms"
+msgstr "Extrahiere zusätzliche Begriffe..."
+
+msgid "fetch_button"
+msgstr "Abrufen"
+
+msgid "fetch_single_word_prompt"
+msgstr "Keine X-Ray-Daten für '%s' gefunden. Möchten Sie sie suchen?"
+
+msgid "fetch_successful"
+msgstr "Abruf erfolgreich"
+
+msgid "fetching_ai"
+msgstr "Buch wird analysiert, um X-Ray-Daten zu generieren..."
+
+msgid "fetching_author"
+msgstr "Autor-Info wird von %s abgerufen..."
+
+msgid "fetching_series_context"
+msgstr "Serienkontext wird abgerufen: Buch %d von %d…"
+
+msgid "fetching_series_info"
+msgstr "Identifiziere Serienbücher..."
+
+msgid "fetching_wait"
+msgstr "⏳ Bitte warten...\nDieser Vorgang kann 10-50 Sekunden dauern."
+
+msgid "find_mentions"
+msgstr "Erwähnungen finden"
+
+msgid "full_book_option"
+msgstr "Vollständiger Buch-Modus"
+
+msgid "label_aliases"
+msgstr "ALIASE"
+
+msgid "label_category"
+msgstr "KATEGORIE"
+
+msgid "label_definition"
+msgstr "DEFINITION"
+
+msgid "label_description"
+msgstr "BESCHREIBUNG"
+
+msgid "label_expanded"
+msgstr "STEHT FÜR"
+
+msgid "label_gender"
+msgstr "GESCHLECHT"
+
+msgid "label_name"
+msgstr "NAME"
+
+msgid "label_occupation"
+msgstr "BERUF"
+
+msgid "label_reasoning"
+msgstr "KI-DENKPROZESS"
+
+msgid "label_role"
+msgstr "ROLLE"
+
+msgid "lang_follow_book"
+msgstr "Automatisch (Buchsprache)"
+
+msgid "lang_follow_system"
+msgstr "Automatisch (Systemeinstellungen)"
+
+msgid "lang_mismatch_title"
+msgstr "Falsche Sprache"
+
+msgid "language_changed_reopen"
+msgstr "Sprache geändert. Öffnen Sie das Menü erneut, um die Änderungen zu sehen."
+
+msgid "later"
+msgstr "Later"
+
+msgid "linked_entries"
+msgstr "Verknüpfte Einträge"
+
+msgid "linked_entries_disabled"
+msgstr "Deaktiviert"
+
+msgid "linked_entries_enabled"
+msgstr "Aktiviert"
+
+msgid "linked_entries_setting_desc"
+msgstr "Verknüpfte Einträge verbindet automatisch Charaktere, Orte und historische Personen, wenn sie in den Beschreibungen der jeweils anderen erwähnt werden.\n\nWenn Sie dies deaktivieren, wird die Schaltfläche 'Verknüpfte Einträge' in den Detaildialogen ausgeblendet."
+
+msgid "log_empty"
+msgstr "Protokoll ist leer."
+
+msgid "log_loading"
+msgstr "Protokoll wird geladen..."
+
+msgid "log_tail_notice"
+msgstr "[... %d frühere Zeile(n) ausgelassen ...]"
+
+msgid "logs_cleared"
+msgstr "Logs gelöscht!"
+
+msgid "looking_up_msg"
+msgstr "Suche nach '%s'..."
+
+msgid "low_conf_match"
+msgstr "Teilweise Übereinstimmung – zeige '%s' für Ihre Anfrage. Tippen Sie unten, um den genauen Begriff abzurufen."
+
+msgid "manual_pick"
+msgstr "Manual Pick"
+
+msgid "mention_dismiss_btn"
+msgstr "✕"
+
+msgid "mention_return_btn"
+msgstr "← Back"
+
+msgid "mention_return_label"
+msgstr "← Zurück zu S.%d"
+
+msgid "mentions_at_location"
+msgstr "Erwähnung: %s"
+
+msgid "mentions_disabled"
+msgstr "Deaktiviert"
+
+msgid "mentions_enabled"
+msgstr "Aktiviert"
+
+msgid "mentions_none"
+msgstr "Noch keine Erwähnungen für '%s' gefunden."
+
+msgid "mentions_preference_desc"
+msgstr "Wählen Sie Ihre bevorzugte Einstellung für Charakter- und Ortserwähnungen:"
+
+msgid "mentions_refresh"
+msgstr "Erwähnungen aktualisieren"
+
+msgid "mentions_scanning"
+msgstr "Suche läuft... %1 von %2 Kapiteln"
+
+msgid "mentions_setting_desc"
+msgstr "Das Scannen nach Erwähnungen ermöglicht es Ihnen, jedes Vorkommen einer Figur oder eines Ortes im Buch zu finden. Dies geschieht automatisch im Hintergrund, damit das Lesegerät reaktionsfähig bleibt.\n\nDas Deaktivieren dieser Funktion blendet die Schaltfläche 'Erwähnungen finden' aus."
+
+msgid "mentions_setting_title"
+msgstr "Erwähnungen-Einstellungen"
+
+msgid "mentions_title"
+msgstr "Erwähnungen: %s"
+
+msgid "menu_about"
+msgstr "Über"
+
+msgid "menu_ai_settings"
+msgstr "KI-Einstellungen"
+
+msgid "menu_api_keys"
+msgstr "API-Schlüssel & Anbieter"
+
+msgid "menu_author_info"
+msgstr "Autor-Info"
+
+msgid "menu_auto_update_frequency"
+msgstr "Auto X-Ray Einstellungen"
+
+msgid "menu_beta_channel"
+msgstr "Beta Channel Einstellungen"
+
+msgid "menu_book_mode"
+msgstr "Book Mode"
+
+msgid "menu_characters"
+msgstr "Charaktere"
+
+msgid "menu_clear_cache"
+msgstr "Cache leeren"
+
+msgid "menu_clear_logs"
+msgstr "Logs löschen"
+
+msgid "menu_config_header"
+msgstr "--- Aktuelle Konfiguration ---"
+
+msgid "menu_content_fetch_settings"
+msgstr "Inhalts- & Abruf-Einstellungen"
+
+msgid "menu_custom_model_title"
+msgstr "Benutzerdefiniertes %s-Modell"
+
+msgid "menu_desc_length_settings"
+msgstr "Länge der Beschreibung"
+
+msgid "menu_display_ui_settings"
+msgstr "Anzeige- & Benutzeroberflächen-Einstellungen"
+
+msgid "menu_enter_custom_model"
+msgstr "Benutzerdefiniertes Modell eingeben..."
+
+msgid "menu_entity_ui_mode"
+msgstr "Stil der Entitätsbeschreibung"
+
+msgid "menu_fetch_author"
+msgstr "Autor-Info abrufen (KI)"
+
+msgid "menu_fetch_more_chars"
+msgstr "Weitere Charaktere abrufen"
+
+msgid "menu_fetch_more_terms"
+msgstr "Weitere Begriffe abrufen"
+
+msgid "menu_fetch_series_context"
+msgstr "Series Context abrufen / aktualisieren"
+
+msgid "menu_frequency"
+msgstr "Frequenz"
+
+msgid "menu_historical_figures"
+msgstr "Historische Personen"
+
+msgid "menu_language"
+msgstr "Sprache"
+
+msgid "menu_linked_entries_settings"
+msgstr "Einstellungen für verknüpfte Einträge"
+
+msgid "menu_locations"
+msgstr "Orte"
+
+msgid "menu_maintenance"
+msgstr "Wartung"
+
+msgid "menu_mentions_settings"
+msgstr "Erwähnungen-Einstellungen"
+
+msgid "menu_primary_ai_model"
+msgstr "Primäres KI-Modell"
+
+msgid "menu_reasoning_effort"
+msgstr "KI-Denkaufwand"
+
+msgid "menu_secondary_ai_model"
+msgstr "Sekundäres KI-Modell"
+
+msgid "menu_series_context"
+msgstr "Reihen-Kontext"
+
+msgid "menu_settings"
+msgstr "Einstellungen"
+
+msgid "menu_terms"
+msgstr "Glossar"
+
+msgid "menu_timeline"
+msgstr "Zeitstrahl"
+
+msgid "menu_ui_popup_intext"
+msgstr "Fußnoten-Stil für In-Text-Suche verwenden"
+
+msgid "menu_ui_popup_menu"
+msgstr "Fußnoten-Stil für Menü-Suche verwenden"
+
+msgid "menu_update_xray"
+msgstr "X-Ray Daten aktualisieren (Zusammenführen)"
+
+msgid "menu_view_config"
+msgstr "Alle Konfigurationswerte anzeigen"
+
+msgid "menu_view_log"
+msgstr "Protokoll anzeigen"
+
+msgid "menu_xray"
+msgstr "X-Ray"
+
+msgid "menu_xray_mode"
+msgstr "X-Ray Modus-Einstellungen"
+
+msgid "merge_back"
+msgstr "← Zurück"
+
+msgid "merge_button"
+msgstr "Merge"
+
+msgid "merge_confirm"
+msgstr "%s in %s zusammenführen? Der sekundäre Eintrag wird gelöscht und dessen Aliase übernommen."
+
+msgid "merge_duplicates"
+msgstr "Duplikate zusammenführen..."
+
+msgid "merge_failed"
+msgstr "Zusammenführen fehlgeschlagen."
+
+msgid "merge_pick_primary"
+msgstr "Wählen Sie den zu BEHALTENDEN Eintrag"
+
+msgid "merge_pick_secondary"
+msgstr "Wählen Sie den zu ENTFERNENDEN Eintrag"
+
+msgid "merge_success"
+msgstr "Einträge erfolgreich zusammengeführt."
+
+msgid "merging_smartly"
+msgstr "Führe zusammen..."
+
+msgid "model_free"
+msgstr "kostenlos"
+
+msgid "model_paid"
+msgstr "kostenpflichtig"
+
+msgid "msg_added_characters"
+msgstr "%d neue Charaktere hinzugefügt!"
+
+msgid "msg_added_terms"
+msgstr "%d neue Begriffe hinzugefügt!"
+
+msgid "msg_fetch_failed"
+msgstr "AI Abruf fehlgeschlagen"
+
+msgid "msg_no_bio"
+msgstr "Keine Biografie verfügbar."
+
+msgid "msg_suggest_lang"
+msgstr "Dieses Buch ist auf %s. X-Ray-Sprache anpassen?"
+
+msgid "multiple_matches"
+msgstr "Mehrere Treffer für '%s'. Welchen meinten Sie?"
+
+msgid "next"
+msgstr "Weiter"
+
+msgid "no"
+msgstr "Nein"
+
+msgid "no_api_key"
+msgstr "KI API-Key nicht gesetzt!\n\nGeben Sie den API-Key hier ein:\nMenü → X-Ray → KI-Einstellungen"
+
+msgid "no_author_data_fetch"
+msgstr "Keine Autor-Info verfügbar.\n\nMöchten Sie diese von der KI abrufen?"
+
+msgid "no_character_data"
+msgstr "Noch keine Charakterdaten.\n\nBitte nutzen Sie zuerst 'X-Ray Daten abrufen'."
+
+msgid "no_data_prompt"
+msgstr "Keine X-Ray-Daten für dieses Buch gefunden. Möchten Sie diese jetzt von der KI abrufen?"
+
+msgid "no_duplicates_found"
+msgstr "Keine Duplikate gefunden."
+
+msgid "no_historical_data"
+msgstr "Noch keine Daten zu historischen Personen.\n\nBitte nutzen Sie zuerst 'X-Ray Daten abrufen'.\n\nKI wird reale historische Personen im Buch erkennen."
+
+msgid "no_location_data"
+msgstr "Noch keine Ortsdaten. Bitte nutzen Sie zuerst 'X-Ray Daten abrufen'."
+
+msgid "no_merges_performed"
+msgstr "Keine Zusammenführungen durchgeführt."
+
+msgid "no_terms_data"
+msgstr "Noch keine Begriffsdaten vorhanden. Bitte verwenden Sie zuerst 'Fetch X-Ray Data'."
+
+msgid "no_timeline_data"
+msgstr "Noch keine Timeline-Daten.\n\nBitte nutzen Sie zuerst 'X-Ray Daten abrufen'.\n\nKI wird wichtige Ereignisse in chronologischer Reihenfolge anzeigen."
+
+msgid "ok"
+msgstr "OK"
+
+msgid "pair_rejected"
+msgstr "Pair marked as not a duplicate."
+
+msgid "path"
+msgstr "plugins/xray.koplugin"
+
+msgid "pending_duplicates_prompt"
+msgstr "Die KI hat %d mögliche(s) Duplikat(e) aus dem letzten Abruf gefunden. Jetzt überprüfen?"
+
+msgid "plugin_description"
+msgstr "Verbessern Sie Ihr Leseerlebnis mit KI-gestützter Buchanalyse, genau wie Amazon Kindle X-Ray!"
+
+msgid "quick_menu_title"
+msgstr "X-Ray-Schnellmenü"
+
+msgid "read_more"
+msgstr "Read More"
+
+msgid "reason"
+msgstr "Reason"
+
+msgid "reasoning_about"
+msgstr "Controls 'thinking' depth for reasoning models:\n\n• Unset: No specific instruction sent; model uses its internal defaults.\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n\nApplies to: GPT-5.x, DeepSeek Reasoner, Claude 4.5+ (extended thinking), and Gemini 2.5+."
+
+msgid "reasoning_high"
+msgstr "Hoch"
+
+msgid "reasoning_low"
+msgstr "Niedrig"
+
+msgid "reasoning_medium"
+msgstr "Mittel"
+
+msgid "reasoning_unset"
+msgstr "Nicht festgelegt (Standard)"
+
+msgid "reject_pair"
+msgstr "Reject"
+
+msgid "relookup_button"
+msgstr "Erneute Suche nach '%s'"
+
+msgid "review"
+msgstr "Review"
+
+msgid "save"
+msgstr "Speichern"
+
+msgid "search_button"
+msgstr "Suche"
+
+msgid "search_character"
+msgstr "Charaktere suchen..."
+
+msgid "search_character_title"
+msgstr "Charakter-Suche"
+
+msgid "search_hint"
+msgstr "Charakternamen eingeben"
+
+msgid "search_term"
+msgstr "Suchbegriffe"
+
+msgid "series_ask_later_msg"
+msgstr "Serienzusammenfassung verschoben. Wir fragen erneut, wenn Sie dieses Buch öffnen/fortsetzen."
+
+msgid "series_context_enabled_toggle"
+msgstr "Series Context aktivieren"
+
+msgid "series_context_loaded"
+msgstr "Series Context geladen (%d vorherige Bücher)."
+
+msgid "series_context_prompt_text"
+msgstr "Dies scheint Buch %d von '%s' zu sein. Eine Zusammenfassung der vorherigen %d Buch/Bücher laden?\n\n(Sie können dies in Einstellungen → Reihen-Kontext deaktivieren)"
+
+msgid "series_context_prompt_title"
+msgstr "Serie erkannt"
+
+msgid "series_disabled_msg"
+msgstr "Automatische Abfrage für dieses Buch deaktiviert. Sie können die Zusammenfassung manuell über das X-Ray-Menü abrufen."
+
+msgid "series_no_prior_detected"
+msgstr "Keine vorherigen Bücher für diese Serie erkannt."
+
+msgid "series_prior_books_header"
+msgstr "── Vorherige Bücher ──"
+
+msgid "series_prior_label"
+msgstr "[Vorherige]"
+
+msgid "skip"
+msgstr "Skip"
+
+msgid "spoiler_free_about"
+msgstr "Der spoiler-freie Modus begrenzt die KI-Extraktion auf die Seiten, die Sie bereits gelesen haben (bis zu Ihrer aktuellen Seite), um Spoiler aus zukünftigen Kapiteln zu vermeiden.\n\nDer vollständige Buch-Modus analysiert das gesamte Buch, was Spoiler enthalten kann."
+
+msgid "spoiler_free_menu_option"
+msgstr "Spoiler-frei"
+
+msgid "spoiler_free_option"
+msgstr "Spoiler-freier Modus (Bis zu %d%% des Buches)"
+
+msgid "spoiler_preference_desc"
+msgstr "Wählen Sie Ihre Spoiler-Einstellung für X-Ray-Daten:"
+
+msgid "spoiler_preference_title"
+msgstr "Spoiler-Einstellung"
+
+msgid "stop"
+msgstr "Stop"
+
+msgid "term_not_found"
+msgstr "Kein passender Begriff für '%s' gefunden"
+
+msgid "this_chapter"
+msgstr "Dieses Kapitel"
+
+msgid "this_page"
+msgstr "Diese Seite"
+
+msgid "updater_available_header"
+msgstr "X-Ray %s ist verfügbar!\nSie haben %s."
+
+msgid "updater_btn_cancel"
+msgstr "Abbrechen"
+
+msgid "updater_btn_download"
+msgstr "Herunterladen und installieren"
+
+msgid "updater_btn_later"
+msgstr "Später"
+
+msgid "updater_btn_open_browser"
+msgstr "Im Browser öffnen"
+
+msgid "updater_btn_restart"
+msgstr "Neustart"
+
+msgid "updater_cancelled_check"
+msgstr "Update-Check abgebrochen."
+
+msgid "updater_cancelled_update"
+msgstr "Update abgebrochen."
+
+msgid "updater_check"
+msgstr "Nach Updates suchen"
+
+msgid "updater_checking"
+msgstr "Suche nach Updates..."
+
+msgid "updater_download_prompt"
+msgstr "\n\nJetzt herunterladen und installieren?"
+
+msgid "updater_downloading"
+msgstr "X-Ray %s wird heruntergeladen..."
+
+msgid "updater_err_download"
+msgstr "Download-Fehler: %s"
+
+msgid "updater_err_extract"
+msgstr "Entpackungs-Fehler: %s"
+
+msgid "updater_error_checking"
+msgstr "Fehler beim Suchen nach Updates."
+
+msgid "updater_error_checking_detail"
+msgstr "Fehler beim Suchen nach Updates: %s"
+
+msgid "updater_no_asset"
+msgstr "Keine automatische Update-Datei gefunden.\n\nReleases-Seite auf GitHub öffnen?"
+
+msgid "updater_success_restart"
+msgstr "X-Ray %s erfolgreich installiert.\n\nKOReader neu starten, um das Update anzuwenden?"
+
+msgid "updater_up_to_date"
+msgstr "X-Ray ist auf dem neuesten Stand (%s)."
+
+msgid "updater_whats_new"
+msgstr "Was ist neu:"
+
+msgid "updating_ai"
+msgstr "X-Ray Daten werden aktualisiert..."
+
+msgid "val"
+msgstr "???"
+
+msgid "xray_disabled_label"
+msgstr "Deaktiviert"
+
+msgid "xray_enabled_label"
+msgstr "Aktiviert"
+
+msgid "xray_mode_desc"
+msgstr "Fügt eine 'X-Ray'-Schaltfläche zu Wörterbuch- und Auswahlmenüs für sofortige Lookups hinzu."
+
+msgid "yes"
+msgstr "Ja"
+

@@ -1,0 +1,865 @@
+msgid ""
+msgstr ""
+"Language-Team: Chinese (Simplified)\n"
+"Language: zh_CN\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "about"
+msgstr "关于"
+
+msgid "ai_error"
+msgstr "AI 错误: "
+
+msgid "ai_fetch_complete"
+msgstr "已成功从 %s 获取！\n\n书名：%s\n作者：%s\n\n角色数：%d\n地点数：%d\n主题数：%d\n时间线事件：%d\n历史人物：%d\n\n%s\n\n摘要：\n%s"
+
+msgid "ai_fetch_complete_msg"
+msgstr "AI 获取完成！"
+
+msgid "ai_key_required"
+msgstr "需要配置 AI API 密钥。"
+
+msgid "ai_merge_confirm_title"
+msgstr "AI 发现重复条目"
+
+msgid "ai_merged_n"
+msgstr "成功合并了 %d 对重复项。"
+
+msgid "ai_scan"
+msgstr "AI Scan"
+
+msgid "ai_scanning_duplicates"
+msgstr "AI 正在扫描重复项..."
+
+msgid "auto_dupe_check_disabled"
+msgstr "已禁用"
+
+msgid "auto_dupe_check_enabled"
+msgstr "已启用"
+
+msgid "auto_dupe_check_preference_desc"
+msgstr "选择自动 AI 重复项检测的首选项："
+
+msgid "auto_dupe_check_setting_desc"
+msgstr "启用后，X-Ray 会在每次获取数据后自动让 AI 检查重复的角色和地点。如果检测到重复项，系统将提示您进行查看和合并。\n\n禁用此功能将停止所有后台重复项扫描。您仍可以通过“角色”或“地点”菜单手动合并重复项。\n\n注意：每次检查都会使用一次 AI API 调用。免费层或配额受限计划的用户可能更愿意禁用此功能。"
+
+msgid "auto_dupe_check_setting_title"
+msgstr "重复检查"
+
+msgid "auto_fetch_page_interval_prompt"
+msgstr "页面间隔"
+
+msgid "auto_update_aggressive"
+msgstr "激进：每章都检查"
+
+msgid "auto_update_balanced"
+msgstr "平衡：最多每 5 分钟"
+
+msgid "auto_update_disabled"
+msgstr "已禁用"
+
+msgid "auto_update_economical"
+msgstr "经济：最多每 15 分钟"
+
+msgid "auto_update_freq_about"
+msgstr "自动更新功能会在您阅读时自动在后台检查新章节的数据。\n\n限制与性能\n频繁的后台请求会消耗电池寿命，并可能触及 AI 服务商的频率限制（尤其是 Pro 模型）。\n\n模式\n• 极速：按您设置的 N 页间隔检查一次（章节中途）\n• 激进：进入新章节时即检查\n• 平衡：最多每 5 分钟检查一次（推荐）\n• 经济：最多每 15 分钟检查一次\n• 稀疏：最多每 30 分钟检查一次\n• 已禁用：不进行后台请求\n\n注意：如果因频率限制跳过了某个章节，X-Ray 将在下次后台获取时自动包含它。"
+
+msgid "auto_update_freq_label"
+msgstr "后台获取频率："
+
+msgid "auto_update_sparse"
+msgstr "稀疏：最多每 30 分钟"
+
+msgid "auto_update_ultra"
+msgstr "极速：每%d页检查一次"
+
+msgid "back_to_reading"
+msgstr "回到阅读"
+
+msgid "beta_channel_desc"
+msgstr "Beta Channel 允许您接收 X-Ray 插件的预发布版本。这些版本包含最新的功能和错误修复，但可能不如 Stable Channel 稳定。"
+
+msgid "beta_disabled"
+msgstr "Stable Channel (推荐)"
+
+msgid "beta_enabled"
+msgstr "已启用 Beta Channel"
+
+msgid "beta_preference_desc"
+msgstr "选择您的更新渠道偏好："
+
+msgid "book_mode_auto"
+msgstr "自动"
+
+msgid "book_mode_desc"
+msgstr "选择此书的模式。"
+
+msgid "book_mode_fiction"
+msgstr "虚构"
+
+msgid "book_mode_nonfiction"
+msgstr "非虚构"
+
+msgid "book_mode_saved"
+msgstr "书籍模式已保存！"
+
+msgid "book_type_about"
+msgstr "书籍类型决定了 AI 提取信息的侧重策略与可用功能。\n\n- 小说 (Fiction): 聚焦于叙事结构、登场角色与故事时间线。\n- 非小说 (Non-Fiction): 聚焦于专业术语、核心概念与相关历史人物。\n\n“自动检测”会在首次提取后由 AI 自动判断书籍类型。"
+
+msgid "book_type_auto"
+msgstr "自动检测"
+
+msgid "book_type_fiction"
+msgstr "虚构"
+
+msgid "book_type_nonfiction"
+msgstr "非虚构"
+
+msgid "book_type_saved"
+msgstr "书籍类型已保存！"
+
+msgid "cache_cleared"
+msgstr "缓存已清除！\n\n现在可以获取新数据：\n菜单 → X-Ray → 获取 AI 数据"
+
+msgid "cache_save_failed"
+msgstr "保存缓存失败"
+
+msgid "cache_save_success"
+msgstr "✓ 缓存已更新。"
+
+msgid "cache_saved"
+msgstr "已保存到缓存！"
+
+msgid "cancel"
+msgstr "取消"
+
+msgid "character_not_found"
+msgstr "未找到匹配“%s”的角色"
+
+msgid "close"
+msgstr "关闭"
+
+msgid "config_api_key_label"
+msgstr "%s API 密钥："
+
+msgid "config_default_gemini"
+msgstr "  默认 (Gemini)"
+
+msgid "config_model"
+msgstr "  模型: "
+
+msgid "config_provider"
+msgstr "  服务商："
+
+msgid "config_status_not_set"
+msgstr "未设置"
+
+msgid "config_status_set"
+msgstr "已设置"
+
+msgid "current_language"
+msgstr "zh_CN"
+
+msgid "current_mode"
+msgstr "当前模式："
+
+msgid "custom_api_endpoint_hint"
+msgstr "例如：https://openrouter.ai/api/v1/chat/completions"
+
+msgid "custom_api_endpoint_title"
+msgstr "自定义 API %d — 终结点 URL"
+
+msgid "custom_api_is_reasoning"
+msgstr "是否为推理模型 (如 DeepSeek-R1)"
+
+msgid "custom_api_key_title"
+msgstr "自定义 API %d — API 密钥"
+
+msgid "custom_api_model_hint"
+msgstr "例如：google/gemini-2.5-flash 或 openai/gpt-4o"
+
+msgid "custom_api_model_title"
+msgstr "自定义 API %d — 默认模型"
+
+msgid "custom_api_name"
+msgstr "自定义 API %d (OpenAI 兼容)"
+
+msgid "custom_api_not_configured"
+msgstr "（未配置 — 点击设置）"
+
+msgid "custom_api_saved"
+msgstr "Custom API %d 配置已保存。"
+
+msgid "desc_len_about_chars"
+msgstr "角色描述长度\n\n• 简短 (~80 字): 角色名称、身份与一句话简评。\n• 默认 (~200 字): 标准分析描述。\n• 详细 (~350 字): 包含性格特征与行为动机的丰富角色研究。\n• 极详细 (~500 字): 深度角色剖析。\n\n字数平衡\n描述长度越长 → 首次或全量获取时返回的角色总数可能会越少。后续运行“获取更多”不受此限制影响。"
+
+msgid "desc_len_about_hist"
+msgstr "历史人物生平长度\n\n• 简短 (~50 字): 人名与主要生平身份。\n• 默认 (~100 字): 标准详细度传记。\n• 详细 (~200 字): 生平经历、历史意义以及与本书关联的背景。\n• 极详细 (~300 字): 详尽的完整传记。\n\n字数平衡\n传记长度越长 → 首次或全量获取时返回的历史人物总数可能会越少。"
+
+msgid "desc_len_about_locs"
+msgstr "地点描述长度\n\n• 简短 (~50 字): 地点名称与单行背景介绍。\n• 默认 (~100 字): 标准详细度描述。\n• 详细 (~200 字): 地点氛围、历史意义与关联事件。\n• 极详细 (~300 字): 完整的详尽描述。\n\n字数平衡\n描述长度越长 → 首次或全量获取时返回的地点总数可能会越少。"
+
+msgid "desc_len_about_timeline"
+msgstr "故事时间线 — 每章固定记录一个事件（始终有效）\n\n时间线为每章严格记录一个条目。此设置仅影响每章摘要的详细程度。\n\n• 简短 (~50 字): 简短的一句话摘要。\n• 默认 (~80 字): 标准详细度的摘要。\n• 详细 (~150 字): 包含前因后果与上下文细节。\n• 极详细 (~200 字): 完整的叙事性描述。\n\n时间线的条目总数不会因长度设置而减少。"
+
+msgid "desc_len_default"
+msgstr "默认"
+
+msgid "desc_len_detailed"
+msgstr "详细"
+
+msgid "desc_len_short"
+msgstr "短"
+
+msgid "desc_len_v_detailed"
+msgstr "非常详细"
+
+msgid "dont_ask_again"
+msgstr "不再询问此书"
+
+msgid "entity_label_characters"
+msgstr "角色"
+
+msgid "entity_label_locations"
+msgstr "地点"
+
+msgid "entity_not_found"
+msgstr "未发现 '%s' 为角色或地点。"
+
+msgid "entity_ui_style_both"
+msgstr "现代弹窗 (全开启)"
+
+msgid "entity_ui_style_classic"
+msgstr "经典对话框"
+
+msgid "entity_ui_style_desc"
+msgstr "选择何时使用新的“现代弹窗”界面来替代“经典对话框”显示实体描述。"
+
+msgid "entity_ui_style_in_text"
+msgstr "现代弹窗 (仅书中)"
+
+msgid "entity_ui_style_menu"
+msgstr "现代弹窗 (仅菜单)"
+
+msgid "error_api_key_desc"
+msgstr "提供的 API Key 被拒绝。请检查您的设置并确保 Key 正确无误。"
+
+msgid "error_api_key_title"
+msgstr "API Key 无效"
+
+msgid "error_extract_text"
+msgstr "错误：无法提取书籍文本。"
+
+msgid "error_model_access_desc"
+msgstr "您的 API Key 没有访问所选模型的权限。您可能需要使用其他模型或提供商。"
+
+msgid "error_model_access_title"
+msgstr "权限被拒绝"
+
+msgid "error_model_not_found_desc"
+msgstr "所选 AI 模型不可用或终端 URL 不正确。"
+
+msgid "error_model_not_found_title"
+msgstr "模型未找到"
+
+msgid "error_no_api_key"
+msgstr "error_no_api_key"
+
+msgid "error_parse_desc"
+msgstr "AI 返回了无法处理的响应。这可能是一个暂时的故障。"
+
+msgid "error_parse_title"
+msgstr "数据错误"
+
+msgid "error_quota_desc"
+msgstr "您的 API 额度已耗尽或已达到速率限制。请检查您的账单状态或稍后再试。"
+
+msgid "error_quota_title"
+msgstr "配额已超出"
+
+msgid "error_service_down_desc"
+msgstr "AI 服务暂时不可用或过载。请在几分钟后重试。"
+
+msgid "error_service_down_title"
+msgstr "服务不可用"
+
+msgid "error_timeout_desc"
+msgstr "请求耗时过长。这通常发生于内容复杂的书籍或网络连接较慢时。"
+
+msgid "error_timeout_title"
+msgstr "连接超时"
+
+msgid "error_unknown_desc"
+msgstr "发生了一个意外错误：%s"
+
+msgid "error_unknown_title"
+msgstr "获取失败"
+
+msgid "extracting_more_characters"
+msgstr "正在提取更多角色..."
+
+msgid "extracting_more_terms"
+msgstr "正在提取更多术语..."
+
+msgid "fetch_button"
+msgstr "获取"
+
+msgid "fetch_single_word_prompt"
+msgstr "未发现 '%s' 的 X-Ray 数据。是否要查询？"
+
+msgid "fetch_successful"
+msgstr "获取成功"
+
+msgid "fetching_ai"
+msgstr "正在分析书籍以生成 X-Ray 数据..."
+
+msgid "fetching_author"
+msgstr "正在从 %s 获取作者信息..."
+
+msgid "fetching_series_context"
+msgstr "正在获取系列背景：第 %d 本，共 %d 本..."
+
+msgid "fetching_series_info"
+msgstr "识别系列图书..."
+
+msgid "fetching_wait"
+msgstr "⏳ 请稍候...\n此过程可能需要 10-50 秒。"
+
+msgid "find_mentions"
+msgstr "查找提及"
+
+msgid "full_book_option"
+msgstr "整本书模式"
+
+msgid "label_aliases"
+msgstr "??"
+
+msgid "label_category"
+msgstr "类别"
+
+msgid "label_definition"
+msgstr "定义"
+
+msgid "label_description"
+msgstr "描述"
+
+msgid "label_expanded"
+msgstr "指代"
+
+msgid "label_gender"
+msgstr "性别"
+
+msgid "label_name"
+msgstr "名称"
+
+msgid "label_occupation"
+msgstr "职业"
+
+msgid "label_reasoning"
+msgstr "AI 推理"
+
+msgid "label_role"
+msgstr "身份/角色"
+
+msgid "lang_follow_book"
+msgstr "自动 (跟随书籍)"
+
+msgid "lang_follow_system"
+msgstr "自动 (跟随系统)"
+
+msgid "lang_mismatch_title"
+msgstr "语言不匹配"
+
+msgid "language_changed_reopen"
+msgstr "语言已更改。重新打开菜单以查看更改。"
+
+msgid "later"
+msgstr "Later"
+
+msgid "linked_entries"
+msgstr "链接条目"
+
+msgid "linked_entries_disabled"
+msgstr "已禁用"
+
+msgid "linked_entries_enabled"
+msgstr "已启用"
+
+msgid "linked_entries_setting_desc"
+msgstr "“关联条目”会在角色、地点和历史人物在彼此的描述中被提到时自动建立连接。\n\n禁用此功能将隐藏详情对话框中的“关联条目”按钮。"
+
+msgid "log_empty"
+msgstr "日志为空。"
+
+msgid "log_loading"
+msgstr "正在加载日志..."
+
+msgid "log_tail_notice"
+msgstr "[... 已省略 %d 行更早的日志 ...]"
+
+msgid "logs_cleared"
+msgstr "日志已清除！"
+
+msgid "looking_up_msg"
+msgstr "正在查询 '%s'..."
+
+msgid "low_conf_match"
+msgstr "部分匹配 — 已显示“%s”的关联信息。点击下方重新获取精确词条。"
+
+msgid "manual_pick"
+msgstr "Manual Pick"
+
+msgid "mention_dismiss_btn"
+msgstr "✕"
+
+msgid "mention_return_btn"
+msgstr "← Back"
+
+msgid "mention_return_label"
+msgstr "← 返回至第 %d 页"
+
+msgid "mentions_at_location"
+msgstr "提及：%s"
+
+msgid "mentions_disabled"
+msgstr "已禁用"
+
+msgid "mentions_enabled"
+msgstr "已启用"
+
+msgid "mentions_none"
+msgstr "尚未找到关于 “%s” 的提及。"
+
+msgid "mentions_preference_desc"
+msgstr "选择您对角色和地点提及的偏好："
+
+msgid "mentions_refresh"
+msgstr "刷新提及"
+
+msgid "mentions_scanning"
+msgstr "扫描中... 第 %1 / %2 章"
+
+msgid "mentions_setting_desc"
+msgstr "“提及扫描”功能允许您查找书中角色或地点的每一次出现。此过程将在后台自动运行，以确保阅读器保持响应速度。\n\n禁用此功能将隐藏“查找提及”按钮。"
+
+msgid "mentions_setting_title"
+msgstr "提及设置"
+
+msgid "mentions_title"
+msgstr "提及：%s"
+
+msgid "menu_about"
+msgstr "关于"
+
+msgid "menu_ai_settings"
+msgstr "AI 设置"
+
+msgid "menu_api_keys"
+msgstr "API 密钥与服务商"
+
+msgid "menu_author_info"
+msgstr "作者信息"
+
+msgid "menu_auto_update_frequency"
+msgstr "自动 X-Ray 设置"
+
+msgid "menu_beta_channel"
+msgstr "Beta Channel 设置"
+
+msgid "menu_book_mode"
+msgstr "Book Mode"
+
+msgid "menu_characters"
+msgstr "角色"
+
+msgid "menu_clear_cache"
+msgstr "清除缓存"
+
+msgid "menu_clear_logs"
+msgstr "清除日志"
+
+msgid "menu_config_header"
+msgstr "--- 当前配置 ---"
+
+msgid "menu_content_fetch_settings"
+msgstr "内容获取设置"
+
+msgid "menu_custom_model_title"
+msgstr "自定义 %s 模型"
+
+msgid "menu_desc_length_settings"
+msgstr "描述长度"
+
+msgid "menu_display_ui_settings"
+msgstr "显示与界面设置"
+
+msgid "menu_enter_custom_model"
+msgstr "输入自定义模型..."
+
+msgid "menu_entity_ui_mode"
+msgstr "实体描述显示样式"
+
+msgid "menu_fetch_author"
+msgstr "获取作者信息 (AI)"
+
+msgid "menu_fetch_more_chars"
+msgstr "获取更多角色"
+
+msgid "menu_fetch_more_terms"
+msgstr "获取更多术语"
+
+msgid "menu_fetch_series_context"
+msgstr "获取/刷新 Series Context"
+
+msgid "menu_frequency"
+msgstr "频率"
+
+msgid "menu_historical_figures"
+msgstr "历史人物"
+
+msgid "menu_language"
+msgstr "语言"
+
+msgid "menu_linked_entries_settings"
+msgstr "关联条目设置"
+
+msgid "menu_locations"
+msgstr "地点"
+
+msgid "menu_maintenance"
+msgstr "维护"
+
+msgid "menu_mentions_settings"
+msgstr "提及设置"
+
+msgid "menu_primary_ai_model"
+msgstr "主位 AI 模型"
+
+msgid "menu_reasoning_effort"
+msgstr "AI 推理深度"
+
+msgid "menu_secondary_ai_model"
+msgstr "次位 AI 模型"
+
+msgid "menu_series_context"
+msgstr "系列上下文"
+
+msgid "menu_settings"
+msgstr "设置"
+
+msgid "menu_terms"
+msgstr "术语表"
+
+msgid "menu_timeline"
+msgstr "时间线"
+
+msgid "menu_ui_popup_intext"
+msgstr "书中查询使用脚注样式"
+
+msgid "menu_ui_popup_menu"
+msgstr "菜单查询使用脚注样式"
+
+msgid "menu_update_xray"
+msgstr "更新 X-Ray 数据 (合并)"
+
+msgid "menu_view_config"
+msgstr "查看所有配置"
+
+msgid "menu_view_log"
+msgstr "查看日志"
+
+msgid "menu_xray"
+msgstr "X-Ray"
+
+msgid "menu_xray_mode"
+msgstr "X-Ray 模式设置"
+
+msgid "merge_back"
+msgstr "← 返回"
+
+msgid "merge_button"
+msgstr "Merge"
+
+msgid "merge_confirm"
+msgstr "确定将 %s 合并至 %s 吗？次要条目将被删除，其别名将被吸收。"
+
+msgid "merge_duplicates"
+msgstr "合并重复项..."
+
+msgid "merge_failed"
+msgstr "合并失败。"
+
+msgid "merge_pick_primary"
+msgstr "选择要保留的条目"
+
+msgid "merge_pick_secondary"
+msgstr "选择要删除的条目"
+
+msgid "merge_success"
+msgstr "条目合并成功。"
+
+msgid "merging_smartly"
+msgstr "正在合并..."
+
+msgid "model_free"
+msgstr "免费"
+
+msgid "model_paid"
+msgstr "付费"
+
+msgid "msg_added_characters"
+msgstr "已添加 %d 个新角色！"
+
+msgid "msg_added_terms"
+msgstr "已添加 %d 个新术语！"
+
+msgid "msg_fetch_failed"
+msgstr "AI 获取失败"
+
+msgid "msg_no_bio"
+msgstr "暂无传记。"
+
+msgid "msg_suggest_lang"
+msgstr "本书语言为 %s。是否切换 X-Ray 语言以匹配？"
+
+msgid "multiple_matches"
+msgstr "找到多个“%s”的匹配项。您指的是哪一个？"
+
+msgid "next"
+msgstr "下一页"
+
+msgid "no"
+msgstr "否"
+
+msgid "no_api_key"
+msgstr "未设置 AI API 密钥！\n\n请在以下路径输入密钥：\n菜单 → X-Ray → AI 设置"
+
+msgid "no_author_data_fetch"
+msgstr "暂无作者信息。\n\n是否要通过 AI 获取？"
+
+msgid "no_character_data"
+msgstr "暂无角色数据。\n\n请先使用“获取 X-Ray 数据”。"
+
+msgid "no_data_prompt"
+msgstr "未找到此书的 X-Ray 数据。是否现在通过 AI 获取？"
+
+msgid "no_duplicates_found"
+msgstr "未发现重复项。"
+
+msgid "no_historical_data"
+msgstr "暂无历史人物数据。\n\n请先使用“获取 X-Ray 数据”。\n\nAI 将自动检测书中提及的真实历史人物。"
+
+msgid "no_location_data"
+msgstr "暂无地点数据。请先使用“获取 X-Ray 数据”。"
+
+msgid "no_merges_performed"
+msgstr "未执行任何合并。"
+
+msgid "no_terms_data"
+msgstr "尚无术语数据。请先使用“Fetch X-Ray Data”。"
+
+msgid "no_timeline_data"
+msgstr "暂无时间线数据。\n\n请先使用“获取 X-Ray 数据”。\n\nAI 将按时间顺序显示关键事件。"
+
+msgid "ok"
+msgstr "确定"
+
+msgid "pair_rejected"
+msgstr "Pair marked as not a duplicate."
+
+msgid "path"
+msgstr "plugins/xray.koplugin"
+
+msgid "pending_duplicates_prompt"
+msgstr "AI 发现了上次获取的 %d 个潜在重复项。现在查看吗？"
+
+msgid "plugin_description"
+msgstr "使用 AI 驱动的书籍分析提升您的阅读体验，就像 Kindle X-Ray 一样！"
+
+msgid "quick_menu_title"
+msgstr "X-Ray 快捷菜单"
+
+msgid "read_more"
+msgstr "Read More"
+
+msgid "reason"
+msgstr "Reason"
+
+msgid "reasoning_about"
+msgstr "Controls 'thinking' depth for reasoning models:\n\n• Unset: No specific instruction sent; model uses its internal defaults.\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n\nApplies to: GPT-5.x, DeepSeek Reasoner, Claude 4.5+ (extended thinking), and Gemini 2.5+."
+
+msgid "reasoning_high"
+msgstr "高"
+
+msgid "reasoning_low"
+msgstr "低"
+
+msgid "reasoning_medium"
+msgstr "中"
+
+msgid "reasoning_unset"
+msgstr "未设置（默认）"
+
+msgid "reject_pair"
+msgstr "Reject"
+
+msgid "relookup_button"
+msgstr "重新查询“%s”"
+
+msgid "review"
+msgstr "Review"
+
+msgid "save"
+msgstr "保存"
+
+msgid "search_button"
+msgstr "搜索"
+
+msgid "search_character"
+msgstr "搜索角色..."
+
+msgid "search_character_title"
+msgstr "角色搜索"
+
+msgid "search_hint"
+msgstr "输入名称"
+
+msgid "search_term"
+msgstr "搜索术语"
+
+msgid "series_ask_later_msg"
+msgstr "系列剧情回顾已推迟。我们会在你下次打开/继续阅读此书时再次询问。"
+
+msgid "series_context_enabled_toggle"
+msgstr "启用 Series Context"
+
+msgid "series_context_loaded"
+msgstr "Series context 已加载（包含 %d 本前序书籍）。"
+
+msgid "series_context_prompt_text"
+msgstr "这似乎是《%2$s》的第 %1$d 册。是否加载前 %3$d 册的书籍回顾？\n\n(您可以在 设置 → 系列上下文 中关闭此提示)"
+
+msgid "series_context_prompt_title"
+msgstr "检测到系列书籍"
+
+msgid "series_disabled_msg"
+msgstr "已为本书禁用自动提示。你可以从 X-Ray 菜单手动获取剧情回顾。"
+
+msgid "series_no_prior_detected"
+msgstr "未检测到该系列的前序书籍。"
+
+msgid "series_prior_books_header"
+msgstr "── 前作回顾 ──"
+
+msgid "series_prior_label"
+msgstr "[前序]"
+
+msgid "skip"
+msgstr "Skip"
+
+msgid "spoiler_free_about"
+msgstr "无剧透模式将 AI 提取范围限制在您已阅读的页面（截止到当前页），防止剧透后续章节。\n\n整本书模式将分析整本书，可能包含剧透。"
+
+msgid "spoiler_free_menu_option"
+msgstr "无剧透"
+
+msgid "spoiler_free_option"
+msgstr "无剧透模式（截至 %d%%）"
+
+msgid "spoiler_preference_desc"
+msgstr "选择 X-Ray 数据的剧透偏好："
+
+msgid "spoiler_preference_title"
+msgstr "剧透偏好"
+
+msgid "stop"
+msgstr "Stop"
+
+msgid "term_not_found"
+msgstr "未找到匹配“%s”的术语"
+
+msgid "this_chapter"
+msgstr "本章"
+
+msgid "this_page"
+msgstr "当前页"
+
+msgid "updater_available_header"
+msgstr "X-Ray %s 已发布！\n您当前的版本是 %s。"
+
+msgid "updater_btn_cancel"
+msgstr "取消"
+
+msgid "updater_btn_download"
+msgstr "下载并安装"
+
+msgid "updater_btn_later"
+msgstr "稍后"
+
+msgid "updater_btn_open_browser"
+msgstr "在浏览器中打开"
+
+msgid "updater_btn_restart"
+msgstr "重启"
+
+msgid "updater_cancelled_check"
+msgstr "已取消更新检查。"
+
+msgid "updater_cancelled_update"
+msgstr "已取消更新。"
+
+msgid "updater_check"
+msgstr "检查更新"
+
+msgid "updater_checking"
+msgstr "正在检查更新..."
+
+msgid "updater_download_prompt"
+msgstr "\n\n现在下载并安装？"
+
+msgid "updater_downloading"
+msgstr "正在下载 X-Ray %s..."
+
+msgid "updater_err_download"
+msgstr "下载错误：%s"
+
+msgid "updater_err_extract"
+msgstr "解压错误：%s"
+
+msgid "updater_error_checking"
+msgstr "检查更新时出错。"
+
+msgid "updater_error_checking_detail"
+msgstr "检查更新时出错：%s"
+
+msgid "updater_no_asset"
+msgstr "未找到自动更新文件。\n\n是否在 GitHub 上打开发布页面？"
+
+msgid "updater_success_restart"
+msgstr "X-Ray %s 已成功安装。\n\n是否重启 KOReader 以应用更新？"
+
+msgid "updater_up_to_date"
+msgstr "X-Ray 已是最新版本 (%s)。"
+
+msgid "updater_whats_new"
+msgstr "更新内容："
+
+msgid "updating_ai"
+msgstr "正在更新 X-Ray 数据..."
+
+msgid "val"
+msgstr "???"
+
+msgid "xray_disabled_label"
+msgstr "已禁用"
+
+msgid "xray_enabled_label"
+msgstr "已启用"
+
+msgid "xray_mode_desc"
+msgstr "在字典和选择菜单中添加“X-Ray”按钮，实现即时查询。"
+
+msgid "yes"
+msgstr "是"
+

@@ -1,0 +1,15 @@
+{
+  "roots": [
+    "/Users/dniehof/Programming/Programme/koreader-xray-plugin-main/spec",
+    "/Users/dniehof/Programming/Programme/koreader-xray-plugin-main/tools",
+    "/Users/dniehof/Programming/Programme/koreader-xray-plugin-main/xray.koplugin"
+  ],
+  "include_extensions": [
+    ".lua",
+    ".md",
+    ".py"
+  ],
+  "ignore_patterns": [
+    "**/.*"
+  ]
+}
