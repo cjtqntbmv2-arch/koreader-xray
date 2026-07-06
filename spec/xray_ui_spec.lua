@@ -451,3 +451,33 @@ describe("quick xray menu", function()
         assert.is_true(plugin.last_menu_was_quick)
     end)
 end)
+
+describe("api key onboarding", function()
+    local old_net
+
+    before_each(function()
+        old_net = package.loaded["ui/network/manager"]
+    end)
+
+    after_each(function()
+        package.loaded["ui/network/manager"] = old_net
+    end)
+
+    it("manual fetch without any key opens the onboarding instead of fetching", function()
+        local fetch = require("xray_fetch")
+        local ui = require("xray_ui")
+        local plugin = createMockPlugin()
+        for k, v in pairs(ui) do plugin[k] = v end
+        for k, v in pairs(fetch) do plugin[k] = v end
+        plugin.ai_helper = { settings = {}, hasApiKey = function() return false end }
+        local onboarded = 0
+        plugin.showApiKeyOnboarding = function() onboarded = onboarded + 1 end
+        local network_called = false
+        package.loaded["ui/network/manager"] = {
+            runWhenOnline = function(_, cb) network_called = true end,
+        }
+        plugin:fetchFromAI()
+        assert.are.equal(1, onboarded)
+        assert.is_false(network_called)
+    end)
+end)

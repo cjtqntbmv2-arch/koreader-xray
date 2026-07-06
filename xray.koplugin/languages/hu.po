@@ -674,6 +674,18 @@ msgstr "Még nincsenek idővonal-adatok.\n\nKérjük, használja előbb az 'X-Ra
 msgid "ok"
 msgstr "OK"
 
+msgid "onboarding_key_saved"
+msgstr "API key saved. X-Ray is ready - fetch data via the X-Ray menu."
+
+msgid "onboarding_no_key"
+msgstr "X-Ray needs an AI provider API key (one-time setup).\n\nGoogle Gemini offers a free tier (aistudio.google.com).\n\nSet it up now?"
+
+msgid "onboarding_pick_provider"
+msgstr "Choose your AI provider"
+
+msgid "onboarding_setup_now"
+msgstr "Set up now"
+
 msgid "pair_rejected"
 msgstr "Pair marked as not a duplicate."
 

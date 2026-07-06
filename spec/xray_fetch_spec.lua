@@ -208,3 +208,25 @@ describe("manual fetch concurrency guard", function()
         assert.is_false(network_called)
     end)
 end)
+
+describe("auto dupe check default", function()
+    it("does not start a duplicate check unless explicitly enabled", function()
+        local fetch = require("xray_fetch")
+        local plugin = createMockPlugin()
+        for k, v in pairs(fetch) do plugin[k] = v end
+        local started = 0
+        plugin.prefetch_active = false
+        plugin.characters = { { name = "A" }, { name = "B" } }
+        plugin.locations = {}
+        plugin.ai_helper = {
+            settings = {}, -- user never touched the setting
+            hasApiKey = function() return true end,
+            findDuplicatesAsync = function() started = started + 1; return nil end,
+        }
+        plugin:runPostFetchDuplicateCheck("T", "A", 50, true)
+        assert.are.equal(0, started)
+        plugin.ai_helper.settings.auto_dupe_check_enabled = true
+        plugin:runPostFetchDuplicateCheck("T", "A", 50, true)
+        assert.is_true(started > 0)
+    end)
+end)

@@ -1891,7 +1891,7 @@ function M:showAutoDupeCheckSettings()
     local function showSettings()
         if info_dialog then UIManager:close(info_dialog) end
         
-        local current_setting = self.ai_helper.settings.auto_dupe_check_enabled ~= false -- default is true
+        local current_setting = self.ai_helper.settings.auto_dupe_check_enabled == true -- default is false (opt-in, costs an extra AI call)
         local enabled_text = self.loc:t("auto_dupe_check_enabled") or "Enabled"
         local disabled_text = self.loc:t("auto_dupe_check_disabled") or "Disabled"
         
@@ -3794,6 +3794,78 @@ function M:getAPIKeysMenu()
     return menu_items
 end
 
+-- First-run onboarding: the only mandatory configuration is one provider key.
+-- Instead of a dead-end error message, walk the user straight to the input.
+function M:showApiKeyOnboarding()
+    local ConfirmBox = require("ui/widget/confirmbox")
+    UIManager:show(ConfirmBox:new{
+        text = self.loc:t("onboarding_no_key")
+            or "X-Ray needs an AI provider API key (one-time setup).\n\nGoogle Gemini offers a free tier (aistudio.google.com).\n\nSet it up now?",
+        ok_text = self.loc:t("onboarding_setup_now") or "Set up now",
+        cancel_text = self.loc:t("cancel") or "Cancel",
+        ok_callback = function()
+            self:showProviderKeyOnboardingMenu()
+        end,
+    })
+end
+
+function M:showProviderKeyOnboardingMenu()
+    local items = {}
+    for _, p in ipairs({
+        { id = "gemini", name = "Google Gemini" },
+        { id = "chatgpt", name = "OpenAI ChatGPT" },
+        { id = "deepseek", name = "DeepSeek" },
+        { id = "claude", name = "Anthropic Claude" },
+    }) do
+        table.insert(items, {
+            text = p.name,
+            callback = function() self:promptProviderKey(p.id, p.name) end,
+        })
+    end
+    self.onboarding_menu = self:newMenu("onboarding_menu", {
+        title = self.loc:t("onboarding_pick_provider") or "Choose your AI provider",
+        item_table = items,
+        is_borderless = true,
+        width = Screen:getWidth(),
+        height = Screen:getHeight(),
+    })
+    UIManager:show(self.onboarding_menu)
+end
+
+function M:promptProviderKey(provider, provider_name)
+    local InputDialog = require("ui/widget/inputdialog")
+    local ui_key = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings[provider .. "_api_key"] or ""
+    local input_dialog
+    input_dialog = InputDialog:new{
+        title = provider_name .. " API Key",
+        input = ui_key,
+        buttons = {
+            {
+                { text = self.loc:t("cancel"), callback = function() UIManager:close(input_dialog) end },
+                { text = self.loc:t("save"), is_enter_default = true, callback = function()
+                    local key = input_dialog:getInputText()
+                    UIManager:close(input_dialog)
+                    if key and #key > 0 then
+                        self.ai_helper:saveSettings({
+                            [provider .. "_api_key"] = key,
+                            [provider .. "_use_ui_key"] = true,
+                        })
+                        self.ai_helper:init(self.path)
+                        if self.onboarding_menu then UIManager:close(self.onboarding_menu); self.onboarding_menu = nil end
+                        UIManager:show(require("ui/widget/infomessage"):new{
+                            text = self.loc:t("onboarding_key_saved") or "API key saved. X-Ray is ready - fetch data via the X-Ray menu.",
+                            timeout = 5,
+                        })
+                        UIManager:setDirty(nil, "ui")
+                    end
+                end },
+            },
+        },
+    }
+    UIManager:show(input_dialog)
+    input_dialog:onShowKeyboard()
+end
+
 function M:getProviderKeySubMenu(provider, provider_name)
     local config_key = (self.ai_helper and self.ai_helper.config_keys) and self.ai_helper.config_keys[provider] or ""
     local ui_key = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings[provider .. "_api_key"] or ""
@@ -3901,31 +3973,7 @@ function M:getProviderKeySubMenu(provider, provider_name)
                     return
                 end
 
-                local InputDialog = require("ui/widget/inputdialog")
-                local input_dialog
-                input_dialog = InputDialog:new{
-                    title = provider_name .. " API Key",
-                    input = ui_key,
-                    buttons = {
-                        {
-                            { text = self.loc:t("cancel"), callback = function() UIManager:close(input_dialog) end },
-                            { text = self.loc:t("save"), is_enter_default = true, callback = function()
-                                local key = input_dialog:getInputText()
-                                UIManager:close(input_dialog)
-                                if key and #key > 0 then
-                                    self.ai_helper:saveSettings({ 
-                                        [provider .. "_api_key"] = key,
-                                        [provider .. "_use_ui_key"] = true
-                                    })
-                                    self.ai_helper:init(self.path)
-                                    UIManager:setDirty(nil, "ui")
-                                end
-                            end }
-                        }
-                    }
-                }
-                UIManager:show(input_dialog)
-                input_dialog:onShowKeyboard()
+                self:promptProviderKey(provider, provider_name)
             end
         }
     }

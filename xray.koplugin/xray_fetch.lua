@@ -37,6 +37,10 @@ function M:fetchFromAI()
         })
         return
     end
+    if not (self.ai_helper and self.ai_helper.hasApiKey and self.ai_helper:hasApiKey()) then
+        self:showApiKeyOnboarding()
+        return
+    end
     require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
@@ -57,6 +61,10 @@ function M:updateFromAI()
             text = self.loc:t("prefetch_busy") or "A fetch is already running. Try again in a moment.",
             timeout = 4,
         })
+        return
+    end
+    if not (self.ai_helper and self.ai_helper.hasApiKey and self.ai_helper:hasApiKey()) then
+        self:showApiKeyOnboarding()
         return
     end
     require("ui/network/manager"):runWhenOnline(function()
@@ -869,7 +877,8 @@ end
 function M:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
     if self.prefetch_active then return end -- prefetch runs the dupe check once at the end (D3)
     if not self.ai_helper or not self.ai_helper.hasApiKey or not self.ai_helper:hasApiKey() then return end
-    if self.ai_helper.settings and self.ai_helper.settings.auto_dupe_check_enabled == false then return end
+    -- Opt-in: every check costs one extra AI call; default off (battery/quota)
+    if not (self.ai_helper.settings and self.ai_helper.settings.auto_dupe_check_enabled == true) then return end
 
     local DataStorage = require("datastorage")
     local settings_xray_dir = DataStorage:getSettingsDir() .. "/xray"
