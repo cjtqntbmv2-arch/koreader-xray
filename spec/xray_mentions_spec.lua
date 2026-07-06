@@ -13,6 +13,18 @@ describe("xray_mentions", function()
         _G.ui_tracker.shown = {}; _G.ui_tracker.last_shown = nil; _G.ui_tracker.closed = {}
     end)
 
+    describe("saveMentionsToCache", function()
+        it("delegates persistence to persistDisplayedEntities (write-back routing)", function()
+            local delegated = 0
+            plugin.persistDisplayedEntities = function() delegated = delegated + 1 end
+            plugin.cache_manager = {
+                asyncSaveCache = function() error("must not write the main cache directly") end,
+            }
+            plugin:saveMentionsToCache()
+            assert.are.equal(1, delegated)
+        end)
+    end)
+
     describe("showReturnBanner", function()
         local test_mentions = { {page = 10}, {page = 20}, {page = 30} }
 

@@ -147,30 +147,9 @@ function M:saveMentionsToCache()
     if not self.cache_manager then
         self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
     end
-    
-    if not self.book_data then
-        self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
-    end
-    local updated = self.book_data
-    
-    -- Update only the entity lists that contain the new mentions
-    updated.characters         = self.characters
-    updated.historical_figures = self.historical_figures
-    updated.locations          = self.locations
-    updated.terms              = self.terms
-    updated.timeline           = self.timeline
-    
-    if self.book_data then
-        updated.book_title      = self.book_data.book_title or updated.book_title
-        updated.author          = self.book_data.author or updated.author
-        updated.last_fetch_page = self.book_data.last_fetch_page or updated.last_fetch_page
-    end
-    
-    if self.author_info then
-        updated.author_info = self.author_info
-    end
-
-    self.cache_manager:asyncSaveCache(self.ui.document.file, updated)
+    -- Write-back routing (D4 displayed-dataset rule): a snapshot view writes
+    -- its own snapshot file, the main view keeps the legacy main-cache path.
+    self:persistDisplayedEntities()
 end
 
 function M:showMentionsForEntity(entity)

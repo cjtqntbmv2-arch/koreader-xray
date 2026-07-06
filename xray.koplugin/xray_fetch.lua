@@ -16,8 +16,21 @@ local function sanitizeMetadata(val)
     else return "Unknown" end
 end
 
+-- While a checkpoint-snapshot view is active, the position is already covered
+-- by prefetched data; a live fetch would merge against the snapshot view and
+-- pollute the main cache (D4). One shared guard for all manual AI entry points.
+function M:guardSnapshotViewActive()
+    if not self.active_snapshot_index then return false end
+    if self.showPrefetchInfo then
+        self:showPrefetchInfo(self.loc:t("prefetch_position_covered")
+            or "This position is already covered by offline X-Ray data. Clear the cache to re-fetch.")
+    end
+    return true
+end
+
 function M:fetchFromAI()
-    require("ui/network/manager"):runWhenOnline(function() 
+    if self:guardSnapshotViewActive() then return end
+    require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
@@ -31,7 +44,8 @@ function M:fetchFromAI()
 end
 
 function M:updateFromAI()
-    require("ui/network/manager"):runWhenOnline(function() 
+    if self:guardSnapshotViewActive() then return end
+    require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
@@ -940,7 +954,8 @@ function M:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
 end
 
 function M:fetchMoreCharacters()
-    require("ui/network/manager"):runWhenOnline(function() 
+    if self:guardSnapshotViewActive() then return end
+    require("ui/network/manager"):runWhenOnline(function()
         if not self.ai_helper then
             local AIHelper = require(plugin_path .. "xray_aihelper")
             self.ai_helper = AIHelper
@@ -1111,6 +1126,7 @@ function M:fetchMoreCharacters()
 end
 
 function M:fetchMoreTerms()
+    if self:guardSnapshotViewActive() then return end
     require("ui/network/manager"):runWhenOnline(function()
         if not self.ai_helper then
             local AIHelper = require(plugin_path .. "xray_aihelper")
@@ -1349,6 +1365,9 @@ end
 
 function M:mergeSeriesContext(cache_data, series_info)
     if not cache_data or not series_info then return end
+    -- Keep the refs so a snapshot swap can re-apply the series context on top
+    -- of the new view (see xray_prefetch.lua applySnapshot).
+    self._series_ctx = { cache_data = cache_data, series_info = series_info }
 
     local function filterPrior(tbl)
         local filtered = {}

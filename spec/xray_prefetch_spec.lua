@@ -142,6 +142,14 @@ describe("xray_prefetch", function()
                     return true
                 end,
                 loadCache = function() return plugin.book_data end,
+                loadSnapshot = function(_, _, idx)
+                    return {
+                        snapshot_version = 1,
+                        page = ({ 100, 200, 300 })[idx],
+                        percent = ({ 33, 66, 100 })[idx],
+                        characters = {}, locations = {}, terms = {}, historical_figures = {},
+                    }
+                end,
             }
 
             plugin._spec_fetch_calls = {}
@@ -196,6 +204,8 @@ describe("xray_prefetch", function()
             assert.is_true(plugin.book_data.prefetch.completed)
             assert.is_true(plugin:isPrefetchComplete())
             assert.is_false(plugin.prefetch_active)
+            -- the finish must re-apply the position view (reader at page 10 -> snapshot 1)
+            assert.are.equal(1, plugin.active_snapshot_index)
         end)
 
         it("skips checkpoints already covered by last_fetch_page", function()
@@ -281,6 +291,209 @@ describe("xray_prefetch", function()
             assert.is_true(dialogs >= 1)
             assert.are.equal(1, infos)
             assert.are.equal("InfoMessage", _G.ui_tracker.last_shown.type)
+        end)
+    end)
+
+    describe("snapshot resolution", function()
+        local function makeViewPlugin(existing)
+            local plugin = createMockPlugin()
+            plugin.ui.document.getPageCount = function() return 300 end
+            for k, v in pairs(prefetch) do
+                plugin[k] = v
+            end
+            plugin.book_data = {
+                characters = { { name = "MainChar" } },
+                locations = { { name = "MainLoc" } },
+                terms = {},
+                historical_figures = {},
+                prefetch = {
+                    checkpoints = {
+                        { page = 100, percent = 33 },
+                        { page = 200, percent = 66 },
+                        { page = 300, percent = 100 },
+                    },
+                },
+            }
+            plugin.characters = plugin.book_data.characters
+            plugin.locations = plugin.book_data.locations
+            plugin.terms = plugin.book_data.terms
+            plugin.historical_figures = plugin.book_data.historical_figures
+            plugin._spec_loads = 0
+            plugin._spec_snapshot_saves = {}
+            plugin._spec_async_saves = 0
+            plugin.cache_manager = {
+                snapshotExists = function(_, _, idx) return existing[idx] == true end,
+                saveSnapshot = function(_, _, idx, data)
+                    table.insert(plugin._spec_snapshot_saves, { index = idx, data = data })
+                    return true
+                end,
+                asyncSaveCache = function()
+                    plugin._spec_async_saves = plugin._spec_async_saves + 1
+                    return true
+                end,
+                loadSnapshot = function(_, _, idx)
+                    plugin._spec_loads = plugin._spec_loads + 1
+                    return {
+                        snapshot_version = 1,
+                        page = plugin.book_data.prefetch.checkpoints[idx].page,
+                        percent = plugin.book_data.prefetch.checkpoints[idx].percent,
+                        characters = { { name = "SnapChar" .. idx } },
+                        locations = {},
+                        terms = {},
+                        historical_figures = {},
+                    }
+                end,
+            }
+            plugin.ai_helper = { settings = {} }
+            return plugin
+        end
+
+        it("picks the largest snapshot at or below the position", function()
+            local plugin = makeViewPlugin({ [1] = true, [2] = true, [3] = true })
+            assert.are.equal(2, plugin:resolveSnapshotIndexForPage(250))
+            assert.are.equal(3, plugin:resolveSnapshotIndexForPage(300))
+        end)
+
+        it("tolerantly falls back to the smallest existing snapshot before CP1", function()
+            local plugin = makeViewPlugin({ [1] = true, [2] = true, [3] = true })
+            assert.are.equal(1, plugin:resolveSnapshotIndexForPage(10))
+        end)
+
+        it("skips missing snapshot files", function()
+            local plugin = makeViewPlugin({ [3] = true })
+            assert.are.equal(3, plugin:resolveSnapshotIndexForPage(250))
+            local plugin2 = makeViewPlugin({ [1] = true })
+            assert.are.equal(1, plugin2:resolveSnapshotIndexForPage(350))
+        end)
+
+        it("returns nil without a manifest or without snapshots", function()
+            local plugin = makeViewPlugin({})
+            assert.is_nil(plugin:resolveSnapshotIndexForPage(150))
+            local plugin2 = makeViewPlugin({ [1] = true })
+            plugin2.book_data.prefetch = nil
+            assert.is_nil(plugin2:resolveSnapshotIndexForPage(150))
+        end)
+
+        it("applySnapshot swaps entity lists and restores the main view", function()
+            local plugin = makeViewPlugin({ [2] = true })
+            plugin:applySnapshot(2)
+            assert.are.equal("SnapChar2", plugin.characters[1].name)
+            assert.are.equal(2, plugin.active_snapshot_index)
+            assert.are.equal(200, plugin.active_snapshot_page)
+
+            plugin:applySnapshot(nil)
+            assert.are.equal("MainChar", plugin.characters[1].name)
+            assert.is_nil(plugin.active_snapshot_index)
+            assert.is_nil(plugin.active_snapshot_page)
+        end)
+
+        it("updateSnapshotViewForPage loads a snapshot only on boundary crossings", function()
+            local plugin = makeViewPlugin({ [1] = true, [2] = true, [3] = true })
+            plugin:updateSnapshotViewForPage(150)
+            assert.are.equal(1, plugin.active_snapshot_index)
+            assert.are.equal(1, plugin._spec_loads)
+            plugin:updateSnapshotViewForPage(180) -- same interval -> no reload
+            assert.are.equal(1, plugin._spec_loads)
+            plugin:updateSnapshotViewForPage(250) -- crossing -> reload
+            assert.are.equal(2, plugin.active_snapshot_index)
+            assert.are.equal(2, plugin._spec_loads)
+        end)
+
+        it("prefers the fresher main cache when online fetches passed the snapshots", function()
+            local plugin = makeViewPlugin({ [1] = true, [2] = true })
+            plugin.book_data.last_fetch_page = 250
+            -- boundary 250 is spoiler-free at page 260 and newer than snapshot 2 (page 200)
+            assert.is_nil(plugin:resolveSnapshotIndexForPage(260))
+            -- at page 150 the boundary (250) would spoil -> snapshot 1 protects
+            assert.are.equal(1, plugin:resolveSnapshotIndexForPage(150))
+        end)
+
+        it("freezes the view while a prefetch is active", function()
+            local plugin = makeViewPlugin({ [1] = true, [2] = true, [3] = true })
+            plugin.prefetch_active = true
+            plugin:updateSnapshotViewForPage(250)
+            assert.is_nil(plugin.active_snapshot_index)
+        end)
+
+        it("full_book setting forces the main view", function()
+            local plugin = makeViewPlugin({ [1] = true, [2] = true, [3] = true })
+            plugin:updateSnapshotViewForPage(250)
+            assert.are.equal(2, plugin.active_snapshot_index)
+            plugin.ai_helper.settings.spoiler_setting = "full_book"
+            plugin:updateSnapshotViewForPage(250)
+            assert.is_nil(plugin.active_snapshot_index)
+            assert.are.equal("MainChar", plugin.characters[1].name)
+        end)
+
+        it("visibleTimeline returns the full timeline without an active snapshot", function()
+            local plugin = makeViewPlugin({})
+            plugin.timeline = { { text = "a", page = 10 }, { text = "b", page = 999 } }
+            assert.are.equal(plugin.timeline, plugin:visibleTimeline())
+        end)
+
+        it("visibleTimeline filters events beyond the active snapshot page", function()
+            local plugin = makeViewPlugin({ [2] = true })
+            plugin.timeline = {
+                { text = "early", page = 10 },
+                { text = "mid", page = 150 },
+                { text = "late", page = 999 },
+                { text = "unanchored" }, -- no page -> hidden in snapshot view
+            }
+            plugin:applySnapshot(2) -- active_snapshot_page = 200
+            local visible = plugin:visibleTimeline()
+            assert.are.equal(2, #visible)
+            assert.are.equal("early", visible[1].text)
+            assert.are.equal("mid", visible[2].text)
+        end)
+
+        it("visibleTimeline keeps series_prior events despite missing page anchors", function()
+            local plugin = makeViewPlugin({ [1] = true })
+            plugin.timeline = {
+                { text = "prior", source = "series_prior" },
+                { text = "late", page = 999 },
+            }
+            plugin:applySnapshot(1) -- active_snapshot_page = 100
+            local visible = plugin:visibleTimeline()
+            assert.are.equal(1, #visible)
+            assert.are.equal("prior", visible[1].text)
+        end)
+
+        it("re-applies stored series context after a snapshot swap", function()
+            local plugin = makeViewPlugin({ [2] = true })
+            local merged = 0
+            plugin.mergeSeriesContext = function(self, cache_data, series_info)
+                merged = merged + 1
+                self._spec_series_args = { cache_data, series_info }
+            end
+            plugin._series_ctx = { cache_data = { books = {} }, series_info = { index = 2 } }
+            plugin:applySnapshot(2)
+            assert.are.equal(1, merged)
+        end)
+
+        it("write-back routing persists to the active snapshot file, never the main cache", function()
+            local plugin = makeViewPlugin({ [2] = true })
+            plugin:applySnapshot(2)
+            plugin.characters[1].mentions = { { page = 150 } }
+            plugin:persistDisplayedEntities()
+
+            assert.are.equal(1, #plugin._spec_snapshot_saves)
+            assert.are.equal(2, plugin._spec_snapshot_saves[1].index)
+            assert.are.equal("SnapChar2", plugin._spec_snapshot_saves[1].data.characters[1].name)
+            assert.are.equal(200, plugin._spec_snapshot_saves[1].data.page)
+            assert.are.equal(0, plugin._spec_async_saves)
+            -- main cache lists untouched
+            assert.are.equal("MainChar", plugin.book_data.characters[1].name)
+        end)
+
+        it("write-back routing uses the legacy main-cache path without an active snapshot", function()
+            local plugin = makeViewPlugin({})
+            plugin.timeline = { { text = "t" } }
+            plugin:persistDisplayedEntities()
+
+            assert.are.equal(0, #plugin._spec_snapshot_saves)
+            assert.are.equal(1, plugin._spec_async_saves)
+            assert.are.equal(plugin.characters, plugin.book_data.characters)
+            assert.are.equal(plugin.timeline, plugin.book_data.timeline)
         end)
     end)
 end)

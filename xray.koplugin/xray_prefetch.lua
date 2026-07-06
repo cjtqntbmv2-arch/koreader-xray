@@ -128,7 +128,9 @@ function M:startOfflinePrefetch(is_silent)
 
     local spoiler_setting = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
     if spoiler_setting == "full_book" then
-        -- D4: full_book needs no checkpoints -- one normal full fetch equals it
+        -- D4: full_book needs no checkpoints -- one normal full fetch equals it.
+        -- Drop any leftover snapshot view first so the fetch guard lets it pass.
+        if self.applySnapshot then self:applySnapshot(nil) end
         self:fetchFromAI()
         return
     end
@@ -296,8 +298,12 @@ function M:_finishPrefetch(success)
     end
     self:log("XRayPlugin: Prefetch finished (" .. done .. "/" .. tostring(total) .. " snapshots)")
 
-    -- Bring the display in line with the new snapshot situation (Task 6)
+    -- Bring the display in line with the new snapshot situation. The fetch
+    -- chain replaced the self.* lists, so force a fresh apply even if the
+    -- index looks unchanged.
     if self.updateSnapshotViewForPage and self.ui and self.ui.getCurrentPage then
+        self.active_snapshot_index = nil
+        self.active_snapshot_page = nil
         self:updateSnapshotViewForPage(self.ui:getCurrentPage())
     end
 end
@@ -339,6 +345,154 @@ function M:_closePrefetchProgress()
         if ok_ui and UIManager then UIManager:close(self.prefetch_dialog) end
         self.prefetch_dialog = nil
     end
+end
+
+-- D4 displayed-dataset rule: mutations (mention scans, edits, merges) persist
+-- into the dataset currently on display. A snapshot view must NEVER overwrite
+-- the main cache -- that would destroy the 100% data.
+function M:persistDisplayedEntities()
+    if not self.cache_manager then
+        self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
+    end
+    if self.active_snapshot_index then
+        local snap = {
+            checkpoint_index = self.active_snapshot_index,
+            page = self.active_snapshot_page,
+            characters = self.characters or {},
+            locations = self.locations or {},
+            terms = self.terms or {},
+            historical_figures = self.historical_figures or {},
+        }
+        local manifest = self.book_data and self.book_data.prefetch
+        local cp = manifest and manifest.checkpoints and manifest.checkpoints[self.active_snapshot_index]
+        if cp then snap.percent = cp.percent end
+        self.cache_manager:saveSnapshot(self.ui.document.file, self.active_snapshot_index, snap)
+        return
+    end
+    -- Legacy path: today's behavior (see the former saveMentionsToCache body)
+    if not self.book_data then
+        self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
+    end
+    local updated = self.book_data
+    updated.characters         = self.characters
+    updated.historical_figures = self.historical_figures
+    updated.locations          = self.locations
+    updated.terms              = self.terms
+    updated.timeline           = self.timeline
+    if self.author_info then updated.author_info = self.author_info end
+    self.cache_manager:asyncSaveCache(self.ui.document.file, updated)
+end
+
+-- ── Position-based snapshot resolution (D4) ────────────────────────────────
+-- The displayed view is ALWAYS position-based (online too): after a prefetch
+-- the main cache holds 100% data, so showing self.* unfiltered would leak.
+-- Rule: largest existing snapshot with page <= position; before the first
+-- checkpoint the smallest existing snapshot is shown (tolerant, per user
+-- decision); without any snapshots the main cache behaves exactly as today.
+
+function M:resolveSnapshotIndexForPage(page)
+    local manifest = self.book_data and self.book_data.prefetch
+    if not manifest or not manifest.checkpoints or not page then return nil end
+    if not self.cache_manager then return nil end
+    local best, smallest
+    for i, cp in ipairs(manifest.checkpoints) do
+        if self:_snapshotExistsCached(i) then
+            if not smallest then smallest = i end
+            if cp.page <= page then best = i end
+        end
+    end
+    if best then
+        -- If online fetches advanced the main cache PAST the best snapshot but
+        -- not past the reading position, the main cache is the fresher view
+        -- and still spoiler-free here -> show it (index nil).
+        local boundary = self.book_data and self.book_data.last_fetch_page
+        local best_page = manifest.checkpoints[best] and manifest.checkpoints[best].page
+        if boundary and best_page and boundary <= page and boundary >= best_page then
+            return nil
+        end
+    end
+    return best or smallest
+end
+
+-- Cache the io.open probes per session; invalidated on save/clear.
+function M:_snapshotExistsCached(index)
+    self._snapshot_exists = self._snapshot_exists or {}
+    local hit = self._snapshot_exists[index]
+    if hit ~= nil then return hit end
+    local exists = self.cache_manager:snapshotExists(self.ui.document.file, index) and true or false
+    self._snapshot_exists[index] = exists
+    return exists
+end
+
+function M:invalidateSnapshotExistsCache()
+    self._snapshot_exists = nil
+end
+
+function M:applySnapshot(index)
+    if index == self.active_snapshot_index then return end
+    if index == nil then
+        -- restore the main-cache view
+        local bd = self.book_data or {}
+        self.characters = bd.characters or {}
+        self.locations = bd.locations or {}
+        self.terms = bd.terms or {}
+        self.historical_figures = bd.historical_figures or {}
+        self.active_snapshot_index = nil
+        self.active_snapshot_page = nil
+    else
+        local snap = self.cache_manager and self.cache_manager:loadSnapshot(self.ui.document.file, index)
+        if not snap then return end
+        self.characters = snap.characters or {}
+        self.locations = snap.locations or {}
+        self.terms = snap.terms or {}
+        self.historical_figures = snap.historical_figures or {}
+        self.active_snapshot_index = index
+        self.active_snapshot_page = snap.page
+    end
+    self:log("XRayPlugin: Snapshot view -> " .. tostring(index))
+    -- Re-apply the series context on top of the new view: entities from
+    -- previous books are spoiler-free by definition. The refs are stored by
+    -- mergeSeriesContext on first merge.
+    if self._series_ctx and self.mergeSeriesContext then
+        pcall(function()
+            self:mergeSeriesContext(self._series_ctx.cache_data, self._series_ctx.series_info)
+        end)
+    end
+end
+
+-- D2: the timeline is never swapped -- it has exactly one truth in the main
+-- cache. The display filters it through the active snapshot's page anchor.
+function M:visibleTimeline()
+    if not self.active_snapshot_page then return self.timeline or {} end
+    local out = {}
+    for _, ev in ipairs(self.timeline or {}) do
+        if ev.source == "series_prior" then
+            -- events from previous books have no spoiler axis in this book
+            table.insert(out, ev)
+        elseif ev.page and ev.page <= self.active_snapshot_page then
+            -- ponytail: this-book events without a page anchor are hidden in
+            -- snapshot view (conservative -- not placeable on the spoiler axis).
+            table.insert(out, ev)
+        end
+    end
+    return out
+end
+
+function M:updateSnapshotViewForPage(page)
+    if not page then return end
+    -- Frozen during a prefetch run: the fetch chain owns self.* (its merged
+    -- state feeds the next checkpoint as existing_characters); _finishPrefetch
+    -- re-applies the position view once the chain is done.
+    if self.prefetch_active then return end
+    local manifest = self.book_data and self.book_data.prefetch
+    if not manifest or not manifest.checkpoints then return end
+
+    local spoiler_setting = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
+    if spoiler_setting == "full_book" then
+        if self.active_snapshot_index then self:applySnapshot(nil) end
+        return
+    end
+    self:applySnapshot(self:resolveSnapshotIndexForPage(page))
 end
 
 return M

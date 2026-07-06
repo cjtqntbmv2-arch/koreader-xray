@@ -366,6 +366,10 @@ end
 function XRayPlugin:onPageUpdate(pageno)
     self.last_pageno = pageno
 
+    -- Checkpoint-snapshot view follows the reading position (cheap no-op
+    -- without a prefetch manifest; snapshot files load only on boundary crossings)
+    if self.updateSnapshotViewForPage then self:updateSnapshotViewForPage(pageno) end
+
     if self.pending_return_banner then
         local p = self.pending_return_banner
         self.pending_return_banner = nil
@@ -542,6 +546,12 @@ end
 function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
     if self.bg_fetch_active then return end
     if not self.ui or not self.ui.document then return end
+    -- Checkpoint-prefetch guards: no auto-merge while the prefetch loop runs,
+    -- while a snapshot view covers the position, or when the book is fully
+    -- prefetched (nothing left to fetch).
+    if self.prefetch_active then return end
+    if self.active_snapshot_index then return end
+    if self.isPrefetchComplete and self:isPrefetchComplete() then return end
 
     -- SILENT NETWORK CHECK: use isOnline() instead of runWhenOnline to avoid "white box" connecting dialogs
     local NetworkMgr = require("ui/network/manager")
@@ -661,6 +671,16 @@ function XRayPlugin:autoLoadCache()
             }
         end
         if #self.characters > 0 then self.xray_mode_enabled = true end
+
+        -- Apply the checkpoint-snapshot view for the current position (D4:
+        -- always position-based -- after a prefetch the main cache holds 100%
+        -- data and must not be displayed unfiltered).
+        if self.updateSnapshotViewForPage then
+            UIManager:scheduleIn(0.1, function()
+                if self.destroyed or not self.ui then return end
+                self:updateSnapshotViewForPage(self.ui:getCurrentPage())
+            end)
+        end
 
         -- Stage 2: Restore Sort Order (Deferred 500ms)
         UIManager:scheduleIn(500, function()

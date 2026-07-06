@@ -2111,19 +2111,9 @@ function M:walkDuplicatePairs(list, list_name, pairs_found)
 
     local function saveAndRefresh()
         if merge_count == 0 then return end
-        if not self.cache_manager then
-            self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
-        end
-        if not self.book_data then
-            self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
-        end
-        local cache = self.book_data
-        if list_name == "characters" then
-            cache.characters = list
-        elseif list_name == "locations" then
-            cache.locations = list
-        end
-        self.cache_manager:asyncSaveCache(self.ui.document.file, cache)
+        -- Write-back routing (D4): persist the displayed dataset -- the list
+        -- is self.characters/self.locations, which may be a snapshot view.
+        self:persistDisplayedEntities()
         -- Clear normalized lookup caches
         for _, it in ipairs(list) do
             it._norm_name = nil
@@ -2350,21 +2340,9 @@ function M:showMergeFlow(list, list_name)
                                     UIManager:close(wait_msg)
                                     
                                     if self:mergeEntries(list, primary_item.name, secondary_name, ai_merged_desc) then
-                                        -- Save cache: load existing, patch only the changed list
-                                        if not self.cache_manager then
-                                            self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
-                                        end
-                                        if not self.book_data then
-                                            self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
-                                        end
-                                        local cache = self.book_data
-                                        if list_name == "characters" then
-                                            cache.characters = list
-                                        elseif list_name == "locations" then
-                                            cache.locations = list
-                                        end
-                                        self.cache_manager:asyncSaveCache(self.ui.document.file, cache)
-                                        
+                                        -- Write-back routing (D4): persist the displayed dataset
+                                        self:persistDisplayedEntities()
+
                                         -- Clear normalized lookup caches so the LookupManager rebuilds them
                                         for _, it in ipairs(list) do
                                             it._norm_name = nil
@@ -2868,6 +2846,12 @@ function M:clearCache()
     if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
     self.cache_manager:clearCache(self.ui.document.file)
     self.characters = {}; self.locations = {}; self.timeline = {}; self.historical_figures = {}; self.author_info = nil
+    -- Checkpoint-prefetch: snapshots were deleted along with the cache --
+    -- drop the stale manifest/view state so guards and resolution reset too.
+    self.book_data = nil
+    self.active_snapshot_index = nil
+    self.active_snapshot_page = nil
+    if self.invalidateSnapshotExistsCache then self:invalidateSnapshotExistsCache() end
     UIManager:show(InfoMessage:new{ text = self.loc:t("cache_cleared"), timeout = 3 })
 end
 
@@ -3343,9 +3327,13 @@ function M:showTimeline()
     local toc = self.ui.document:getToc()
     self:assignTimelinePages(self.timeline, toc, true)
     self:sortTimelineByTOC(self.timeline)
-    
+
+    -- Checkpoint-prefetch: render only events at or before the active snapshot page
+    local timeline = self.visibleTimeline and self:visibleTimeline() or self.timeline
+    if #timeline == 0 then UIManager:show(InfoMessage:new{ text = self.loc:t("no_timeline_data"), timeout = 3 }); return end
+
     local has_prior = false
-    for _, ev in ipairs(self.timeline) do
+    for _, ev in ipairs(timeline) do
         if ev.source == "series_prior" then
             has_prior = true
             break
@@ -3370,7 +3358,7 @@ function M:showTimeline()
         })
     end
 
-    for _, ev in ipairs(self.timeline) do
+    for _, ev in ipairs(timeline) do
         if ev.source == "series_prior" then
             if not self.series_prior_timeline_collapsed then
                 table.insert(items, {
