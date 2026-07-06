@@ -452,6 +452,7 @@ end
 
 -- Clear cache for a book
 function CacheManager:clearCache(book_path)
+    self:deleteSnapshots(book_path)
     local cache_file = self:getCachePath(book_path)
     if cache_file then
         local success, err = os.remove(cache_file)
@@ -464,6 +465,76 @@ function CacheManager:clearCache(book_path)
         end
     end
     return false
+end
+
+-- ── Checkpoint snapshots (offline prefetch) ────────────────────────────────
+-- One file per checkpoint in the sidecar dir; a missing file marks a still
+-- pending checkpoint (resume marker). Snapshots hold only the entity lists,
+-- never the timeline (the timeline lives once in the main cache and is
+-- filtered by page anchors at display time).
+local SNAPSHOT_VERSION = 1
+
+function CacheManager:getSnapshotPath(book_path, index)
+    if not book_path or not index then return nil end
+    local dir = DocSettings:getSidecarDir(book_path)
+    if not dir then return nil end
+    return string.format("%s/xray_snapshot_%02d.lua", dir, index)
+end
+
+function CacheManager:saveSnapshot(book_path, index, data)
+    local path = self:getSnapshotPath(book_path, index)
+    if not path or not data then return false end
+    if not self:ensureDirectory(path) then return false end
+    data.snapshot_version = SNAPSHOT_VERSION
+    data.created_at = os.time()
+    local f, open_err = io.open(path, "w")
+    if not f then
+        logger.warn("CacheManager: Cannot open snapshot for writing:", open_err or "unknown")
+        return false
+    end
+    local ok = pcall(function()
+        f:write("-- X-Ray Snapshot v" .. SNAPSHOT_VERSION .. "\nreturn ")
+        self:serializeToFile(f, data, "")
+        f:write("\n")
+    end)
+    f:close()
+    if not ok then
+        logger.warn("CacheManager: Failed to save snapshot:", path)
+        AIHelper:log("CacheManager: Failed to save snapshot: " .. tostring(path))
+        return false
+    end
+    return true
+end
+
+function CacheManager:loadSnapshot(book_path, index)
+    local path = self:getSnapshotPath(book_path, index)
+    if not path then return nil end
+    local probe = io.open(path, "r")
+    if not probe then return nil end
+    probe:close()
+    local ok, data = pcall(dofile, path)
+    if not ok or type(data) ~= "table" or data.snapshot_version ~= SNAPSHOT_VERSION then
+        logger.warn("CacheManager: Ignoring unreadable/mismatched snapshot:", path)
+        return nil
+    end
+    return data
+end
+
+function CacheManager:snapshotExists(book_path, index)
+    local path = self:getSnapshotPath(book_path, index)
+    if not path then return false end
+    local f = io.open(path, "r")
+    if f then f:close(); return true end
+    return false
+end
+
+function CacheManager:deleteSnapshots(book_path)
+    -- ponytail: fixed index sweep 1..24 instead of a directory listing — lfs
+    -- can be nil on old devices; 24 is well above the hard cap of 12 checkpoints.
+    for i = 1, 24 do
+        local path = self:getSnapshotPath(book_path, i)
+        if path then os.remove(path) end
+    end
 end
 
 return CacheManager
