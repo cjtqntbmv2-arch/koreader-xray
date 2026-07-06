@@ -104,7 +104,12 @@ function XRayPlugin:init()
     self.loc:init(self.path)
 
     XRayLogger:init(self.path)
-    
+
+    -- Recover API keys if a previous OTA update died mid-install
+    pcall(function()
+        require(plugin_path .. "xray_updater").restoreConfigBackup()
+    end)
+
     local AIHelper = require(plugin_path .. "xray_aihelper")
     self.ai_helper = AIHelper
     self.ai_helper:init(self.path)

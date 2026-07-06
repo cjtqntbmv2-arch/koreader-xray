@@ -153,7 +153,8 @@ local specs = {
     "spec/xray_terms_spec.lua",
     "spec/xray_seriesmanager_spec.lua",
     "spec/xray_prefetch_spec.lua",
-    "spec/xray_main_spec.lua"
+    "spec/xray_main_spec.lua",
+    "spec/xray_updater_spec.lua"
 }
 
 print("=== Running KOReader X-Ray Unit Tests ===")

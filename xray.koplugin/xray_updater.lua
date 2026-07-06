@@ -53,6 +53,45 @@ local function t(key, ...)
     return key
 end
 
+-- gsub-safe key injection: user values (custom endpoints/models) may contain
+-- '%', which is a capture escape in gsub replacement strings.
+function M._injectValue(content, field, value)
+    if not value or value == "" then return content end
+    local safe = value:gsub("%%", "%%%%")
+    return content:gsub(field .. '%s*=%s*""', field .. ' = "' .. safe .. '"')
+end
+
+-- Recover from an update that died between unzip and key re-injection: the
+-- .bak written before the unzip is then the only copy of the user's keys.
+-- Always removes the .bak. config_path parameter exists for tests.
+function M.restoreConfigBackup(config_path)
+    config_path = config_path or (_plugin_dir .. "/xray_config.lua")
+    local bak_path = config_path .. ".bak"
+    local probe = io.open(bak_path, "r")
+    if not probe then return false end
+    probe:close()
+    local ok_live, live = pcall(dofile, config_path)
+    local has_key = ok_live and type(live) == "table" and (
+        (live.gemini_api_key or "") ~= "" or (live.chatgpt_api_key or "") ~= "" or
+        (live.deepseek_api_key or "") ~= "" or (live.claude_api_key or "") ~= "" or
+        (live.custom1_api_key or "") ~= "" or (live.custom2_api_key or "") ~= "")
+    if not has_key then
+        local src = io.open(bak_path, "r")
+        if src then
+            local content = src:read("*a")
+            src:close()
+            local dst = io.open(config_path, "w")
+            if dst then
+                dst:write(content)
+                dst:close()
+                logger.info("xray updater: restored xray_config.lua from backup after interrupted update")
+            end
+        end
+    end
+    pcall(os.remove, bak_path)
+    return true
+end
+
 local function _cacheFile(use_beta)
     local suffix = use_beta and "_beta" or ""
     local ok, DS = pcall(require, "datastorage")
@@ -384,10 +423,33 @@ local function _applyUpdate(download_url, new_version)
             saved_keys.custom2_model = cfg.custom2_model
         end
 
+        -- Backup the live config: between unzip (overwrites it) and the key
+        -- re-injection below, the RAM table is otherwise the only key copy.
+        local bak_path = config_path .. ".bak"
+        pcall(function()
+            local src = io.open(config_path, "r")
+            if src then
+                local content = src:read("*a")
+                src:close()
+                local dst = io.open(bak_path, "w")
+                if dst then dst:write(content); dst:close() end
+            end
+        end)
+
         -- 2. Download the update
         local dl_ok, dl_err = _httpGetToFile(download_url, tmp_zip)
         if not dl_ok then
             return { success = false, stage = "download", err = dl_err }
+        end
+
+        -- Reject truncated downloads before extracting over the live install.
+        -- ponytail: no staged install; zip -t + config backup cover the
+        -- realistic failure (partial download). Upgrade path: unzip to a
+        -- staging dir + directory swap if half-written installs ever show up.
+        local test_ret = os.execute(string.format("unzip -tqq %q >/dev/null 2>&1", tmp_zip))
+        if test_ret ~= 0 and test_ret ~= true then
+            os.remove(tmp_zip)
+            return { success = false, stage = "download", err = "corrupted download (zip integrity test failed)" }
         end
 
         -- 3. Extract (overwrites xray_config.lua with the default one)
@@ -410,38 +472,16 @@ local function _applyUpdate(download_url, new_version)
                 nfh:close()
 
                 -- Replace empty key placeholders with the saved user keys
-                if saved_keys.gemini and saved_keys.gemini ~= "" then
-                    content = content:gsub('gemini_api_key%s*=%s*""', 'gemini_api_key = "' .. saved_keys.gemini .. '"')
-                end
-                if saved_keys.chatgpt and saved_keys.chatgpt ~= "" then
-                    content = content:gsub('chatgpt_api_key%s*=%s*""', 'chatgpt_api_key = "' .. saved_keys.chatgpt .. '"')
-                end
-                if saved_keys.deepseek and saved_keys.deepseek ~= "" then
-                    content = content:gsub('deepseek_api_key%s*=%s*""', 'deepseek_api_key = "' .. saved_keys.deepseek .. '"')
-                end
-                if saved_keys.claude and saved_keys.claude ~= "" then
-                    content = content:gsub('claude_api_key%s*=%s*""', 'claude_api_key = "' .. saved_keys.claude .. '"')
-                end
-                
-                if saved_keys.custom1_key and saved_keys.custom1_key ~= "" then
-                    content = content:gsub('custom1_api_key%s*=%s*""', 'custom1_api_key = "' .. saved_keys.custom1_key .. '"')
-                end
-                if saved_keys.custom1_endpoint and saved_keys.custom1_endpoint ~= "" then
-                    content = content:gsub('custom1_endpoint%s*=%s*""', 'custom1_endpoint = "' .. saved_keys.custom1_endpoint .. '"')
-                end
-                if saved_keys.custom1_model and saved_keys.custom1_model ~= "" then
-                    content = content:gsub('custom1_model%s*=%s*""', 'custom1_model = "' .. saved_keys.custom1_model .. '"')
-                end
-                
-                if saved_keys.custom2_key and saved_keys.custom2_key ~= "" then
-                    content = content:gsub('custom2_api_key%s*=%s*""', 'custom2_api_key = "' .. saved_keys.custom2_key .. '"')
-                end
-                if saved_keys.custom2_endpoint and saved_keys.custom2_endpoint ~= "" then
-                    content = content:gsub('custom2_endpoint%s*=%s*""', 'custom2_endpoint = "' .. saved_keys.custom2_endpoint .. '"')
-                end
-                if saved_keys.custom2_model and saved_keys.custom2_model ~= "" then
-                    content = content:gsub('custom2_model%s*=%s*""', 'custom2_model = "' .. saved_keys.custom2_model .. '"')
-                end
+                content = M._injectValue(content, "gemini_api_key", saved_keys.gemini)
+                content = M._injectValue(content, "chatgpt_api_key", saved_keys.chatgpt)
+                content = M._injectValue(content, "deepseek_api_key", saved_keys.deepseek)
+                content = M._injectValue(content, "claude_api_key", saved_keys.claude)
+                content = M._injectValue(content, "custom1_api_key", saved_keys.custom1_key)
+                content = M._injectValue(content, "custom1_endpoint", saved_keys.custom1_endpoint)
+                content = M._injectValue(content, "custom1_model", saved_keys.custom1_model)
+                content = M._injectValue(content, "custom2_api_key", saved_keys.custom2_key)
+                content = M._injectValue(content, "custom2_endpoint", saved_keys.custom2_endpoint)
+                content = M._injectValue(content, "custom2_model", saved_keys.custom2_model)
 
                 local outh = io.open(config_path, "w")
                 if outh then
@@ -451,6 +491,7 @@ local function _applyUpdate(download_url, new_version)
             end
         end
 
+        pcall(os.remove, bak_path)
         return { success = true }
     end
 
