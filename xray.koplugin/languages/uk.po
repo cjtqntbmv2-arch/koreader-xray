@@ -330,7 +330,7 @@ msgid "find_mentions"
 msgstr "Знайти згадки"
 
 msgid "full_book_option"
-msgstr "Режим усієї книги"
+msgstr "Show everything (full book)"
 
 msgid "label_aliases"
 msgstr "??????????"
@@ -798,16 +798,16 @@ msgid "skip"
 msgstr "Skip"
 
 msgid "spoiler_free_about"
-msgstr "Режим без спойлерів обмежує аналіз ШІ сторінками, які ви вже прочитали (до вашої поточної сторінки), запобігаючи спойлерам із майбутніх розділів.\n\nРежим усієї книги аналізує всю книгу цілком, що може містити спойлери."
+msgstr "Spoiler-free: the X-Ray display always follows your reading position. After preparing a book for offline reading, the whole book's data is stored locally - spoiler-free controls what is SHOWN, not what is fetched. New AI fetches stay limited to the pages you have read.\n\nShow everything (full book): analyzes and displays the entire book at once (one AI request, no position filtering). Recommended for non-fiction and re-reads - may contain spoilers on a first read."
 
 msgid "spoiler_free_menu_option"
-msgstr "Без спойлерів"
+msgstr "Spoiler-free (recommended)"
 
 msgid "spoiler_free_option"
 msgstr "Режим без спойлерів (до %d%% книги)"
 
 msgid "spoiler_preference_desc"
-msgstr "Виберіть налаштування спойлерів для даних X-Ray:"
+msgstr "Spoiler-free shows X-Ray data only up to your current reading position. Show everything displays all fetched data immediately - for non-fiction and re-reads."
 
 msgid "spoiler_preference_title"
 msgstr "Налаштування спойлерів"

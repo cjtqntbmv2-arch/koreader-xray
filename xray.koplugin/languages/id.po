@@ -330,7 +330,7 @@ msgid "find_mentions"
 msgstr "Temukan Sebutan"
 
 msgid "full_book_option"
-msgstr "Mode Buku Penuh"
+msgstr "Show everything (full book)"
 
 msgid "label_aliases"
 msgstr "ALIAS"
@@ -798,16 +798,16 @@ msgid "skip"
 msgstr "Lewati"
 
 msgid "spoiler_free_about"
-msgstr "Mode bebas spoiler membatasi ekstraksi AI pada halaman yang telah Anda baca (hingga halaman Anda saat ini), mencegah spoiler dari bab-bab mendatang.\n\nMode Buku Penuh menganalisis seluruh buku, yang mungkin berisi spoiler."
+msgstr "Spoiler-free: the X-Ray display always follows your reading position. After preparing a book for offline reading, the whole book's data is stored locally - spoiler-free controls what is SHOWN, not what is fetched. New AI fetches stay limited to the pages you have read.\n\nShow everything (full book): analyzes and displays the entire book at once (one AI request, no position filtering). Recommended for non-fiction and re-reads - may contain spoilers on a first read."
 
 msgid "spoiler_free_menu_option"
-msgstr "Bebas Spoiler"
+msgstr "Spoiler-free (recommended)"
 
 msgid "spoiler_free_option"
 msgstr "Mode Bebas Spoiler (Hingga %d%% buku)"
 
 msgid "spoiler_preference_desc"
-msgstr "Pilih preferensi spoiler Anda untuk data X-Ray:"
+msgstr "Spoiler-free shows X-Ray data only up to your current reading position. Show everything displays all fetched data immediately - for non-fiction and re-reads."
 
 msgid "spoiler_preference_title"
 msgstr "Preferensi Spoiler"

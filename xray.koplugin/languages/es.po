@@ -330,7 +330,7 @@ msgid "find_mentions"
 msgstr "Buscar menciones"
 
 msgid "full_book_option"
-msgstr "Modo libro completo"
+msgstr "Show everything (full book)"
 
 msgid "label_aliases"
 msgstr "ALIAS"
@@ -798,16 +798,16 @@ msgid "skip"
 msgstr "Skip"
 
 msgid "spoiler_free_about"
-msgstr "El modo sin spoilers limita la extracción de IA a las páginas que ya ha leído (hasta su página actual), evitando spoilers de futuros capítulos.\n\nEl modo de libro completo analiza todo el libro, lo que puede contener spoilers."
+msgstr "Spoiler-free: the X-Ray display always follows your reading position. After preparing a book for offline reading, the whole book's data is stored locally - spoiler-free controls what is SHOWN, not what is fetched. New AI fetches stay limited to the pages you have read.\n\nShow everything (full book): analyzes and displays the entire book at once (one AI request, no position filtering). Recommended for non-fiction and re-reads - may contain spoilers on a first read."
 
 msgid "spoiler_free_menu_option"
-msgstr "Sin spoilers"
+msgstr "Spoiler-free (recommended)"
 
 msgid "spoiler_free_option"
 msgstr "Modo sin spoilers (Hasta el %d%% del libro)"
 
 msgid "spoiler_preference_desc"
-msgstr "Seleccione su preferencia de spoilers para los datos de X-Ray:"
+msgstr "Spoiler-free shows X-Ray data only up to your current reading position. Show everything displays all fetched data immediately - for non-fiction and re-reads."
 
 msgid "spoiler_preference_title"
 msgstr "Preferencia de spoilers"

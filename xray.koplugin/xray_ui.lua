@@ -2556,11 +2556,11 @@ function M:showSpoilerSettings()
         
         info_dialog = ButtonDialog:new{
             title = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
-            text = self.loc:t("spoiler_preference_desc") or "Select your spoiler preference for X-Ray data:",
+            text = self.loc:t("spoiler_preference_desc") or "Spoiler-free shows X-Ray data only up to your current reading position. Show everything displays all fetched data immediately - for non-fiction and re-reads.",
             buttons = {
                 {
                     {
-                        text = (current_setting == "spoiler_free" and "[✓] " or "[  ] ") .. (self.loc:t("spoiler_free_menu_option") or "Spoiler-free"),
+                        text = (current_setting == "spoiler_free" and "[✓] " or "[  ] ") .. (self.loc:t("spoiler_free_menu_option") or "Spoiler-free (recommended)"),
                         callback = function()
                             self.ai_helper:saveSettings({ spoiler_setting = "spoiler_free" })
                             UIManager:setDirty(nil, "ui")
@@ -2568,7 +2568,7 @@ function M:showSpoilerSettings()
                         end
                     },
                     {
-                        text = (current_setting == "full_book" and "[✓] " or "[  ] ") .. (self.loc:t("full_book_option") or "Full Book Mode"),
+                        text = (current_setting == "full_book" and "[✓] " or "[  ] ") .. (self.loc:t("full_book_option") or "Show everything (full book)"),
                         callback = function()
                             self.ai_helper:saveSettings({ spoiler_setting = "full_book" })
                             UIManager:setDirty(nil, "ui")
@@ -2581,7 +2581,7 @@ function M:showSpoilerSettings()
                         text = self.loc:t("menu_about") or "About",
                         callback = function()
                             UIManager:show(InfoMessage:new{
-                                text = self.loc:t("spoiler_free_about") or "Spoiler-free mode limits AI extraction to the pages you have already read (up to your current page), preventing spoilers from future chapters.\n\nFull Book Mode analyzes the entire book, which may contain spoilers.",
+                                text = self.loc:t("spoiler_free_about") or "Spoiler-free: the X-Ray display always follows your reading position. After preparing a book for offline reading, the whole book's data is stored locally - spoiler-free controls what is SHOWN, not what is fetched. New AI fetches stay limited to the pages you have read.\n\nShow everything (full book): analyzes and displays the entire book at once (one AI request, no position filtering). Recommended for non-fiction and re-reads - may contain spoilers on a first read.",
                                 timeout = 30
                             })
                         end

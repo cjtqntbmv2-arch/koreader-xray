@@ -330,7 +330,7 @@ msgid "find_mentions"
 msgstr "Erwähnungen finden"
 
 msgid "full_book_option"
-msgstr "Vollständiger Buch-Modus"
+msgstr "Alles anzeigen (Vollbuch)"
 
 msgid "label_aliases"
 msgstr "ALIASE"
@@ -798,16 +798,16 @@ msgid "skip"
 msgstr "Skip"
 
 msgid "spoiler_free_about"
-msgstr "Der spoiler-freie Modus begrenzt die KI-Extraktion auf die Seiten, die Sie bereits gelesen haben (bis zu Ihrer aktuellen Seite), um Spoiler aus zukünftigen Kapiteln zu vermeiden.\n\nDer vollständige Buch-Modus analysiert das gesamte Buch, was Spoiler enthalten kann."
+msgstr "Spoilerfrei: Die X-Ray-Anzeige folgt immer deiner Leseposition. Nach der Offline-Vorbereitung liegen die Daten des ganzen Buchs lokal vor – Spoilerfrei steuert die ANZEIGE, nicht den Abruf. Neue KI-Abrufe bleiben auf die bereits gelesenen Seiten begrenzt.\n\nAlles anzeigen (Vollbuch): analysiert und zeigt das ganze Buch sofort (ein KI-Abruf, keine Positionsfilterung). Empfohlen für Sachbücher und Re-Reads – beim Erstlesen sind Spoiler möglich."
 
 msgid "spoiler_free_menu_option"
-msgstr "Spoiler-frei"
+msgstr "Spoilerfrei (empfohlen)"
 
 msgid "spoiler_free_option"
 msgstr "Spoiler-freier Modus (Bis zu %d%% des Buches)"
 
 msgid "spoiler_preference_desc"
-msgstr "Wählen Sie Ihre Spoiler-Einstellung für X-Ray-Daten:"
+msgstr "Spoilerfrei zeigt X-Ray-Daten nur bis zu deiner aktuellen Leseposition. Alles anzeigen zeigt alle abgerufenen Daten sofort – für Sachbücher und Re-Reads."
 
 msgid "spoiler_preference_title"
 msgstr "Spoiler-Einstellung"

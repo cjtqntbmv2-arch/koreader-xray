@@ -226,7 +226,7 @@ function Localization:t(key, ...)
             log_loading = "Loading log...",
             logs_cleared = "Logs cleared!",
             spoiler_free_option = "Spoiler-free Mode (Up to %d%% of the book)",
-            spoiler_free_about = "Spoiler-free mode limits AI extraction to the pages you have already read (up to your current page), preventing spoilers from future chapters.\n\nFull Book Mode analyzes the entire book, which may contain spoilers.",
+            spoiler_free_about = "Spoiler-free: the X-Ray display always follows your reading position. After preparing a book for offline reading, the whole book's data is stored locally - spoiler-free controls what is SHOWN, not what is fetched. New AI fetches stay limited to the pages you have read.\n\nShow everything (full book): analyzes and displays the entire book at once (one AI request, no position filtering). Recommended for non-fiction and re-reads - may contain spoilers on a first read.",
             updater_check = "Check for Updates",
             updater_checking = "Checking for updates...",
             updater_error_checking = "Error checking for updates.",
