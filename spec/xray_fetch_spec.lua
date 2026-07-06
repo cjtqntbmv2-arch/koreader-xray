@@ -179,3 +179,32 @@ describe("fetchSingleWord snapshot guard", function()
         assert.is_false(network_called)
     end)
 end)
+
+describe("manual fetch concurrency guard", function()
+    local old_net
+
+    before_each(function()
+        old_net = package.loaded["ui/network/manager"]
+    end)
+
+    after_each(function()
+        package.loaded["ui/network/manager"] = old_net
+    end)
+
+    it("refuses a second manual fetch while one is active", function()
+        local fetch = require("xray_fetch")
+        local plugin = createMockPlugin()
+        for k, v in pairs(fetch) do plugin[k] = v end
+        plugin.bg_fetch_active = true
+        local network_called = false
+        package.loaded["ui/network/manager"] = {
+            runWhenOnline = function(_, cb) network_called = true end,
+        }
+        plugin:fetchFromAI()
+        assert.is_false(network_called)
+        plugin.bg_fetch_active = false
+        plugin.bg_fetch_pending = true
+        plugin:updateFromAI()
+        assert.is_false(network_called)
+    end)
+end)

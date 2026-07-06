@@ -281,3 +281,34 @@ describe("AIHelper", function()
         end)
     end)
 end)
+
+describe("checkAsyncResult response-shape hardening", function()
+    local ok_json = pcall(require, "json")
+    if not ok_json then
+        print("SKIP: checkAsyncResult shape tests need the json module (SQUASHFS_ROOT)")
+    else
+        it("returns error_parse instead of crashing on choices without message", function()
+            local AIHelper = require("xray_aihelper")
+            local path = "/tmp/xray_spec_async_result.json"
+            local f = io.open(path, "w")
+            f:write("200\nchatgpt\n" .. '{"choices":[{"finish_reason":"content_filter"}]}')
+            f:close()
+            local data, code = AIHelper:checkAsyncResult(path)
+            pcall(os.remove, path)
+            assert.is_false(data)
+            assert.are.equal("error_parse", code)
+        end)
+
+        it("returns error_parse on a non-table JSON body", function()
+            local AIHelper = require("xray_aihelper")
+            local path = "/tmp/xray_spec_async_result2.json"
+            local f = io.open(path, "w")
+            f:write("200\nchatgpt\ntrue")
+            f:close()
+            local data, code = AIHelper:checkAsyncResult(path)
+            pcall(os.remove, path)
+            assert.is_false(data)
+            assert.are.equal("error_parse", code)
+        end)
+    end
+end)

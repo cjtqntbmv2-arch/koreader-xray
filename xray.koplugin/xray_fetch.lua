@@ -30,6 +30,13 @@ end
 
 function M:fetchFromAI()
     if self:guardSnapshotViewActive() then return end
+    if self.bg_fetch_active or self.bg_fetch_pending then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("prefetch_busy") or "A fetch is already running. Try again in a moment.",
+            timeout = 4,
+        })
+        return
+    end
     require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
@@ -45,6 +52,13 @@ end
 
 function M:updateFromAI()
     if self:guardSnapshotViewActive() then return end
+    if self.bg_fetch_active or self.bg_fetch_pending then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("prefetch_busy") or "A fetch is already running. Try again in a moment.",
+            timeout = 4,
+        })
+        return
+    end
     require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
@@ -454,7 +468,20 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 else
                     if wait_msg then UIManager:close(wait_msg) end
                     self.bg_fetch_active = false
-                    self:finalizeXRayData(data, title, author, book_text, is_update, is_silent, current_page)
+                    local fin_ok, fin_err = pcall(function()
+                        self:finalizeXRayData(data, title, author, book_text, is_update, is_silent, current_page)
+                    end)
+                    if not fin_ok then
+                        self:log("XRayPlugin: finalizeXRayData failed: " .. tostring(fin_err))
+                        if not is_silent then
+                            local err_title, err_text = utils:getFriendlyError("error_parse", tostring(fin_err), self.loc)
+                            UIManager:show(ConfirmBox:new{
+                                text = err_title .. "\n\n" .. err_text,
+                                ok_text = self.loc:t("ok") or "OK",
+                                cancel_text = nil,
+                            })
+                        end
+                    end
                 end
             end
             UIManager:scheduleIn(2, poll)

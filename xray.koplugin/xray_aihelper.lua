@@ -460,7 +460,14 @@ function AIHelper:makeRequestAsync(request_params, result_file)
                         source = ltn12_req.source.string(req.body or ""),
                         sink = socketutil_req.table_sink(response_body)
                     }
-                    ok, code, response_headers, status = http_req.request(request)
+                    local req_ok, req_err = pcall(function()
+                        ok, code, response_headers, status = http_req.request(request)
+                    end)
+                    if not req_ok then
+                        -- socket-level crash: mark this provider failed and let the loop try the fallback
+                        self:log("AIHelper Child: http.request crashed for " .. tostring(req.provider) .. ": " .. tostring(req_err))
+                        ok, code, response_headers, status = nil, "crash", nil, tostring(req_err)
+                    end
                     response_text = table.concat(response_body)
                     code_num = tonumber(code)
 
@@ -779,37 +786,52 @@ function AIHelper:checkAsyncResult(result_file)
     -- Parse the response based on provider
     local success, data = pcall(json.decode, response_text)
     if not success then return false, "error_parse", "JSON decode failed" end
+    if type(data) ~= "table" then return false, "error_parse", "Non-object JSON response" end
 
+    -- The extraction below indexes provider-specific shapes; a single
+    -- unexpected response (e.g. choices without message) must return an
+    -- error instead of crashing the poll callback -- a crash there leaves
+    -- bg_fetch_active locked and stalls the prefetch loop.
     local ai_text = ""
-    if provider == "gemini" then
-        if data.candidates and data.candidates[1] and
-           data.candidates[1].content and data.candidates[1].content.parts then
-            local parts = data.candidates[1].content.parts
-            for _, p in ipairs(parts) do
-                if p.text and not p.thought then
-                    ai_text = ai_text .. p.text
+    local extract_ok, extract_err = pcall(function()
+        if provider == "gemini" then
+            if data.candidates and data.candidates[1] and
+               data.candidates[1].content and data.candidates[1].content.parts then
+                local parts = data.candidates[1].content.parts
+                for _, p in ipairs(parts) do
+                    if p.text and not p.thought then
+                        ai_text = ai_text .. p.text
+                    end
                 end
             end
-        end
-    elseif provider == "claude" or self:isAnthropic(provider, self.providers[provider] and self.providers[provider].endpoint) then
-        if data.content and data.content[1] and data.content[1].text then
-            local content_text = data.content[1].text
-            if content_text:find("^%s*{") then
-                ai_text = content_text
-            else
-                ai_text = "{" .. content_text
+        elseif provider == "claude" or self:isAnthropic(provider, self.providers[provider] and self.providers[provider].endpoint) then
+            if data.content and data.content[1] and data.content[1].text then
+                local content_text = data.content[1].text
+                if content_text:find("^%s*{") then
+                    ai_text = content_text
+                else
+                    ai_text = "{" .. content_text
+                end
+            end
+        else
+            if data.choices and data.choices[1] and data.choices[1].message then
+                ai_text = data.choices[1].message.content or ""
             end
         end
-    else
-        if data.choices and data.choices[1] then
-            ai_text = data.choices[1].message.content
-        end
+    end)
+    if not extract_ok then
+        self:log("AIHelper: Response extraction failed for " .. tostring(provider) .. ": " .. tostring(extract_err))
+        return false, "error_parse", "Unexpected response shape from " .. tostring(provider)
     end
 
     if not ai_text or #ai_text == 0 then
-        local finish_reason = (data.candidates and data.candidates[1] and data.candidates[1].finishReason) or "unknown"
-        self:log("AIHelper: Gemini ai_text empty. finishReason=" .. finish_reason)
-        return false, "error_parse", "No text in AI response (finishReason=" .. finish_reason .. ")"
+        local finish_reason
+        if provider == "gemini" then
+            finish_reason = (data.candidates and data.candidates[1] and data.candidates[1].finishReason) or "unknown"
+        end
+        self:log("AIHelper: " .. tostring(provider) .. " ai_text empty"
+            .. (finish_reason and (". finishReason=" .. finish_reason) or ""))
+        return false, "error_parse", "No text in AI response (" .. tostring(provider) .. ")"
     end
 
     local parsed_data, parse_err = self:parseAIResponse(ai_text)
