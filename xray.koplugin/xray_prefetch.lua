@@ -411,6 +411,60 @@ function M:persistDisplayedEntities()
     self.cache_manager:asyncSaveCache(self.ui.document.file, updated)
 end
 
+-- Forward-propagate a single manually-fetched entity from the active snapshot
+-- to the end of the book: the main cache plus every LATER existing snapshot.
+-- Spoiler-safe -- earlier snapshots (positions the reader had not reached when
+-- the entity was discovered) are never touched. The active snapshot itself is
+-- persisted by persistDisplayedEntities(); this covers only index > active.
+local ENTITY_LIST_KEYS = {
+    character         = "characters",
+    location          = "locations",
+    historical_figure = "historical_figures",
+    term              = "terms",
+}
+
+local function entityListContains(list, name)
+    local target = (name or ""):lower()
+    for _, e in ipairs(list) do
+        if (e.name or ""):lower() == target then return true end
+    end
+    return false
+end
+
+function M:propagateEntityForward(item, item_type)
+    if not item or not self.active_snapshot_index then return end
+    local key = ENTITY_LIST_KEYS[item_type]
+    if not key then return end
+    if not self.cache_manager then
+        self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
+    end
+    local book_path = self.ui.document.file
+
+    -- Main cache (the 100% view): append, then save.
+    self.book_data = self.book_data or {}
+    self.book_data[key] = self.book_data[key] or {}
+    if not entityListContains(self.book_data[key], item.name) then
+        table.insert(self.book_data[key], item)
+        self.cache_manager:asyncSaveCache(book_path, self.book_data)
+    end
+
+    -- Every later existing snapshot.
+    local checkpoints = self.book_data.prefetch and self.book_data.prefetch.checkpoints
+    if not checkpoints then return end
+    for i = self.active_snapshot_index + 1, #checkpoints do
+        if self:_snapshotExistsCached(i) then
+            local snap = self.cache_manager:loadSnapshot(book_path, i)
+            if snap then
+                snap[key] = snap[key] or {}
+                if not entityListContains(snap[key], item.name) then
+                    table.insert(snap[key], item)
+                    self.cache_manager:saveSnapshot(book_path, i, snap)
+                end
+            end
+        end
+    end
+end
+
 -- ── Position-based snapshot resolution (D4) ────────────────────────────────
 -- The displayed view is ALWAYS position-based (online too): after a prefetch
 -- the main cache holds 100% data, so showing self.* unfiltered would leak.

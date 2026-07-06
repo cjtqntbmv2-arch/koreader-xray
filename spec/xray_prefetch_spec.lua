@@ -425,6 +425,54 @@ describe("xray_prefetch", function()
             assert.is_nil(plugin2:resolveSnapshotIndexForPage(150))
         end)
 
+        it("propagateEntityForward writes later snapshots and the main cache, never the active or earlier ones", function()
+            local plugin = makeViewPlugin({ [1] = true, [2] = true, [3] = true })
+            plugin.active_snapshot_index = 2
+            plugin:propagateEntityForward({ name = "Newcomer" }, "character")
+
+            local saved = {}
+            for _, s in ipairs(plugin._spec_snapshot_saves) do saved[s.index] = s.data end
+
+            -- later snapshot (index 3) receives the entity
+            assert.is_not_nil(saved[3])
+            local in3 = false
+            for _, c in ipairs(saved[3].characters) do if c.name == "Newcomer" then in3 = true end end
+            assert.is_true(in3)
+
+            -- the active (2) and earlier (1) snapshots are never rewritten by propagate
+            assert.is_nil(saved[1])
+            assert.is_nil(saved[2])
+
+            -- the main cache gains the entity and is saved
+            local in_main = false
+            for _, c in ipairs(plugin.book_data.characters) do if c.name == "Newcomer" then in_main = true end end
+            assert.is_true(in_main)
+            assert.is_true(plugin._spec_async_saves >= 1)
+        end)
+
+        it("propagateEntityForward does not duplicate an entity already in a later snapshot", function()
+            local plugin = makeViewPlugin({ [1] = true, [2] = true, [3] = true })
+            plugin.active_snapshot_index = 1
+            -- snapshot 3's mock already contains "SnapChar3"; snapshot 2 does not
+            plugin:propagateEntityForward({ name = "SnapChar3" }, "character")
+
+            local saved = {}
+            for _, s in ipairs(plugin._spec_snapshot_saves) do saved[s.index] = s.data end
+
+            -- snapshot 2 lacked it -> appended
+            assert.is_not_nil(saved[2])
+            local in2 = false
+            for _, c in ipairs(saved[2].characters) do if c.name == "SnapChar3" then in2 = true end end
+            assert.is_true(in2)
+
+            -- snapshot 3 already had it -> never duplicated
+            if saved[3] then
+                local count = 0
+                for _, c in ipairs(saved[3].characters) do if c.name == "SnapChar3" then count = count + 1 end end
+                assert.are.equal(1, count)
+            end
+        end)
+
         it("applySnapshot swaps entity lists and restores the main view", function()
             local plugin = makeViewPlugin({ [2] = true })
             plugin:applySnapshot(2)

@@ -87,7 +87,10 @@ function M:updateFromAI()
 end
 
 function M:fetchSingleWord(text, pos0, pos1)
-    if self:guardSnapshotViewActive() then return end
+    -- No snapshot guard here (unlike the full fetches): a single-name lookup
+    -- merges exactly one entity through the snapshot-safe persistDisplayedEntities()
+    -- + propagateEntityForward() path, so it never overwrites the main cache.
+    -- D4.4 is deliberately relaxed for this one entry point.
     require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / (self.ui.document:getPageCount() or 1)) * 100)
@@ -237,6 +240,10 @@ function M:fetchSingleWord(text, pos0, pos1)
                     -- snapshot view must never overwrite the main cache.
                     self:sortDataByFrequency(target_list, book_text, "name")
                     self:persistDisplayedEntities()
+                    -- Keep a name added inside a covered region visible for the
+                    -- rest of the book: push it into the main cache and every
+                    -- later snapshot (no-op when no snapshot view is active).
+                    self:propagateEntityForward(item, item_type)
                 end
                 
                 -- Always show result if it's valid, even if it didn't merge into a target_list
