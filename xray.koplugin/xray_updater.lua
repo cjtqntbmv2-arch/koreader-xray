@@ -381,6 +381,34 @@ local function _unzip(zip_path, dest_dir)
     return true
 end
 
+-- Portable "is this a complete zip?" check, run before extracting over the
+-- live install. We can't shell out to `unzip -t`: BusyBox unzip (Kindle and
+-- most e-reader firmwares) has no -t option, so that test false-fails EVERY
+-- update on those devices. Instead verify the local-file-header magic
+-- (PK\3\4, or PK\5\6 for an empty archive) and that the End-Of-Central-
+-- Directory signature (PK\5\6) is present near the end -> catches empty,
+-- truncated, and HTML-error-page downloads without any external tool.
+-- Extraction still uses `unzip -o` (which BusyBox does support).
+function M._zipLooksValid(path)
+    local fh = io.open(path, "rb")
+    if not fh then return false end
+    local head = fh:read(4) or ""
+    if head ~= "PK\3\4" and head ~= "PK\5\6" then
+        fh:close()
+        return false
+    end
+    local size = fh:seek("end")
+    if not size or size < 22 then
+        fh:close()
+        return false
+    end
+    local tail_len = math.min(size, 65557) -- 22-byte EOCD + up to 65535 comment
+    fh:seek("end", -tail_len)
+    local tail = fh:read(tail_len) or ""
+    fh:close()
+    return tail:find("PK\5\6", 1, true) ~= nil
+end
+
 -- ---------------------------------------------------------------------------
 -- Download & Install
 -- ---------------------------------------------------------------------------
@@ -442,14 +470,15 @@ local function _applyUpdate(download_url, new_version)
             return { success = false, stage = "download", err = dl_err }
         end
 
-        -- Reject truncated downloads before extracting over the live install.
-        -- ponytail: no staged install; zip -t + config backup cover the
+        -- Reject truncated/empty downloads before extracting over the live
+        -- install. Portable check (see M._zipLooksValid) — must not depend on
+        -- `unzip -t`, which BusyBox (Kindle etc.) does not implement.
+        -- ponytail: no staged install; this check + config backup cover the
         -- realistic failure (partial download). Upgrade path: unzip to a
         -- staging dir + directory swap if half-written installs ever show up.
-        local test_ret = os.execute(string.format("unzip -tqq %q >/dev/null 2>&1", tmp_zip))
-        if test_ret ~= 0 and test_ret ~= true then
+        if not M._zipLooksValid(tmp_zip) then
             os.remove(tmp_zip)
-            return { success = false, stage = "zip", err = "corrupted download (zip integrity test failed)" }
+            return { success = false, stage = "zip", err = "corrupted download (zip integrity check failed)" }
         end
 
         -- 3. Extract (overwrites xray_config.lua with the default one)
