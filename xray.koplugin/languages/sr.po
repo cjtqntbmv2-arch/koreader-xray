@@ -884,6 +884,9 @@ msgstr "Грешка при преузимању: %s"
 msgid "updater_err_extract"
 msgstr "Грешка при распакивању: %s"
 
+msgid "updater_err_zip"
+msgstr "Corrupted update file: %s"
+
 msgid "updater_error_checking"
 msgstr "Грешка при провери ажурирања."
 

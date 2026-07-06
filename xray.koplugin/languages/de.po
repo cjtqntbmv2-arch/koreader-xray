@@ -884,6 +884,9 @@ msgstr "Download-Fehler: %s"
 msgid "updater_err_extract"
 msgstr "Entpackungs-Fehler: %s"
 
+msgid "updater_err_zip"
+msgstr "Corrupted update file: %s"
+
 msgid "updater_error_checking"
 msgstr "Fehler beim Suchen nach Updates."
 

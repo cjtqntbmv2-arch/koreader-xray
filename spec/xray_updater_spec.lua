@@ -36,6 +36,18 @@ describe("xray_updater hardening", function()
         pcall(os.remove, cfg)
     end)
 
+    it("restoreConfigBackup restores when the live config is unreadable", function()
+        local cfg = "/tmp/xray_spec_config3.lua"
+        local bak = cfg .. ".bak"
+        write(cfg, 'return { gemini_api_key = ') -- Syntaxfehler: pcall(dofile) schlägt fehl
+        write(bak, 'return { gemini_api_key = "SECRET" }')
+        updater.restoreConfigBackup(cfg)
+        local restored = dofile(cfg)
+        assert.are.equal("SECRET", restored.gemini_api_key)
+        assert.is_nil(io.open(bak, "r"))
+        pcall(os.remove, cfg)
+    end)
+
     it("restoreConfigBackup only cleans up when the live config still has keys", function()
         local cfg = "/tmp/xray_spec_config2.lua"
         local bak = cfg .. ".bak"

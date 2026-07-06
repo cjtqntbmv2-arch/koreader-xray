@@ -884,6 +884,9 @@ msgstr "Erreur de téléchargement : %s"
 msgid "updater_err_extract"
 msgstr "Erreur d'extraction : %s"
 
+msgid "updater_err_zip"
+msgstr "Corrupted update file: %s"
+
 msgid "updater_error_checking"
 msgstr "Erreur lors de la vérification des mises à jour."
 

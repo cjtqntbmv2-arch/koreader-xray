@@ -884,6 +884,9 @@ msgstr "Downloadfout: %s"
 msgid "updater_err_extract"
 msgstr "Extractiefout: %s"
 
+msgid "updater_err_zip"
+msgstr "Corrupted update file: %s"
+
 msgid "updater_error_checking"
 msgstr "Fout bij het controleren op updates."
 

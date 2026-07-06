@@ -527,8 +527,9 @@ function CacheManager:saveSnapshot(book_path, index, data)
         pcall(os.remove, tmp_path)
         return false
     end
-    local rn_ok = os.rename(tmp_path, path)
+    local rn_ok, rn_err = os.rename(tmp_path, path)
     if not rn_ok then
+        logger.warn("CacheManager: Snapshot rename failed:", rn_err or "unknown")
         pcall(os.remove, tmp_path)
         return false
     end
