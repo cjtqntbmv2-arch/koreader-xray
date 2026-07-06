@@ -719,6 +719,9 @@ msgstr "Preparing for offline reading - checkpoint %d of %d"
 msgid "prefetch_progress_hint"
 msgstr "You can keep reading. Cancel stops after the current checkpoint."
 
+msgid "quick_menu_full"
+msgstr "All options..."
+
 msgid "quick_menu_title"
 msgstr "Menu rápido do X-Ray"
 

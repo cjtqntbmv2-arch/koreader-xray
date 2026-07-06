@@ -431,3 +431,23 @@ describe("xray_ui", function()
         end)
     end)
 end)
+
+describe("quick xray menu", function()
+    it("is a real short menu, not an alias of the full menu", function()
+        local ui = require("xray_ui")
+        local plugin = createMockPlugin()
+        for k, v in pairs(ui) do plugin[k] = v end
+        local captured
+        plugin.newMenu = function(_, _, opts)
+            captured = opts
+            return { fake_menu = true }
+        end
+        plugin.getSubMenuItems = function()
+            error("quick menu must not build the full menu tree")
+        end
+        plugin:showQuickXRayMenu()
+        assert.is_not_nil(captured)
+        assert.are.equal(7, #captured.item_table)
+        assert.is_true(plugin.last_menu_was_quick)
+    end)
+end)

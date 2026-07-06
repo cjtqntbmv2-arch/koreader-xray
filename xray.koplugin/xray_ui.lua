@@ -891,7 +891,7 @@ function M:showCharacters()
         height = Screen:getHeight(),
         on_close_callback = function() 
             if self.is_cancelled then return end
-            self:showFullXRayMenu() 
+            self:reopenXRayMenu()
         end,
     })
     UIManager:show(self.char_menu)
@@ -1708,7 +1708,7 @@ function M:showTerms()
         height = Screen:getHeight(),
         on_close_callback = function() 
             if self.is_cancelled then return end
-            self:showFullXRayMenu() 
+            self:reopenXRayMenu()
         end,
     })
     UIManager:show(self.terms_menu)
@@ -2794,7 +2794,7 @@ function M:showLocations()
         height = Screen:getHeight(),
         on_close_callback = function() 
             if self.is_cancelled then return end
-            self:showFullXRayMenu() 
+            self:reopenXRayMenu()
         end,
     })
     UIManager:show(self.loc_menu)
@@ -3394,7 +3394,7 @@ function M:showTimeline()
         height = Screen:getHeight(),
         on_close_callback = function() 
             if self.is_cancelled then return end
-            self:showFullXRayMenu() 
+            self:reopenXRayMenu()
         end,
     })
     UIManager:show(self.timeline_menu)
@@ -3703,16 +3703,49 @@ function M:showHistoricalFigures()
         height = Screen:getHeight(),
         on_close_callback = function() 
             if self.is_cancelled then return end
-            self:showFullXRayMenu() 
+            self:reopenXRayMenu()
         end,
     })
     UIManager:show(self.hf_menu)
 end
 
-function M:showQuickXRayMenu() self:showFullXRayMenu() end
-function M:showFullXRayMenu()
+-- Everyday entry point: the 5 entity views + update. Settings/Maintenance/
+-- About live only in the full menu (hold / tools submenu / "All options").
+function M:showQuickXRayMenu()
     if self.xray_menu then UIManager:close(self.xray_menu); self.xray_menu = nil end
-    self.xray_menu = self:newMenu("xray_menu", { 
+    self.last_menu_was_quick = true
+    local items = {
+        { text = self.loc:t("menu_characters") or "Characters", callback = function() self:showCharacters() end },
+        { text = self.loc:t("menu_timeline") or "Timeline", callback = function() self:showTimeline() end },
+        { text = self.loc:t("menu_locations") or "Locations", callback = function() self:showLocations() end },
+        { text = self.loc:t("menu_terms") or "Glossary", callback = function() self:showTerms() end },
+        { text = self.loc:t("menu_historical_figures") or "Historical Figures", callback = function() self:showHistoricalFigures() end },
+        { text = self.loc:t("menu_update_xray") or "Update X-Ray Data (Merge)", callback = function() self:updateFromAI() end, separator = true },
+        { text = self.loc:t("quick_menu_full") or "All options...", callback = function() self:showFullXRayMenu() end },
+    }
+    self.xray_menu = self:newMenu("xray_menu", {
+        title = self.loc:t("quick_menu_title") or "X-Ray Quick Menu",
+        item_table = items,
+        is_borderless = true,
+        width = Screen:getWidth(),
+        height = Screen:getHeight(),
+    })
+    UIManager:show(self.xray_menu)
+end
+
+-- Entity views close back into whichever menu opened them.
+function M:reopenXRayMenu()
+    if self.last_menu_was_quick then
+        self:showQuickXRayMenu()
+    else
+        self:showFullXRayMenu()
+    end
+end
+
+function M:showFullXRayMenu()
+    self.last_menu_was_quick = false
+    if self.xray_menu then UIManager:close(self.xray_menu); self.xray_menu = nil end
+    self.xray_menu = self:newMenu("xray_menu", {
         title = self.loc:t("menu_xray") or "X-Ray", 
         item_table = self:getSubMenuItems(), 
         is_borderless = true, 
