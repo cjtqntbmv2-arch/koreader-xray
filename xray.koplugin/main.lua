@@ -223,25 +223,58 @@ end
 
 
 function XRayPlugin:destroy()
+    if self.destroyed then return end
     self:log("XRayPlugin: destroy called, marking as destroyed")
     self.destroyed = true
-    
+
     if self.ai_helper then
         self.ai_helper:cancelAsyncChild()
     end
-    
+
     if self.active_mention_scan and self.active_mention_scan.cancel_handle then
         self.active_mention_scan.cancel_handle:cancel()
         self.active_mention_scan = nil
     end
 
     self:closeAllMenus()
-    
+
     if WidgetContainer.destroy then
         WidgetContainer.destroy(self)
     end
 end
 
+-- KOReader teardown: ReaderUI broadcasts CloseWidget/CloseDocument when the
+-- document or reader closes. Without these handlers destroy() is never
+-- reached and every `if self.destroyed` guard in the poll loops is dead code.
+function XRayPlugin:onCloseWidget()
+    self:destroy()
+end
+
+function XRayPlugin:onCloseDocument()
+    self:destroy()
+end
+
+-- Suspend: the OS may kill the forked fetch child during sleep; polling on
+-- after resume would only burn the tick budget. Abort in-flight work but do
+-- NOT set self.destroyed -- the reading session continues after resume.
+function XRayPlugin:onSuspend()
+    if self.bg_fetch_active or self.prefetch_active then
+        self:log("XRayPlugin: onSuspend - aborting active fetch/prefetch")
+    end
+    self.fetch_abort_requested = true
+    if self.prefetch_active then
+        self.prefetch_cancelled = true
+    end
+    if self.ai_helper and self.ai_helper.cancelAsyncChild then
+        self.ai_helper:cancelAsyncChild()
+    end
+end
+
+function XRayPlugin:onResume()
+    self.fetch_abort_requested = false
+    -- Let the opt-in auto-prefetch retry after wake-up (it aborted on suspend)
+    self.auto_prefetch_attempted = false
+end
 
 
 -- Builds the X-Ray button spec for the dict popup.

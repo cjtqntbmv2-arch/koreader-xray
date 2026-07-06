@@ -244,6 +244,7 @@ end
 -- instead of the live reading position (offline prefetch); nil = today's behavior.
 function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_silent, prefetch_page)
     self.bg_fetch_active = true
+    self.fetch_abort_requested = false
     if not self.ai_helper then
         local AIHelper = require(plugin_path .. "xray_aihelper")
         self.ai_helper = AIHelper
@@ -422,7 +423,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
             local poll_count = 0
             local max_polls = 300 -- 10 minutes at 2s intervals
             local function poll()
-                if is_cancelled or self.destroyed then
+                if is_cancelled or self.destroyed or self.fetch_abort_requested then
                     pcall(function() os.remove(result_file) end)
                     self.bg_fetch_active = false
                     self:log("XRayPlugin: Fetch cancelled or plugin destroyed")

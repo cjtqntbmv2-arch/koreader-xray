@@ -108,8 +108,8 @@ end
 -- book_data.last_fetch_page has reached the checkpoint page (set only by the
 -- fetch success path). Every finished checkpoint is persisted immediately, so
 -- a missing snapshot file doubles as the resume marker.
-local PREFETCH_POLL_SECONDS = 1
-local PREFETCH_MAX_TICKS = 600 -- ponytail: 10 min timeout per checkpoint, then stop with resume
+local PREFETCH_POLL_SECONDS = 2 -- battery: a network fetch takes tens of seconds; 1s polling tripled the wakeups
+local PREFETCH_MAX_TICKS = 300 -- ponytail: ~10 min tick budget per checkpoint (scheduler pauses during suspend), then stop with resume
 
 function M:isPrefetchComplete()
     local manifest = self.book_data and self.book_data.prefetch
@@ -244,32 +244,45 @@ function M:_watchPrefetchStep(idx, cp, ticks)
         return
     end
     UIManager:scheduleIn(PREFETCH_POLL_SECONDS, function()
-        if self.destroyed then return end
-        if self.bg_fetch_active and not self.prefetch_cancelled then
-            if ticks >= PREFETCH_MAX_TICKS then
-                self:log("XRayPlugin: Prefetch checkpoint " .. idx .. " timed out")
-                self:_finishPrefetch(false)
-                return
-            end
-            self:_watchPrefetchStep(idx, cp, ticks + 1)
+        -- Document gone / plugin torn down: never leave a dangling prefetch
+        -- lock (it would permanently block manual fetches and view updates).
+        if self.destroyed or not self.ui or not self.ui.document then
+            self.prefetch_active = false
+            self:_closePrefetchProgress()
             return
         end
-        -- Fetch call ended: success <=> the data boundary reached the checkpoint page
-        if (self.book_data and self.book_data.last_fetch_page or 0) >= cp.page then
-            local snap = {
-                checkpoint_index = idx,
-                page = cp.page,
-                percent = cp.percent,
-                characters = self.characters or {},
-                locations = self.locations or {},
-                terms = self.terms or {},
-                historical_figures = self.historical_figures or {},
-            }
-            self.cache_manager:saveSnapshot(self.ui.document.file, idx, snap)
-            if self.invalidateSnapshotExistsCache then self:invalidateSnapshotExistsCache() end
-            self:_prefetchNext()
-        else
-            self:_finishPrefetch(false)
+        local tick_ok, tick_err = pcall(function()
+            if self.bg_fetch_active and not self.prefetch_cancelled then
+                if ticks >= PREFETCH_MAX_TICKS then
+                    self:log("XRayPlugin: Prefetch checkpoint " .. idx .. " timed out")
+                    self:_finishPrefetch(false)
+                    return
+                end
+                self:_watchPrefetchStep(idx, cp, ticks + 1)
+                return
+            end
+            -- Fetch call ended: success <=> the data boundary reached the checkpoint page
+            if (self.book_data and self.book_data.last_fetch_page or 0) >= cp.page then
+                local snap = {
+                    checkpoint_index = idx,
+                    page = cp.page,
+                    percent = cp.percent,
+                    characters = self.characters or {},
+                    locations = self.locations or {},
+                    terms = self.terms or {},
+                    historical_figures = self.historical_figures or {},
+                }
+                self.cache_manager:saveSnapshot(self.ui.document.file, idx, snap)
+                if self.invalidateSnapshotExistsCache then self:invalidateSnapshotExistsCache() end
+                self:_prefetchNext()
+            else
+                self:_finishPrefetch(false)
+            end
+        end)
+        if not tick_ok then
+            self:log("XRayPlugin: Prefetch tick failed: " .. tostring(tick_err))
+            self.prefetch_active = false
+            self:_closePrefetchProgress()
         end
     end)
 end
@@ -277,6 +290,7 @@ end
 function M:_finishPrefetch(success)
     self.prefetch_active = false
     self:_closePrefetchProgress()
+    if not self.ui or not self.ui.document then return end
 
     local manifest = self.book_data and self.book_data.prefetch
     local done, total = 0, 0

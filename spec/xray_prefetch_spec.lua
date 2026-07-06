@@ -547,4 +547,32 @@ describe("xray_prefetch", function()
             assert.are.equal(plugin.timeline, plugin.book_data.timeline)
         end)
     end)
+
+    describe("watch loop hardening", function()
+        it("_watchPrefetchStep releases prefetch_active when the document disappears", function()
+            local plugin = createMockPlugin()
+            for k, v in pairs(prefetch) do plugin[k] = v end
+            plugin.prefetch_active = true
+            plugin.bg_fetch_active = false
+            plugin.book_data = { last_fetch_page = 0,
+                prefetch = { checkpoints = { { page = 100, percent = 50 } } } }
+            plugin.ui = nil
+            plugin:_watchPrefetchStep(1, { page = 100, percent = 50 }, 0)
+            assert.is_false(plugin.prefetch_active)
+        end)
+
+        it("a crashing tick never leaves prefetch_active locked", function()
+            local plugin = createMockPlugin()
+            for k, v in pairs(prefetch) do plugin[k] = v end
+            plugin.prefetch_active = true
+            plugin.bg_fetch_active = false
+            plugin.book_data = { last_fetch_page = 100 }
+            plugin.cache_manager = {
+                saveSnapshot = function() error("disk full") end,
+                snapshotExists = function() return false end,
+            }
+            plugin:_watchPrefetchStep(1, { page = 100, percent = 50 }, 0)
+            assert.is_false(plugin.prefetch_active)
+        end)
+    end)
 end)
