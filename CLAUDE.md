@@ -28,9 +28,26 @@ python3 tools/check_translations.py
 - The spec list is **hardcoded** in `tools/spec_runner.lua` — a new `spec/*_spec.lua` file must be added there or it silently never runs. To run a single spec, temporarily trim that list (the runner has no filter flag), or use `busted spec/foo_spec.lua` if busted is installed.
 - Windows/WSL (upstream author's setup): `powershell -ExecutionPolicy Bypass -File tools/wsl_test.ps1` runs the whole pipeline — syntax check → translation check → tests under KOReader's bundled luajit → rsync into the WSL KOReader install (preserving user `xray_config.lua` via `tools/merge_config.py`) → restart KOReader. `-Watch` re-runs on file changes; `$env:KOREADER_START_CMD` overrides the restart command.
 
-## Release
+## Release & versioning workflow
 
-Versions are CalVer-ish `YY.M.PATCH` (see `version` in `xray.koplugin/_meta.lua`, e.g. `26.7.1`). `python tools/release.py <version>` bumps `_meta.lua`, commits `Release <version>`, tags with the bare version, and pushes. Any pushed tag triggers `.github/workflows/release.yml`, which zips `xray.koplugin/` and creates a **draft** GitHub release (`-beta` in the tag → prerelease). Release-notes tone rules live in `.agents/rules/release_notes.md` (no emoji, human, end-user friendly).
+The remote is `origin` = github.com/cjtqntbmv2-arch/koreader-xray (public). The in-app OTA updater (`xray_updater.lua`) reads `releases/latest` of exactly this repo, so a published release there is what ships to devices.
+
+Versions are CalVer-ish `YY.M.PATCH` (see `version` in `xray.koplugin/_meta.lua`, e.g. `26.7.4`).
+
+**Version bump (routine, after release-worthy changes):** update `_meta.lua` and the version badge in `README.md` to the same value, commit locally (`chore: bump version to X.Y.Z`). **Do NOT tag and do NOT push** — bumps stay local until a release is explicitly requested.
+
+**Release (ONLY on explicit user instruction, never proactively):**
+
+1. Working tree must be committed and the stage empty — `release.py` commits whatever happens to be staged. **Never stage `xray.koplugin/xray_config.lua`** (carries the user's real API key locally); never use `git add -A`/`git add .`/`git commit -a` in this repo.
+2. Make sure `_meta.lua` and the README badge already carry the target version (commit that first if not).
+3. `python3.12 tools/release.py <version>` — stages only `_meta.lua`, commits `Release <version>` if needed, tags with the bare version, and pushes `HEAD` + that one tag to `origin`.
+4. The pushed tag triggers `.github/workflows/release.yml`: zips `xray.koplugin/` into `xray.koplugin.zip` and creates a **draft** release (`-beta` in the tag → prerelease). Wait for the run: `gh run list --limit 1`.
+5. Drafts are invisible to the updater API — publish with `gh release edit <version> --repo cjtqntbmv2-arch/koreader-xray --draft=false`.
+6. Verify the device view: `gh api repos/cjtqntbmv2-arch/koreader-xray/releases/latest` must show the new tag and the `xray.koplugin.zip` asset.
+
+**Tag rules:** every pushed tag triggers the release workflow — never `git push --tags` or `--follow-tags`; push tags only individually and deliberately. Old local tags (26.7.2, 26.7.3) must never be pushed. Never force-push or overwrite existing tags.
+
+Release-notes tone rules live in `.agents/rules/release_notes.md` (no emoji, human, end-user friendly).
 
 ## Architecture: one plugin object, many mixins
 
