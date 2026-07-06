@@ -1460,7 +1460,8 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
         local tl_len    = math.max(50,  math.min(200, s.timeline_event_len or 80))
         local hist_len  = math.max(50,  math.min(400, s.hist_fig_bio_len  or 100))
         -- Count scaling: inversely proportional to description length, with floor/cap.
-        local num_chars = math.min(40, math.max(10, math.floor(25 * 200 / char_len)))
+        -- Base 50 => ~50 chars at the default 200-char length; cap 60 bounds truncation risk on weak models.
+        local num_chars = math.min(60, math.max(10, math.floor(50 * 200 / char_len)))
         local num_locs  = math.min(20, math.max(3,  math.floor(8  * 100 / loc_len)))
         local num_hist  = math.min(15, math.max(3,  math.floor(8  * 100 / hist_len)))
         local term_len  = math.max(50, math.min(300, s.term_def_len or 100))

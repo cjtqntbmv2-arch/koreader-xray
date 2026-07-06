@@ -251,6 +251,12 @@ describe("AIHelper", function()
             assert.is_true(prompt:find("NAME DISAMBIGUATION RULES", 1, true) ~= nil)
         end)
 
+        it("requests ~50 characters at the default description length", function()
+            AIHelper.settings = { char_desc_len = 200 }
+            local prompt = AIHelper:createPrompt("T", "A", { book_text = "text", reading_percent = 50 }, "comprehensive_xray")
+            assert.is_true(prompt:find("(50 normal", 1, true) ~= nil)
+        end)
+
         it("does not append segment mode without the flag", function()
             local prompt = AIHelper:createPrompt("T", "A", { book_text = "text", reading_percent = 50 }, "comprehensive_xray")
             assert.is_true(prompt:find("SEGMENT COMPLETENESS MODE", 1, true) == nil)
