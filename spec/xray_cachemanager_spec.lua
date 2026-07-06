@@ -138,13 +138,13 @@ describe("atomic writes", function()
         -- as an existing directory regardless of the real filesystem, so
         -- ensureDirectory() never actually creates it here -- pre-create it
         -- the same way the outer describe block's before_each does.
-        os.execute("rm -rf atomic_test.epub.sdr")
-        os.execute("mkdir -p atomic_test.epub.sdr")
+        os.execute("rm -rf /tmp/atomic_test.epub.sdr")
+        os.execute("mkdir -p /tmp/atomic_test.epub.sdr")
     end)
 
     it("keeps the previous cache intact when a save fails midway", function()
         local cm = CacheManager:new()
-        local book = "atomic_test.epub"
+        local book = "/tmp/atomic_test.epub"
         assert.is_true(cm:saveCache(book, { characters = { { name = "Alice" } } }))
         cm.serializeToFile = function() error("boom") end
         assert.is_false(cm:saveCache(book, { characters = { { name = "Bob" } } }))
@@ -156,7 +156,7 @@ describe("atomic writes", function()
 
     it("keeps the previous snapshot intact when a snapshot save fails midway", function()
         local cm = CacheManager:new()
-        local book = "atomic_test.epub"
+        local book = "/tmp/atomic_test.epub"
         assert.is_true(cm:saveSnapshot(book, 1, { characters = { { name = "Alice" } } }))
         cm.serializeToFile = function() error("boom") end
         assert.is_false(cm:saveSnapshot(book, 1, { characters = { { name = "Bob" } } }))
