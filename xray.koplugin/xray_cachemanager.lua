@@ -87,43 +87,54 @@ function CacheManager:saveCache(book_path, data)
     data.cached_at = os.time()
     data.cache_version = "6.0"
     
+    -- ponytail: single fixed .tmp name per cache file; concurrent saves to the
+    -- same book were last-writer-wins before too -- rename keeps that atomic.
+    local tmp_file = cache_file .. ".tmp"
     local success, err = pcall(function()
-        local f, open_err = io.open(cache_file, "w")
-        
+        local f, open_err = io.open(tmp_file, "w")
+
         if not f then
-            logger.warn("CacheManager: Cannot open file for writing:", cache_file)
+            logger.warn("CacheManager: Cannot open file for writing:", tmp_file)
             logger.warn("CacheManager: Error:", open_err or "unknown")
-            return false
+            error("open failed: " .. tostring(open_err)) -- propagate: a bare `return false` inside pcall would make saveCache return true
         end
-        
+
         f:write("-- X-Ray Cache v6.0\n")
         f:write("-- Generated: " .. os.date("%Y-%m-%d %H:%M:%S") .. "\n\n")
         f:write("return ")
-        
+
         local ok2, write_err = pcall(function()
             self:serializeToFile(f, data, "")
         end)
-        
+
         f:write("\n")
         f:close()
-        
+
         if not ok2 then
             logger.warn("CacheManager: Serialization error:", write_err or "unknown")
             AIHelper:log("CacheManager: Serialization error: " .. tostring(write_err or "unknown"))
-            return false
+            pcall(os.remove, tmp_file)
+            error("serialization failed") -- propagate so the outer pcall returns false
         end
-        
+
+        local rn_ok, rn_err = os.rename(tmp_file, cache_file)
+        if not rn_ok then
+            logger.warn("CacheManager: Rename failed:", rn_err or "unknown")
+            pcall(os.remove, tmp_file)
+            error("rename failed")
+        end
+
         logger.info("CacheManager: Saved cache to:", cache_file)
         AIHelper:log("CacheManager: Saved cache to: " .. tostring(cache_file))
         return true
     end)
-    
+
     if not success then
         logger.warn("CacheManager: Failed to save cache:", err or "unknown error")
         AIHelper:log("CacheManager: Failed to save cache: " .. tostring(err or "unknown error"))
         return false
     end
-    
+
     return success
 end
 
@@ -157,7 +168,8 @@ function CacheManager:asyncSaveCache(book_path, data, on_done_cb)
     -- ── UIManager cooperative coroutine path (primary) ──────────────────────
     local ok_ui, UIManager = pcall(require, "ui/uimanager")
     if ok_ui and UIManager then
-        local f, open_err = io.open(cache_file, "w")
+        local tmp_file = cache_file .. ".tmp"
+        local f, open_err = io.open(tmp_file, "w")
         if not f then
             logger.warn("CacheManager: Cannot open cache file for async write:", open_err or "unknown")
             if on_done_cb then on_done_cb(false) end
@@ -224,12 +236,20 @@ function CacheManager:asyncSaveCache(book_path, data, on_done_cb)
             if not ok then
                 logger.warn("CacheManager: Error during async serialization:", err or "unknown")
                 f:close()
+                pcall(os.remove, tmp_file)
                 if on_done_cb then on_done_cb(false) end
                 return
             end
 
             if coroutine.status(co) == "dead" then
                 f:close()
+                local rn_ok, rn_err = os.rename(tmp_file, cache_file)
+                if not rn_ok then
+                    logger.warn("CacheManager: Async rename failed:", rn_err or "unknown")
+                    pcall(os.remove, tmp_file)
+                    if on_done_cb then on_done_cb(false) end
+                    return
+                end
                 logger.info("CacheManager: Saved cache asynchronously (cooperative) to:", cache_file)
                 AIHelper:log("CacheManager: Saved cache asynchronously (cooperative) to: " .. tostring(cache_file))
                 if on_done_cb then on_done_cb(true) end
@@ -253,10 +273,12 @@ function CacheManager:asyncSaveCache(book_path, data, on_done_cb)
         local header = "-- X-Ray Cache v6.0\n-- Generated: " .. os.date("%Y-%m-%d %H:%M:%S") .. "\n\nreturn "
         local serialized_str = header .. self:serialize(data, "") .. "\n"
         pcall(function()
-            local f = io.open(cache_file, "w")
+            local tmp_file = cache_file .. ".tmp"
+            local f = io.open(tmp_file, "w")
             if f then
                 f:write(serialized_str)
                 f:close()
+                os.rename(tmp_file, cache_file)
             end
         end)
         if write_fd and write_fd > 0 then
@@ -487,7 +509,8 @@ function CacheManager:saveSnapshot(book_path, index, data)
     if not self:ensureDirectory(path) then return false end
     data.snapshot_version = SNAPSHOT_VERSION
     data.created_at = os.time()
-    local f, open_err = io.open(path, "w")
+    local tmp_path = path .. ".tmp"
+    local f, open_err = io.open(tmp_path, "w")
     if not f then
         logger.warn("CacheManager: Cannot open snapshot for writing:", open_err or "unknown")
         return false
@@ -501,6 +524,12 @@ function CacheManager:saveSnapshot(book_path, index, data)
     if not ok then
         logger.warn("CacheManager: Failed to save snapshot:", path)
         AIHelper:log("CacheManager: Failed to save snapshot: " .. tostring(path))
+        pcall(os.remove, tmp_path)
+        return false
+    end
+    local rn_ok = os.rename(tmp_path, path)
+    if not rn_ok then
+        pcall(os.remove, tmp_path)
         return false
     end
     return true
