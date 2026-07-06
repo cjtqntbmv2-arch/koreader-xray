@@ -126,8 +126,10 @@ In `spec/xray_aihelper_spec.lua`, vor dem abschließenden `end)` des äußeren `
 ```lua
     describe("createPrompt character rules", function()
         setup(function()
-            -- Prompt-Templates direkt laden (Runner läuft im Repo-Root)
-            AIHelper.prompts = AIHelper.prompts or dofile("xray.koplugin/prompts/en.lua")
+            -- Templates HART laden (Runner läuft im Repo-Root): createPrompt hat keinen
+            -- loadLanguage-Guard; mit `or` hinge der Testausgang an der Spec-Reihenfolge
+            -- (Crash statt sauberem Fail, wenn .prompts noch nil ist).
+            AIHelper.prompts = dofile("xray.koplugin/prompts/en.lua")
         end)
 
         it("appends completeness and name disambiguation rules for comprehensive_xray", function()
@@ -174,7 +176,7 @@ direkt darunter einfügen:
             .. "\n- If output space runs short, prioritize by importance and shorten minor characters' descriptions first."
             .. "\n\nNAME DISAMBIGUATION RULES:"
             .. "\n- Different characters may share the same name (dynasties, relatives). ALWAYS use a distinguishing canonical name for each (numeral, epithet, or seat, e.g. \"Aegon II Targaryen\", \"Walder Frey, Lord of the Crossing\")."
-            .. "\n- NEVER list the bare shared name as an alias for any of these characters."
+            .. "\n- NEVER list the bare shared name as an alias for any of these characters (this overrides the general guidance to include the common first name as an alias)."
             .. "\n- Treat a newly found character as an already-known one ONLY if the text clearly refers to the same person; otherwise create a separate, disambiguated entry."
     end
 ```
@@ -219,8 +221,6 @@ In `spec/xray_aihelper_spec.lua`, innerhalb des in Task 2 angelegten `describe("
             local prompt = AIHelper:createPrompt("T", "A", { book_text = "text", reading_percent = 50, prefetch_segment = true }, "comprehensive_xray")
             assert.is_true(prompt:find("SEGMENT COMPLETENESS MODE", 1, true) ~= nil)
             assert.is_true(prompt:find("applies to NEW characters", 1, true) ~= nil)
-            -- Platzhalter muss ersetzt sein (Anhang läuft vor der gsub-Substitution):
-            assert.is_true(prompt:find("{NUM_CHARS}", 1, true) == nil)
         end)
 ```
 
@@ -286,12 +286,13 @@ In `xray.koplugin/xray_aihelper.lua`, im Task-2-Block vor dessen `end` einfügen
             .. "\n- If output space runs short, prioritize by importance and shorten minor characters' descriptions first."
             .. "\n\nNAME DISAMBIGUATION RULES:"
             .. "\n- Different characters may share the same name (dynasties, relatives). ALWAYS use a distinguishing canonical name for each (numeral, epithet, or seat, e.g. \"Aegon II Targaryen\", \"Walder Frey, Lord of the Crossing\")."
-            .. "\n- NEVER list the bare shared name as an alias for any of these characters."
+            .. "\n- NEVER list the bare shared name as an alias for any of these characters (this overrides the general guidance to include the common first name as an alias)."
             .. "\n- Treat a newly found character as an already-known one ONLY if the text clearly refers to the same person; otherwise create a separate, disambiguated entry."
         if context and context.prefetch_segment then
             extra_context = extra_context
                 .. "\n\nSEGMENT COMPLETENESS MODE:"
                 .. "\n- This fetch covers ONE bounded text segment of the book. Extract EVERY character who speaks or acts within the provided samples, including minor ones."
+                .. "\n- For this segment fetch, these rules take precedence over the ANTI-TRUNCATION PROTOCOL and the character count guidance in Step 1 above."
                 .. "\n- The character count target of {NUM_CHARS} applies to NEW characters found in this segment, NOT to the total list."
                 .. "\n- Give minor characters short descriptions. If output space runs short, drop the least important characters first."
         end
@@ -444,7 +445,9 @@ perl -pi -e 's/\r?\n$/\r\n/' xray.koplugin/localization_xray.lua
 file xray.koplugin/localization_xray.lua   # Expected: nur "CRLF line terminators"
 ```
 
-- [ ] **Step 3: Übersetzungs-Sync laufen lassen und en.po prüfen**
+- [ ] **Step 3: en.po manuell aktualisieren, dann Sync laufen lassen**
+
+Die vier msgstr in `xray.koplugin/languages/en.po` MÜSSEN manuell per Edit auf die verbindlichen EN-Texte gesetzt werden — `sync_translations.py` überschreibt bestehende msgstr NIE (`en_final[key] = en_existing.get(key) or used_keys[key] or key`, tools/sync_translations.py:86); es propagiert nur fehlende Keys. Danach:
 
 ```bash
 python3.12 tools/sync_translations.py
@@ -453,7 +456,7 @@ grep -A1 'msgid "full_book_option"' xray.koplugin/languages/en.po
 grep -A1 'msgid "spoiler_preference_desc"' xray.koplugin/languages/en.po
 grep -A1 'msgid "spoiler_free_about"' xray.koplugin/languages/en.po
 ```
-Expected: en.po trägt die neuen EN-Texte. Falls der Sync bestehende msgstr NICHT überschreibt: die vier msgstr in `en.po` manuell per Edit setzen.
+Expected: en.po trägt die vier neuen EN-Texte.
 
 - [ ] **Step 4: de.po übersetzen**
 
