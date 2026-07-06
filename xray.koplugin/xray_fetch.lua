@@ -226,7 +226,9 @@ function M:fetchSingleWord(text, pos0, pos1)
     end)
 end
 
-function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_silent)
+-- prefetch_page (optional): pins the analysis anchor to a checkpoint page
+-- instead of the live reading position (offline prefetch); nil = today's behavior.
+function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_silent, prefetch_page)
     self.bg_fetch_active = true
     if not self.ai_helper then
         local AIHelper = require(plugin_path .. "xray_aihelper")
@@ -285,7 +287,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
         if is_cancelled or self.destroyed then self.bg_fetch_active = false; return end
         if not self.chapter_analyzer then self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new() end
 
-        local current_page = self.ui:getCurrentPage()
+        local current_page = prefetch_page or self.ui:getCurrentPage()
         local first_missing_page = last_fetch_page
         if is_update then
             local toc = self.ui.document:getToc() or {}
@@ -333,7 +335,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
             if is_cancelled or self.destroyed then self.bg_fetch_active = false; return end
             if not self.ui or not self.ui.document then self.bg_fetch_active = false; return end
 
-            local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 200, 150000, reading_percent == 100, first_missing_page, known_chapters)
+            local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 200, 150000, reading_percent == 100, first_missing_page, known_chapters, prefetch_page)
             local annots = self.chapter_analyzer:getAnnotationsForAnalysis(self.ui)
 
             if (not book_text or #book_text < 10) and not samples then
@@ -830,6 +832,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
 end
 
 function M:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
+    if self.prefetch_active then return end -- prefetch runs the dupe check once at the end (D3)
     if not self.ai_helper or not self.ai_helper.hasApiKey or not self.ai_helper:hasApiKey() then return end
     if self.ai_helper.settings and self.ai_helper.settings.auto_dupe_check_enabled == false then return end
 

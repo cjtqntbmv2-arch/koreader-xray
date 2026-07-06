@@ -610,23 +610,28 @@ function ChapterAnalyzer:getAnnotationsForAnalysis(ui)
 end
 
 -- Get detailed samples (Start/Mid/End) from each chapter
-function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit, is_full_book, start_page, known_chapters)
+function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit, is_full_book, start_page, known_chapters, end_page)
     if not ui or not ui.document then return nil, nil end
-    
+
     local toc = ui.document:getToc()
-    if not toc or #toc == 0 then 
+    if not toc or #toc == 0 then
         logger.info("ChapterAnalyzer: No TOC found for detailed sampling")
-        return nil, nil 
+        return nil, nil
     end
-    
+
     local current_page = nil
     if not is_full_book then
-        if ui.view and ui.view.state and ui.view.state.page then
-            current_page = ui.view.state.page
-        elseif ui.rolling and ui.rolling.current_page then
-            current_page = ui.rolling.current_page
-        elseif ui.paging and ui.paging.getCurrentPage then
-            current_page = ui.paging:getCurrentPage()
+        -- Prefetch: end_page pins the sampling boundary to a checkpoint page
+        -- instead of the actual reading position.
+        current_page = end_page
+        if not current_page then
+            if ui.view and ui.view.state and ui.view.state.page then
+                current_page = ui.view.state.page
+            elseif ui.rolling and ui.rolling.current_page then
+                current_page = ui.rolling.current_page
+            elseif ui.paging and ui.paging.getCurrentPage then
+                current_page = ui.paging:getCurrentPage()
+            end
         end
     end
     

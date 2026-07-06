@@ -1,0 +1,286 @@
+-- xray_prefetch_spec.lua
+require("spec.spec_helper")
+
+-- The network manager is not part of spec_helper's fakes; the prefetch loop
+-- requires it lazily at call time.
+package.loaded["ui/network/manager"] = {
+    isConnected = function() return true end,
+    isOnline = function() return true end,
+}
+
+local prefetch = require("xray_prefetch")
+
+local function toc_entry(page, title)
+    return { page = page, title = title or ("Chapter " .. page) }
+end
+
+local function makePlugin(toc, page_count)
+    local plugin = createMockPlugin()
+    plugin.ui.document.getToc = function() return toc end
+    plugin.ui.document.getPageCount = function() return page_count end
+    plugin.isNonNarrativeChapter = function(_, title)
+        return title ~= nil and title:lower():match("^copyright") ~= nil
+    end
+    for k, v in pairs(prefetch) do
+        plugin[k] = v
+    end
+    return plugin
+end
+
+local function pageSet(checkpoints)
+    local set = {}
+    for _, cp in ipairs(checkpoints) do set[cp.page] = cp end
+    return set
+end
+
+describe("xray_prefetch", function()
+    describe("computeCheckpoints", function()
+        it("anchors on chapter end pages and always ends at 100%", function()
+            -- 5 chapters of 100 pages each, 500-page book
+            local toc = {}
+            for i = 0, 4 do table.insert(toc, toc_entry(i * 100 + 1)) end
+            local plugin = makePlugin(toc, 500)
+            local cps = plugin:computeCheckpoints()
+            assert.is_not_nil(cps)
+            assert.are.equal(500, cps[#cps].page)
+            assert.are.equal(100, cps[#cps].percent)
+            local pages = pageSet(cps)
+            assert.is_not_nil(pages[100])
+            assert.is_not_nil(pages[200])
+            assert.is_not_nil(pages[300])
+            assert.is_not_nil(pages[400])
+            assert.are.equal(20, pages[100].percent)
+        end)
+
+        it("thins dense TOCs to at most 12 checkpoints", function()
+            local toc = {}
+            for i = 0, 59 do table.insert(toc, toc_entry(i * 10 + 1)) end
+            local plugin = makePlugin(toc, 600)
+            local cps = plugin:computeCheckpoints()
+            assert.is_true(#cps <= 12)
+            assert.are.equal(600, cps[#cps].page)
+        end)
+
+        it("densifies sparse TOCs so no interval exceeds 15%", function()
+            -- 3 chapters ending at 100/200/300 of a 300-page book
+            local toc = { toc_entry(1), toc_entry(101), toc_entry(201) }
+            local plugin = makePlugin(toc, 300)
+            local cps = plugin:computeCheckpoints()
+            local max_gap = math.floor(300 * 15 / 100) + 1
+            local prev = 0
+            for _, cp in ipairs(cps) do
+                assert.is_true(cp.page - prev <= max_gap)
+                prev = cp.page
+            end
+            assert.are.equal(300, cps[#cps].page)
+        end)
+
+        it("densifies the leading gap before a late first chapter end", function()
+            local toc = { toc_entry(1), toc_entry(121), toc_entry(281) }
+            local plugin = makePlugin(toc, 300)
+            local cps = plugin:computeCheckpoints()
+            assert.is_true(cps[1].page <= math.floor(300 * 15 / 100) + 1)
+        end)
+
+        it("falls back to 10% steps without a usable TOC", function()
+            local plugin = makePlugin({}, 400)
+            local cps = plugin:computeCheckpoints()
+            assert.are.equal(10, #cps)
+            assert.are.equal(40, cps[1].page)
+            assert.are.equal(400, cps[#cps].page)
+            assert.are.equal(100, cps[#cps].percent)
+        end)
+
+        it("ignores non-narrative chapters as anchors", function()
+            -- copyright chapter between ch1 and ch2 must not contribute its end page (149)
+            local toc = { toc_entry(1), toc_entry(150, "Copyright"), toc_entry(240) }
+            local plugin = makePlugin(toc, 400)
+            local cps = plugin:computeCheckpoints()
+            local pages = pageSet(cps)
+            assert.is_not_nil(pages[239]) -- end of ch1 = start of ch2 - 1 (copyright filtered out)
+            assert.is_nil(pages[149])     -- would only exist if copyright counted as a chapter
+        end)
+
+        it("returns nil without a document", function()
+            local plugin = makePlugin({}, 400)
+            plugin.ui = nil
+            assert.is_nil(plugin:computeCheckpoints())
+        end)
+    end)
+
+    describe("prefetch loop", function()
+        local function makeLoopPlugin()
+            local plugin = createMockPlugin()
+            plugin.ui.document.getPageCount = function() return 300 end
+            plugin.ui.getCurrentPage = function() return 10 end
+            for k, v in pairs(prefetch) do
+                plugin[k] = v
+            end
+            -- isolate the loop from the D1 math
+            plugin.computeCheckpoints = function()
+                return {
+                    { page = 100, percent = 33 },
+                    { page = 200, percent = 66 },
+                    { page = 300, percent = 100 },
+                }
+            end
+            plugin.book_data = {}
+
+            local snaps = {}
+            plugin._spec_snaps = snaps
+            plugin._spec_saved_snapshots = {}
+            plugin._spec_async_saves = 0
+            plugin.cache_manager = {
+                snapshotExists = function(_, _, idx) return snaps[idx] == true end,
+                saveSnapshot = function(_, _, idx, data)
+                    snaps[idx] = true
+                    table.insert(plugin._spec_saved_snapshots, { index = idx, page = data.page })
+                    return true
+                end,
+                asyncSaveCache = function()
+                    plugin._spec_async_saves = plugin._spec_async_saves + 1
+                    return true
+                end,
+                loadCache = function() return plugin.book_data end,
+            }
+
+            plugin._spec_fetch_calls = {}
+            plugin.continueWithFetch = function(self, pct, is_update, lfp, silent, page)
+                table.insert(self._spec_fetch_calls, {
+                    pct = pct, page = page, is_update = is_update, silent = silent, lfp = lfp,
+                })
+                -- simulate a successful fetch that already finished: the real
+                -- one fills the timeline and advances last_fetch_page
+                self.timeline = self.timeline or {}
+                table.insert(self.timeline, { chapter = "c" .. tostring(#self._spec_fetch_calls) })
+                self.bg_fetch_active = false
+                self.book_data.last_fetch_page = page
+            end
+
+            plugin._spec_dupe_calls = 0
+            plugin.runPostFetchDuplicateCheck = function(self, _, _, pct)
+                self._spec_dupe_calls = self._spec_dupe_calls + 1
+                self._spec_dupe_pct = pct
+            end
+
+            plugin.ai_helper = {
+                hasApiKey = function() return true end,
+                settings = {},
+                log = function() end,
+            }
+            plugin.timeline = {}
+            _G.ui_tracker.shown = {}
+            _G.ui_tracker.last_shown = nil
+            _G.ui_tracker.closed = {}
+            return plugin
+        end
+
+        it("runs all checkpoints in order and marks the manifest completed", function()
+            local plugin = makeLoopPlugin()
+            plugin:startOfflinePrefetch(true)
+
+            assert.are.equal(3, #plugin._spec_fetch_calls)
+            assert.are.equal(100, plugin._spec_fetch_calls[1].page)
+            assert.are.equal(200, plugin._spec_fetch_calls[2].page)
+            assert.are.equal(300, plugin._spec_fetch_calls[3].page)
+            assert.are.equal(100, plugin._spec_fetch_calls[3].pct)
+            -- virgin book: first call is a fresh fetch, later ones are updates
+            assert.is_false(plugin._spec_fetch_calls[1].is_update)
+            assert.is_true(plugin._spec_fetch_calls[2].is_update)
+
+            assert.are.equal(3, #plugin._spec_saved_snapshots)
+            assert.are.equal(1, plugin._spec_saved_snapshots[1].index)
+            assert.are.equal(100, plugin._spec_saved_snapshots[1].page)
+            assert.are.equal(3, plugin._spec_saved_snapshots[3].index)
+
+            assert.is_true(plugin.book_data.prefetch.completed)
+            assert.is_true(plugin:isPrefetchComplete())
+            assert.is_false(plugin.prefetch_active)
+        end)
+
+        it("skips checkpoints already covered by last_fetch_page", function()
+            local plugin = makeLoopPlugin()
+            plugin.book_data.last_fetch_page = 150
+            plugin:startOfflinePrefetch(true)
+
+            assert.are.equal(2, #plugin._spec_fetch_calls)
+            assert.are.equal(200, plugin._spec_fetch_calls[1].page)
+            assert.are.equal(2, plugin._spec_saved_snapshots[1].index)
+            assert.is_true(plugin.book_data.prefetch.completed)
+        end)
+
+        it("resumes at the first missing snapshot", function()
+            local plugin = makeLoopPlugin()
+            plugin._spec_snaps[1] = true
+            plugin:startOfflinePrefetch(true)
+
+            assert.are.equal(2, #plugin._spec_fetch_calls)
+            assert.are.equal(200, plugin._spec_fetch_calls[1].page)
+            assert.are.equal(300, plugin._spec_fetch_calls[2].page)
+        end)
+
+        it("stops on failure and leaves the manifest incomplete", function()
+            local plugin = makeLoopPlugin()
+            plugin.continueWithFetch = function(self, pct, is_update, lfp, silent, page)
+                table.insert(self._spec_fetch_calls, { page = page })
+                self.bg_fetch_active = false
+                -- last_fetch_page NOT advanced -> failure
+            end
+            plugin:startOfflinePrefetch(true)
+
+            assert.are.equal(1, #plugin._spec_fetch_calls)
+            assert.are.equal(0, #plugin._spec_saved_snapshots)
+            assert.falsy(plugin.book_data.prefetch.completed)
+            assert.is_false(plugin.prefetch_active)
+        end)
+
+        it("honors cancellation between checkpoints", function()
+            local plugin = makeLoopPlugin()
+            local orig = plugin.continueWithFetch
+            plugin.continueWithFetch = function(self, ...)
+                orig(self, ...)
+                self.prefetch_cancelled = true
+            end
+            plugin:startOfflinePrefetch(true)
+
+            assert.are.equal(1, #plugin._spec_fetch_calls)
+            assert.are.equal(1, #plugin._spec_saved_snapshots) -- finished checkpoint is kept
+            assert.falsy(plugin.book_data.prefetch.completed)
+            assert.is_false(plugin.prefetch_active)
+        end)
+
+        it("routes full_book users to a normal full fetch", function()
+            local plugin = makeLoopPlugin()
+            plugin.ai_helper.settings.spoiler_setting = "full_book"
+            local full_fetches = 0
+            plugin.fetchFromAI = function() full_fetches = full_fetches + 1 end
+            plugin:startOfflinePrefetch(true)
+
+            assert.are.equal(1, full_fetches)
+            assert.are.equal(0, #plugin._spec_fetch_calls)
+            assert.falsy(plugin.prefetch_active)
+        end)
+
+        it("runs the duplicate check exactly once at the end", function()
+            local plugin = makeLoopPlugin()
+            plugin:startOfflinePrefetch(true)
+
+            assert.are.equal(1, plugin._spec_dupe_calls)
+            assert.are.equal(100, plugin._spec_dupe_pct)
+        end)
+
+        it("shows a progress dialog and a final info in manual mode", function()
+            local plugin = makeLoopPlugin()
+            plugin:startOfflinePrefetch(false)
+
+            local dialogs, infos = 0, 0
+            for _, w in ipairs(_G.ui_tracker.shown) do
+                if w.type == "ButtonDialog" then dialogs = dialogs + 1 end
+                if w.type == "InfoMessage" then infos = infos + 1 end
+            end
+            assert.is_true(dialogs >= 1)
+            assert.are.equal(1, infos)
+            assert.are.equal("InfoMessage", _G.ui_tracker.last_shown.type)
+        end)
+    end)
+end)

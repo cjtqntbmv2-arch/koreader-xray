@@ -95,4 +95,22 @@ describe("xray_fetch", function()
             assert.is_false(save_called)
         end)
     end)
+
+    describe("runPostFetchDuplicateCheck", function()
+        it("returns immediately while prefetch is active", function()
+            local called = false
+            plugin.prefetch_active = true
+            plugin.ai_helper = {
+                hasApiKey = function() return true end,
+                settings = {},
+                findDuplicatesAsync = function() called = true; return nil end,
+            }
+            plugin.characters = { { name = "A" }, { name = "B" }, { name = "C" } }
+            plugin.locations = { { name = "X" }, { name = "Y" } }
+
+            plugin:runPostFetchDuplicateCheck("Title", "Author", 50, true)
+
+            assert.is_false(called)
+        end)
+    end)
 end)

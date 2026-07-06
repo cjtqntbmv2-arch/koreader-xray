@@ -191,5 +191,22 @@ describe("xray_chapteranalyzer", function()
                 assert.is_true(page <= 25)
             end
         end)
+
+        it("end_page overrides the reading position as sampling boundary (prefetch)", function()
+            -- Reader is on page 25, but the checkpoint boundary is page 45:
+            -- Chapter 3 (page 40) must now be included and partially extracted up to 46
+            local samples, titles = analyzer:getDetailedChapterSamples(mock_ui, 100, 60000, false, nil, nil, 45)
+            assert.are.equal(3, #titles)
+            assert.are.equal("Chapter 3", titles[3])
+            local last = getTextFromXPointers_calls[#getTextFromXPointers_calls]
+            assert.are.equal("xp_page_46", last.end_xp)
+        end)
+
+        it("end_page below the reading position restricts sampling", function()
+            -- Boundary page 15 lies inside Chapter 1 -> only Chapter 1 is sampled
+            local samples, titles = analyzer:getDetailedChapterSamples(mock_ui, 100, 60000, false, nil, nil, 15)
+            assert.are.equal(1, #titles)
+            assert.are.equal("Chapter 1", titles[1])
+        end)
     end)
 end)
