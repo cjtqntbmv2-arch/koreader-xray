@@ -170,13 +170,10 @@ function M:deduplicateByName(list, key)
                 existing = alias_map[k]
             end
 
-            -- Check 3: first-name component of canonical name matches a known alias
-            if not existing then
-                local first = k:match("^(%S+)")
-                if first and first ~= k and #first >= 5 then
-                    existing = alias_map[first]
-                end
-            end
+            -- No first-name-only matching for multi-word names: dynastic books
+            -- (ASOIAF etc.) reuse first names across different characters, so a
+            -- shared first name must never fuse two full names. Bare first names
+            -- ("Daenerys") are still caught by the alias check above.
 
             if not existing then
                 seen[k] = item

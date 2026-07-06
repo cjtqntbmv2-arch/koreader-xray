@@ -68,6 +68,25 @@ describe("xray_data", function()
             assert.is_true(aliases["doctor"])
             assert.is_true(aliases["watson"])
         end)
+
+        it("does not merge different multi-word names sharing a first-name alias", function()
+            local list = {
+                { name = "Aegon Targaryen", aliases = {"Aegon"} },
+                { name = "Aegon Blackfyre", aliases = {} }
+            }
+            local result = xray_data:deduplicateByName(list, "name")
+            assert.are.equal(2, #result)
+        end)
+
+        it("still merges a bare first name into the matching full name", function()
+            local list = {
+                { name = "Daenerys Targaryen", aliases = {"Daenerys"} },
+                { name = "Daenerys", aliases = {} }
+            }
+            local result = xray_data:deduplicateByName(list, "name")
+            assert.are.equal(1, #result)
+            assert.are.equal("Daenerys Targaryen", result[1].name)
+        end)
     end)
 
     describe("assignTimelinePages", function()
