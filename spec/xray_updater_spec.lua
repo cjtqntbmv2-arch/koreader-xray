@@ -48,6 +48,46 @@ describe("xray_updater hardening", function()
         pcall(os.remove, cfg)
     end)
 
+    it("_zipLooksValid accepts a well-formed archive (header + EOCD)", function()
+        local p = "/tmp/xray_spec_zip_ok.zip"
+        -- PK\3\4 local-file-header ... PK\5\6 end-of-central-directory
+        write(p, "PK\3\4" .. string.rep("x", 30) .. "PK\5\6" .. string.rep("\0", 18))
+        assert.is_true(updater._zipLooksValid(p))
+        pcall(os.remove, p)
+    end)
+
+    it("_zipLooksValid accepts an empty archive (bare EOCD)", function()
+        local p = "/tmp/xray_spec_zip_empty_arc.zip"
+        write(p, "PK\5\6" .. string.rep("\0", 18))
+        assert.is_true(updater._zipLooksValid(p))
+        pcall(os.remove, p)
+    end)
+
+    it("_zipLooksValid rejects an empty file", function()
+        local p = "/tmp/xray_spec_zip_empty.zip"
+        write(p, "")
+        assert.is_false(updater._zipLooksValid(p))
+        pcall(os.remove, p)
+    end)
+
+    it("_zipLooksValid rejects a non-zip (e.g. HTML redirect body)", function()
+        local p = "/tmp/xray_spec_zip_html.zip"
+        write(p, "<html><body>Moved</body></html>")
+        assert.is_false(updater._zipLooksValid(p))
+        pcall(os.remove, p)
+    end)
+
+    it("_zipLooksValid rejects a truncated archive (header, no EOCD)", function()
+        local p = "/tmp/xray_spec_zip_trunc.zip"
+        write(p, "PK\3\4" .. string.rep("x", 40))
+        assert.is_false(updater._zipLooksValid(p))
+        pcall(os.remove, p)
+    end)
+
+    it("_zipLooksValid rejects a missing file", function()
+        assert.is_false(updater._zipLooksValid("/tmp/xray_spec_zip_does_not_exist.zip"))
+    end)
+
     it("restoreConfigBackup only cleans up when the live config still has keys", function()
         local cfg = "/tmp/xray_spec_config2.lua"
         local bak = cfg .. ".bak"
