@@ -1411,6 +1411,14 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
             .. "\n- Different characters may share the same name (dynasties, relatives). ALWAYS use a distinguishing canonical name for each (numeral, epithet, or seat, e.g. \"Aegon II Targaryen\", \"Walder Frey, Lord of the Crossing\")."
             .. "\n- NEVER list the bare shared name as an alias for any of these characters (this overrides the general guidance to include the common first name as an alias)."
             .. "\n- Treat a newly found character as an already-known one ONLY if the text clearly refers to the same person; otherwise create a separate, disambiguated entry."
+        if context and context.prefetch_segment then
+            extra_context = extra_context
+                .. "\n\nSEGMENT COMPLETENESS MODE:"
+                .. "\n- This fetch covers ONE bounded text segment of the book. Extract EVERY character who speaks or acts within the provided samples, including minor ones."
+                .. "\n- For this segment fetch, these rules take precedence over the ANTI-TRUNCATION PROTOCOL and the character count guidance in Step 1 above."
+                .. "\n- The character count target of {NUM_CHARS} applies to NEW characters found in this segment, NOT to the total list."
+                .. "\n- Give minor characters short descriptions. If output space runs short, drop the least important characters first."
+        end
     end
     if not success then final_prompt = string.format("Extract %s data.", section_name) end
     if #extra_context > 0 then

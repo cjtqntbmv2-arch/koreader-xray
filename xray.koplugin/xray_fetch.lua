@@ -373,6 +373,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 existing_locations = is_update and self.locations or nil,
                 existing_historical_figures = is_update and self.historical_figures or nil,
                 book_type = self.book_type,
+                prefetch_segment = self.prefetch_active or nil,
             }
 
             local req_params, err_code, err_msg = self.ai_helper:buildComprehensiveRequest(title, author, context)

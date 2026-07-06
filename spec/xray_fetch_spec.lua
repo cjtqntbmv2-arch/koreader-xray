@@ -113,4 +113,41 @@ describe("xray_fetch", function()
             assert.is_false(called)
         end)
     end)
+
+    describe("prefetch_segment flag", function()
+        local function runFetchAndCaptureContext(p)
+            local captured
+            p.ui.getCurrentPage = function() return 42 end
+            p.ui.document.getToc = function() return {} end
+            p.chapter_analyzer = {
+                getTextForAnalysis = function() return "This is definitely enough book text for the test run." end,
+                getDetailedChapterSamples = function() return "SAMPLES", { "Chapter 1" } end,
+                getAnnotationsForAnalysis = function() return nil end,
+            }
+            p.ai_helper = {
+                settings = {},
+                buildComprehensiveRequest = function(self, title, author, context)
+                    captured = context
+                    return nil, "test_abort", "test abort"
+                end,
+            }
+            -- is_silent=true -> kein Dialog, Abbruchpfad ohne UI
+            p:continueWithFetch(50, false, nil, true)
+            return captured
+        end
+
+        it("marks the context as segment fetch while prefetch is active", function()
+            plugin.prefetch_active = true
+            local ctx = runFetchAndCaptureContext(plugin)
+            assert.is_true(ctx ~= nil)
+            assert.is_true(ctx.prefetch_segment == true)
+        end)
+
+        it("does not mark the context outside of prefetch", function()
+            plugin.prefetch_active = nil
+            local ctx = runFetchAndCaptureContext(plugin)
+            assert.is_true(ctx ~= nil)
+            assert.is_true(ctx.prefetch_segment == nil)
+        end)
+    end)
 end)
