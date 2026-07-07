@@ -4152,7 +4152,7 @@ function M:showConfigSummary()
     local secondary = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.secondary_ai or nil
     
     local primary_label = self.loc:t("menu_primary_ai_model") or "Primary AI Model"
-    local secondary_label = self.loc:t("menu_secondary_ai_model") or "Secondary AI Model"
+    local secondary_label = self.loc:t("menu_secondary_ai_model") or "Fallback AI Model"
     local provider_label = self.loc:t("config_provider") or "  Provider: "
     local model_label = self.loc:t("config_model") or "  Model: "
     local default_label = self.loc:t("config_default_gemini") or "  Default (Gemini)"

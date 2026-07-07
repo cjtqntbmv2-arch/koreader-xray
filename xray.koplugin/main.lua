@@ -842,7 +842,7 @@ function XRayPlugin:getSubMenuItems()
                 keep_menu_open = true,
                 sub_item_table = {
                     {
-                        text = self.loc:t("menu_ui_popup_intext") or "Use Footnote Style for In-text Lookups",
+                        text = self.loc:t("menu_ui_popup_intext") or "Footnote popup for tap-a-word lookups",
                         checked_func = function()
                             local val = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.ui_popup_intext
                             if val == nil then return true end
@@ -857,7 +857,7 @@ function XRayPlugin:getSubMenuItems()
                         end,
                     },
                     {
-                        text = self.loc:t("menu_ui_popup_menu") or "Use Footnote Style for Menu Lookups",
+                        text = self.loc:t("menu_ui_popup_menu") or "Footnote popup for dictionary-button lookups",
                         checked_func = function()
                             local val = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.ui_popup_menu
                             if val == nil then return false end
@@ -892,7 +892,7 @@ function XRayPlugin:getSubMenuItems()
                         keep_menu_open = true,
                         sub_item_table = {
                             {
-                                text = self.loc:t("menu_frequency") or "Frequency",
+                                text = self.loc:t("menu_frequency") or "Auto-fetch Frequency",
                                 keep_menu_open = true,
                                 callback = function() self:showAutoUpdateSettings() end,
                             },
@@ -967,7 +967,7 @@ function XRayPlugin:getSubMenuItems()
                         sub_item_table_func = function() return self:getAIModelSelectionMenu("primary") end
                     },
                     {
-                        text = self.loc:t("menu_secondary_ai_model") or "Secondary AI Model",
+                        text = self.loc:t("menu_secondary_ai_model") or "Fallback AI Model",
                         keep_menu_open = true,
                         sub_item_table_func = function() return self:getAIModelSelectionMenu("secondary") end,
                     },
@@ -984,7 +984,7 @@ function XRayPlugin:getSubMenuItems()
                         separator = true,
                     },
                     {
-                        text = self.loc:t("menu_view_config") or "View All Config Values", 
+                        text = self.loc:t("menu_view_config") or "View Configuration (read-only)",
                         keep_menu_open = true,
                         callback = function() self:showConfigSummary() end,
                     },

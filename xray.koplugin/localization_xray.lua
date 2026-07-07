@@ -280,7 +280,7 @@ function Localization:t(key, ...)
             mentions_at_location = "Mention: %s",
             find_mentions = "Find Mentions",
             menu_about = "About",
-            menu_frequency = "Frequency",
+            menu_frequency = "Auto-fetch Frequency",
             auto_update_ultra = "Ultra: checks every %d pages",
             auto_fetch_page_interval_prompt = "Page Interval",
             menu_reasoning_effort = "AI Reasoning Effort",
