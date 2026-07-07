@@ -875,6 +875,9 @@ msgstr "Enter character name"
 msgid "search_term"
 msgstr "Search Terms"
 
+msgid "section_label"
+msgstr "Section"
+
 msgid "series_ask_later_msg"
 msgstr "Series recap postponed. We will ask again when you open/resume this book."
 

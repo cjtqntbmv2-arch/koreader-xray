@@ -861,8 +861,8 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         local fetch_complete = self.loc:t("ai_fetch_complete_msg") or "AI Fetch Complete!"
         local cache_success = self.loc:t("cache_save_success") or "✓ Cache updated."
         local cache_fail = self.loc:t("cache_save_failed") or "Failed to save cache"
-        local label_chars = self.loc:t("entity_label_characters") or "characters"
-        local label_locs = self.loc:t("entity_label_locations") or "locations"
+        local label_chars = self.loc:t("menu_characters") or "Characters"
+        local label_locs = self.loc:t("menu_locations") or "Locations"
         local label_events = self.loc:t("menu_timeline") or "Timeline"
         local summary = string.format("%s\n\n%s: %d\n%s: %d\n%s: %d\n\n%s", 
             fetch_complete,

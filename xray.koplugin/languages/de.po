@@ -875,6 +875,9 @@ msgstr "Charakternamen eingeben"
 msgid "search_term"
 msgstr "Suchbegriffe"
 
+msgid "section_label"
+msgstr "Abschnitt"
+
 msgid "series_ask_later_msg"
 msgstr "Serienzusammenfassung verschoben. Wir fragen erneut, wenn Sie dieses Buch öffnen/fortsetzen."
 
