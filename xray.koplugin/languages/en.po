@@ -923,3 +923,84 @@ msgstr "Adds an 'X-Ray' button to dictionary and selection menus for instant loo
 msgid "yes"
 msgstr "Yes"
 
+msgid "menu_characters_help"
+msgstr "Browse AI bios for every character; search, merge duplicates, or fetch more."
+
+msgid "menu_timeline_help"
+msgstr "Plot timeline chapter by chapter, limited to your current page."
+
+msgid "menu_historical_figures_help"
+msgstr "Real-world historical figures the book references, with a short note on each."
+
+msgid "menu_locations_help"
+msgstr "Settings and places in the book; merge duplicates or view details."
+
+msgid "menu_terms_help"
+msgstr "Book-specific terms, jargon, and concepts with AI definitions."
+
+msgid "menu_author_info_help"
+msgstr "Author biography and life dates; fetched on demand."
+
+msgid "menu_update_xray_help"
+msgstr "Fetch fresh AI data for your current progress and merge it into the existing X-Ray."
+
+msgid "menu_ui_popup_intext_help"
+msgstr "Show lookups from tapping a word in the text as a compact footnote popup."
+
+msgid "menu_ui_popup_menu_help"
+msgstr "Show lookups opened from the dictionary/selection button as a compact footnote popup."
+
+msgid "menu_linked_entries_settings_help"
+msgstr "Control tappable cross-links between related characters, places, and terms."
+
+msgid "mentions_setting_help"
+msgstr "Configure scanning for where a character or term is mentioned in the book."
+
+msgid "menu_frequency_help"
+msgstr "How often X-Ray auto-fetches as you read: every few pages, each chapter, or never."
+
+msgid "auto_dupe_check_setting_help"
+msgstr "Ask the AI to detect duplicates after every fetch (uses one extra API call)."
+
+msgid "menu_prefetch_offline_help"
+msgstr "Fetch and cache X-Ray for the whole book now, so lookups work offline later."
+
+msgid "menu_prefetch_auto_help"
+msgstr "Automatically prepare the whole book for offline use whenever you're online."
+
+msgid "menu_book_mode_help"
+msgstr "Tell X-Ray whether this book is fiction or non-fiction so it fetches the right entries."
+
+msgid "menu_desc_length_settings_help"
+msgstr "Set how detailed each entry is; longer entries mean fewer returned per fetch."
+
+msgid "series_context_enabled_help"
+msgstr "Allow X-Ray to fetch and use a recap of previous books in this series."
+
+msgid "menu_fetch_series_context_help"
+msgstr "Fetch or re-fetch the recap of earlier books in this series now."
+
+msgid "spoiler_preference_help"
+msgstr "Choose whether X-Ray hides content past your current page or shows all fetched data."
+
+msgid "menu_xray_mode_help"
+msgstr "Add an X-Ray button to the dictionary and text-selection popups for instant lookups."
+
+msgid "menu_language_help"
+msgstr "Set the language for AI-generated X-Ray content and the plugin interface."
+
+msgid "menu_primary_ai_model_help"
+msgstr "The main AI model tried first for every fetch; pick a provider then a model."
+
+msgid "menu_secondary_ai_model_help"
+msgstr "Backup AI tried automatically only if the primary fails or has no key; set None to disable."
+
+msgid "menu_reasoning_effort_help"
+msgstr "Thinking depth for reasoning models (GPT-5.x, Claude, Gemini 2.5+); ignored by others."
+
+msgid "menu_api_keys_help"
+msgstr "Enter API keys per provider and set endpoint/model for the two custom slots."
+
+msgid "menu_view_config_help"
+msgstr "Read-only summary of active models and which provider keys are set."
+

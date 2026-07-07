@@ -923,3 +923,84 @@ msgstr "Fügt eine 'X-Ray'-Schaltfläche zu Wörterbuch- und Auswahlmenüs für 
 msgid "yes"
 msgstr "Ja"
 
+msgid "menu_characters_help"
+msgstr "KI-Biografien aller Figuren; suchen, Duplikate zusammenführen oder mehr abrufen."
+
+msgid "menu_timeline_help"
+msgstr "Handlungs-Zeitleiste Kapitel für Kapitel, begrenzt auf deine aktuelle Seite."
+
+msgid "menu_historical_figures_help"
+msgstr "Reale historische Personen, auf die das Buch verweist, mit kurzer Notiz."
+
+msgid "menu_locations_help"
+msgstr "Schauplätze und Orte im Buch; Duplikate zusammenführen oder Details ansehen."
+
+msgid "menu_terms_help"
+msgstr "Buchspezifische Begriffe und Konzepte mit KI-Definitionen."
+
+msgid "menu_author_info_help"
+msgstr "Autor-Biografie und Lebensdaten; bei Bedarf abgerufen."
+
+msgid "menu_update_xray_help"
+msgstr "Frische KI-Daten für deinen Fortschritt abrufen und ins vorhandene X-Ray einfügen."
+
+msgid "menu_ui_popup_intext_help"
+msgstr "Suchen per Wort-Antippen im Text als kompaktes Fußnoten-Popup anzeigen."
+
+msgid "menu_ui_popup_menu_help"
+msgstr "Suchen über die Wörterbuch-Schaltfläche als kompaktes Fußnoten-Popup anzeigen."
+
+msgid "menu_linked_entries_settings_help"
+msgstr "Antippbare Querverweise zwischen verwandten Einträgen steuern."
+
+msgid "mentions_setting_help"
+msgstr "Suche steuern, wo eine Figur oder ein Begriff im Buch erwähnt wird."
+
+msgid "menu_frequency_help"
+msgstr "Wie oft X-Ray beim Lesen automatisch abruft: alle paar Seiten, pro Kapitel oder nie."
+
+msgid "auto_dupe_check_setting_help"
+msgstr "KI nach jedem Abruf Duplikate erkennen lassen (ein zusätzlicher API-Aufruf)."
+
+msgid "menu_prefetch_offline_help"
+msgstr "X-Ray fürs ganze Buch jetzt abrufen und zwischenspeichern für spätere Offline-Nutzung."
+
+msgid "menu_prefetch_auto_help"
+msgstr "Das ganze Buch automatisch für Offline-Nutzung vorbereiten, sobald online."
+
+msgid "menu_book_mode_help"
+msgstr "X-Ray mitteilen, ob dieses Buch Belletristik oder Sachbuch ist."
+
+msgid "menu_desc_length_settings_help"
+msgstr "Festlegen, wie ausführlich jeder Eintrag ist; länger = weniger pro Abruf."
+
+msgid "series_context_enabled_help"
+msgstr "X-Ray erlauben, eine Zusammenfassung früherer Serienbände zu nutzen."
+
+msgid "menu_fetch_series_context_help"
+msgstr "Zusammenfassung früherer Serienbände jetzt abrufen oder aktualisieren."
+
+msgid "spoiler_preference_help"
+msgstr "Wählen, ob X-Ray Inhalte hinter deiner Seite verbirgt oder alles Abgerufene zeigt."
+
+msgid "menu_xray_mode_help"
+msgstr "X-Ray-Schaltfläche zu Wörterbuch- und Auswahl-Popups für Sofortsuche hinzufügen."
+
+msgid "menu_language_help"
+msgstr "Sprache für KI-Inhalte und Oberfläche festlegen."
+
+msgid "menu_primary_ai_model_help"
+msgstr "Das zuerst genutzte KI-Hauptmodell; Anbieter und Modell wählen."
+
+msgid "menu_secondary_ai_model_help"
+msgstr "Ausweich-KI nur bei Ausfall/fehlendem Schlüssel des Hauptmodells; „Keins" deaktiviert."
+
+msgid "menu_reasoning_effort_help"
+msgstr "Denktiefe für Reasoning-Modelle (GPT-5.x, Claude, Gemini 2.5+); andere ignorieren es."
+
+msgid "menu_api_keys_help"
+msgstr "API-Schlüssel je Anbieter eingeben und Endpunkt/Modell für Custom-Slots setzen."
+
+msgid "menu_view_config_help"
+msgstr "Schreibgeschützte Übersicht aktiver Modelle und gesetzter Schlüssel."
+
