@@ -70,7 +70,7 @@ Step 1. Look ONLY at the "CHAPTER SAMPLES" block. Identify the narrative chapter
 Step 2. EXCLUDE all non-narrative frontmatter and backmatter (e.g., Cover, Title Page, Copyright, Table of Contents, Dedication, Acknowledgments, Also By).
 Step 3. For each narrative chapter, starting from the very first one, create EXACTLY ONE event object in the `timeline` array.
 Step 4. The `chapter` field MUST exactly match the chapter header in the sample. (Map them strictly in sequential order).
-Step 5. Summarize that specific chapter in the `event` field. {TIMELINE_DETAIL_GUIDANCE} Write between {MIN_TIMELINE_EVENT} and {MAX_TIMELINE_EVENT} characters. Do NOT write a shorter summary unless the chapter has almost no content. Do NOT group chapters.
+Step 5. Summarize that specific chapter in the `event` field. {TIMELINE_DETAIL_GUIDANCE} Do NOT group chapters.
 Step 6. NO SPOILERS: Stop exactly at the %d%% mark. Do not include events past this progress.
 
 ALGORITHM FOR CHARACTERS & HISTORICAL FIGURES:

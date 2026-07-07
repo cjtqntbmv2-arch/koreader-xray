@@ -41,7 +41,8 @@ describe("xray_terms", function()
                 test_prompt = "Fetch {NUM_TERMS} terms with max {MAX_TERM_DEF} chars."
             }
             local result = xray_aihelper:createPrompt(nil, nil, nil, "test_prompt")
-            assert.is_true(result:find("15 terms") ~= nil)
+            -- num_terms is coupled to term length: floor(15 * 100 / 123) = 12
+            assert.is_true(result:find("12 terms") ~= nil)
             assert.is_true(result:find("123 chars") ~= nil)
         end)
     end)

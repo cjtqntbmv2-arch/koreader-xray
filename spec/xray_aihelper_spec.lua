@@ -318,3 +318,58 @@ describe("checkAsyncResult response-shape hardening", function()
         end)
     end
 end)
+
+-- createPrompt applies the user's "Description Length" settings by substituting
+-- {MAX_CHAR_DESC}, {NUM_TERMS}, {TIMELINE_DETAIL_GUIDANCE}, ... into the prompt.
+-- These are pure string substitutions and need no json module.
+describe("createPrompt description-length placeholders", function()
+
+    describe("character description length (clamp floor)", function()
+        it("should honor the 'Short' character preset of 80 (not clamp up to 100)", function()
+            local AIHelper = require("xray_aihelper")
+            AIHelper.settings = { char_desc_len = 80 }
+            AIHelper.prompts = { test_prompt = "d={MAX_CHAR_DESC}" }
+            local result = AIHelper:createPrompt(nil, nil, nil, "test_prompt")
+            assert.is_true(result:find("d=80") ~= nil)
+        end)
+
+        it("should still clamp absurdly small values up to the 80 floor", function()
+            local AIHelper = require("xray_aihelper")
+            AIHelper.settings = { char_desc_len = 10 }
+            AIHelper.prompts = { test_prompt = "d={MAX_CHAR_DESC}" }
+            local result = AIHelper:createPrompt(nil, nil, nil, "test_prompt")
+            assert.is_true(result:find("d=80") ~= nil)
+        end)
+    end)
+
+    describe("timeline minimum length in detail guidance", function()
+        it("should embed the computed minimum length in the (language-agnostic) guidance", function()
+            local AIHelper = require("xray_aihelper")
+            AIHelper.settings = { timeline_event_len = 200 }
+            AIHelper.prompts = { test_prompt = "{TIMELINE_DETAIL_GUIDANCE}" }
+            local result = AIHelper:createPrompt(nil, nil, nil, "test_prompt")
+            -- min = floor(200 * 0.75) = 150, max = 200
+            assert.is_true(result:find("150") ~= nil)
+            assert.is_true(result:find("200") ~= nil)
+        end)
+    end)
+
+    describe("glossary term count coupled to term length", function()
+        it("should keep 15 terms at the default term length", function()
+            local AIHelper = require("xray_aihelper")
+            AIHelper.settings = { term_def_len = 100 }
+            AIHelper.prompts = { test_prompt = "n={NUM_TERMS}" }
+            local result = AIHelper:createPrompt(nil, nil, nil, "test_prompt")
+            assert.is_true(result:find("n=15") ~= nil)
+        end)
+
+        it("should return fewer terms when term descriptions are much longer", function()
+            local AIHelper = require("xray_aihelper")
+            AIHelper.settings = { term_def_len = 300 }
+            AIHelper.prompts = { test_prompt = "n={NUM_TERMS}" }
+            local result = AIHelper:createPrompt(nil, nil, nil, "test_prompt")
+            -- floor(15 * 100 / 300) = 5
+            assert.is_true(result:find("n=5") ~= nil)
+        end)
+    end)
+end)

@@ -1455,7 +1455,7 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
     -- per-language prompt edits for numeric values.
     do
         local s = self.settings or {}
-        local char_len  = math.max(100, math.min(500, s.char_desc_len     or 200))
+        local char_len  = math.max(80,  math.min(500, s.char_desc_len     or 200))
         local loc_len   = math.max(50,  math.min(300, s.loc_desc_len      or 100))
         local tl_len    = math.max(50,  math.min(200, s.timeline_event_len or 80))
         local hist_len  = math.max(50,  math.min(400, s.hist_fig_bio_len  or 100))
@@ -1465,7 +1465,9 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
         local num_locs  = math.min(20, math.max(3,  math.floor(8  * 100 / loc_len)))
         local num_hist  = math.min(15, math.max(3,  math.floor(8  * 100 / hist_len)))
         local term_len  = math.max(50, math.min(300, s.term_def_len or 100))
-        local num_terms = 15
+        -- Count scaling like the other entities: longer definitions => fewer terms.
+        -- Base 15 => 15 terms at the default 100-char length (unchanged for existing users).
+        local num_terms = math.min(20, math.max(5, math.floor(15 * 100 / term_len)))
 
         -- Guidance for timeline detail based on target length setting
         local tl_guidance = "Write a concise single-sentence summary."
@@ -1485,6 +1487,12 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
         end
 
         local min_tl_len = math.floor(tl_len * 0.75)
+        -- Fold the length range into the (Lua-injected, language-agnostic) guidance so
+        -- every language honours the minimum, not just the few whose prompt template
+        -- still carries a {MIN_TIMELINE_EVENT} placeholder.
+        tl_guidance = tl_guidance .. " Write between " .. tostring(min_tl_len) .. " and "
+            .. tostring(tl_len) .. " characters. Do NOT write a shorter summary unless the"
+            .. " chapter has almost no content."
 
         final_prompt = final_prompt
             :gsub("{MAX_CHAR_DESC}",    tostring(char_len))
@@ -1492,7 +1500,6 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
             :gsub("{MAX_LOC_DESC}",     tostring(loc_len))
             :gsub("{NUM_LOCS}",         tostring(num_locs))
             :gsub("{MAX_TIMELINE_EVENT}",tostring(tl_len))
-            :gsub("{MIN_TIMELINE_EVENT}",tostring(min_tl_len))
             :gsub("{TIMELINE_DETAIL_GUIDANCE}", tl_guidance)
             :gsub("{TIMELINE_EXAMPLE}", tl_example)
             :gsub("{MAX_HIST_BIO}",     tostring(hist_len))

@@ -74,7 +74,7 @@ Passaggio 1. Guarda SOLO il blocco "CAMPIONI CAPITOLO". Identificare i capitoli 
 Passaggio 2. ESCLUDERE tutto il frontespizio e il sottofondo non narrativo (ad esempio copertina, frontespizio, copyright, sommario, dedica, ringraziamenti, anche di).
 Passaggio 3. Per ogni capitolo narrativo, a partire dal primo, crea ESATTAMENTE UN oggetto evento nell'array `timeline`.
 Passo 4. Il campo "chapter" DEVE corrispondere esattamente all'intestazione del capitolo nell'esempio. (Mappali rigorosamente in ordine sequenziale).
-Passaggio 5. Riassumi il capitolo specifico nel campo "event" {TIMELINE_DETAIL_GUIDANCE} Scrivi tra {MIN_TIMELINE_EVENT} e {MAX_TIMELINE_EVENT} caratteri. NON scrivere un riassunto più breve a meno che il capitolo non abbia quasi nessun contenuto. NON raggruppare i capitoli.
+Passaggio 5. Riassumi il capitolo specifico nel campo "event" {TIMELINE_DETAIL_GUIDANCE} NON raggruppare i capitoli.
 Passaggio 6. NESSUN SPOILER: fermati esattamente al segno %d%%. Non includere eventi oltre questo progresso.
 
 ALGORITMO PER PERSONAGGI E FIGURE STORICHE:
