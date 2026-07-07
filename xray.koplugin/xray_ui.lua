@@ -2696,12 +2696,14 @@ function M:showAuthorInfo()
 end
 
 function M:showLocations()
-    if not self.locations or #self.locations == 0 then 
-        UIManager:show(InfoMessage:new{ text = self.loc:t("no_location_data"), timeout = 3 })
-        return 
+    self.locations = self.locations or {}
+    local items = {}
+    if #self.locations == 0 then
+        table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Fetch X-Ray Data"),
+            keep_menu_open = true, callback = function() self:updateFromAI() end })
     end
-    local items = {
-        { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function()
+    if #self.locations > 0 then
+        table.insert(items, { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function()
             local ButtonDialog = require("ui/widget/buttondialog")
             local merge_dialog
             merge_dialog = ButtonDialog:new{
@@ -2724,9 +2726,9 @@ function M:showLocations()
                 }}
             }
             UIManager:show(merge_dialog)
-        end, separator = true },
-    }
-    for _, loc in ipairs(self.locations) do 
+        end, separator = true })
+    end
+    for _, loc in ipairs(self.locations) do
         if type(loc) == "table" then
             local captured_loc = loc
             local name = loc.name or "???"
@@ -2743,12 +2745,7 @@ function M:showLocations()
             })
         end
     end
-    
-    if #items == 0 then
-        UIManager:show(InfoMessage:new{ text = self.loc:t("no_location_data"), timeout = 3 })
-        return
-    end
-    
+
     self.loc_menu = self:newMenu("loc_menu", {
         title = self.loc:t("menu_locations"),
         item_table = items,
@@ -3653,11 +3650,12 @@ function M:showHistoricalFigureDetails(fig, opts)
 end
 
 function M:showHistoricalFigures()
-    if not self.historical_figures or #self.historical_figures == 0 then 
-        UIManager:show(InfoMessage:new{ text = self.loc:t("no_historical_data"), timeout = 3 })
-        return 
-    end
+    self.historical_figures = self.historical_figures or {}
     local items = {}
+    if #self.historical_figures == 0 then
+        table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Fetch X-Ray Data"),
+            keep_menu_open = true, callback = function() self:updateFromAI() end })
+    end
     for _, fig in ipairs(self.historical_figures) do
         table.insert(items, {
             text = (fig.name or "???"),

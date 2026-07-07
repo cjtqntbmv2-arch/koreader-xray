@@ -478,6 +478,23 @@ describe("xray_ui", function()
             assert.are.equal(0, #plugin.characters)
         end)
     end)
+
+    describe("empty-state affordance", function()
+        it("showLocations shows a Menu with a fetch item when empty", function()
+            plugin.locations = {}
+            plugin:showLocations()
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("Menu", last.type)
+            assert.truthy(last.args.item_table[1].text:find("menu_update_xray"))
+        end)
+        it("showHistoricalFigures shows a Menu with a fetch item when empty", function()
+            plugin.historical_figures = {}
+            plugin:showHistoricalFigures()
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("Menu", last.type)
+            assert.truthy(last.args.item_table[1].text:find("menu_update_xray"))
+        end)
+    end)
 end)
 
 describe("quick xray menu", function()
