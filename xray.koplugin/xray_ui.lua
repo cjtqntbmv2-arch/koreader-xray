@@ -521,23 +521,9 @@ function M:showLanguageSelection()
     local LANGUAGE_NAMES = {
         en = "English",
         de = "Deutsch",
-        fr = "Français",
-        ru = "Русский",
-        zh_CN = "简体中文",
-        tr = "Türkçe",
-        pt_br = "Português",
-        es = "Español",
-        uk = "Українська",
-        hu = "Magyar",
-        nl = "Nederlands",
-        pl = "Polski",
-        id = "Bahasa Indonesia",
-        ar = "العربية",
-        it = "Italiano",
-        sr = "Српски",
     }
-    
-    local langs = self.loc and self.loc.available_languages or { "en", "de", "fr", "ru", "zh_CN", "tr", "pt_br", "es", "uk", "hu" }
+
+    local langs = self.loc and self.loc.available_languages or { "en", "de" }
     for _, code in ipairs(langs) do
         local name = LANGUAGE_NAMES[code] or code:upper()
         table.insert(items, {
@@ -567,7 +553,7 @@ function M:resolveLanguage(code)
             supported[c] = 1
         end
     else
-        supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1, uk=1, hu=1, nl=1, pl=1, id=1, ar=1, sr=1 }
+        supported = { en=1, de=1 }
     end
     
     if code == "auto" or not code then
@@ -581,8 +567,6 @@ function M:resolveLanguage(code)
         
         if ko_lang then
             local lang = ko_lang:sub(1, 2):lower()
-            if ko_lang:lower():find("zh_cn") or ko_lang:lower():find("zh-cn") then lang = "zh_CN"
-            elseif ko_lang:lower():find("pt_br") or ko_lang:lower():find("pt-br") then lang = "pt_br" end
             if supported[lang] then return lang end
         end
         return "en"
@@ -592,22 +576,17 @@ function M:resolveLanguage(code)
             local book_lang = props.language
             if book_lang then
                 local lang = book_lang:sub(1, 2):lower()
-                if book_lang:lower():find("zh") then lang = "zh_CN"
-                elseif book_lang:lower():find("pt") then lang = "pt_br" end
                 if supported[lang] then return lang end
             end
         end
         return self:resolveLanguage("auto")
     end
-    return code or "en"
+    if code == "en" or code == "de" then return code end
+    return "en"
 end
 
 function M:isRTL()
-    local lang = self.ai_helper and self.ai_helper.current_language
-    if not lang and self.ai_helper and self.ai_helper.settings then
-        lang = self:resolveLanguage(self.ai_helper.settings.language)
-    end
-    return lang == "ar"
+    return false
 end
 
 function M:isXRayUIActive()
@@ -661,26 +640,10 @@ function M:checkBookLanguageMatch()
     if not book_lang or book_lang == "" then return end
     
     local lang = book_lang:sub(1, 2):lower()
-    if book_lang:find("zh") then lang = "zh_CN"
-    elseif book_lang:find("pt") then lang = "pt_br" end
-    
+
     local LANGUAGE_NAMES = {
         en = "English",
         de = "Deutsch",
-        fr = "Français",
-        ru = "Русский",
-        zh_CN = "简体中文",
-        tr = "Türkçe",
-        pt_br = "Português",
-        es = "Español",
-        uk = "Українська",
-        hu = "Magyar",
-        nl = "Nederlands",
-        pl = "Polski",
-        id = "Bahasa Indonesia",
-        ar = "العربية",
-        it = "Italiano",
-        sr = "Српски",
     }
     
     local supported = {}
