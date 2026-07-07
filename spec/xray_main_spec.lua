@@ -70,4 +70,23 @@ describe("onPageUpdate battery short-circuit", function()
         plugin:onPageUpdate(6)
         assert.are.equal(after_first, normalize_calls) -- every later page must be string-work-free
     end)
+
+    it("nests Duplicate Check under Content & Fetch, not Auto X-Ray Settings", function()
+        local plugin = mkPlugin()          -- REQUIRED: no shared `plugin` in this spec
+        local items = plugin:getSubMenuItems()
+        local function find(tbl, key)
+            for _, it in ipairs(tbl) do
+                if it.text == key then return it end
+            end
+        end
+        -- In specs loc:t(key) returns the key string itself, so match on keys.
+        local settings = find(items, "menu_settings")
+        local content = find(settings.sub_item_table, "menu_content_fetch_settings")
+        local auto = find(content.sub_item_table, "menu_auto_update_frequency")
+        -- Auto X-Ray now holds only Frequency
+        assert.are.equal(1, #auto.sub_item_table)
+        assert.are.equal("menu_frequency", auto.sub_item_table[1].text)
+        -- Duplicate Check now sits directly under Content & Fetch
+        assert.is_not_nil(find(content.sub_item_table, "auto_dupe_check_setting_title"))
+    end)
 end)

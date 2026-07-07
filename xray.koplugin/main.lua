@@ -897,13 +897,13 @@ function XRayPlugin:getSubMenuItems()
                                 keep_menu_open = true,
                                 callback = function() self:showAutoUpdateSettings() end,
                             },
-                            {
-                                text = self.loc:t("auto_dupe_check_setting_title") or "Duplicate Check",
-                                help_text = self.loc:t("auto_dupe_check_setting_help"),
-                                keep_menu_open = true,
-                                callback = function() self:showAutoDupeCheckSettings() end,
-                            },
                         }
+                    },
+                    {
+                        text = self.loc:t("auto_dupe_check_setting_title") or "Duplicate Check",
+                        help_text = self.loc:t("auto_dupe_check_setting_help"),
+                        keep_menu_open = true,
+                        callback = function() self:showAutoDupeCheckSettings() end,
                     },
                     {
                         text = self.loc:t("menu_prefetch_offline") or "Prepare book for offline reading",
