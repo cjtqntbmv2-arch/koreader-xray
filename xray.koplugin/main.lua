@@ -1031,26 +1031,31 @@ function XRayPlugin:getSubMenuItems()
         sub_item_table = {
             {
                 text = self.loc:t("menu_clear_cache"),
+                help_text = self.loc:t("menu_clear_cache_help"),
                 keep_menu_open = true,
                 callback = function() self:clearCache() end,
             },
             {
                 text = self.loc:t("menu_clear_logs") or "Clear Logs",
+                help_text = self.loc:t("menu_clear_logs_help"),
                 keep_menu_open = true,
                 callback = function() self:clearLogs() end,
             },
             {
                 text = self.loc:t("menu_view_log") or "View Log",
+                help_text = self.loc:t("menu_view_log_help"),
                 keep_menu_open = true,
                 callback = function() self:viewLog() end,
             },
             {
                 text = self.loc:t("menu_beta_channel") or "Beta Channel Settings",
+                help_text = self.loc:t("menu_beta_channel_help"),
                 keep_menu_open = true,
                 callback = function() self:showBetaChannelSettings() end,
             },
             {
                 text = self.loc:t("updater_check") or "Check for Updates",
+                help_text = self.loc:t("updater_check_help"),
                 keep_menu_open = true,
                 callback = function()
                     local updater = require(plugin_path .. "xray_updater")
@@ -1062,6 +1067,7 @@ function XRayPlugin:getSubMenuItems()
 
     table.insert(items, {
         text = _t(self, "menu_about", "About"),
+        help_text = self.loc:t("menu_about_help"),
         keep_menu_open = true,
         callback = function() self:showAbout() end,
     })

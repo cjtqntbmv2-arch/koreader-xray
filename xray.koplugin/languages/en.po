@@ -1004,3 +1004,21 @@ msgstr "Enter API keys per provider and set endpoint/model for the two custom sl
 msgid "menu_view_config_help"
 msgstr "Read-only summary of active models and which provider keys are set."
 
+msgid "menu_clear_cache_help"
+msgstr "Delete X-Ray data and offline snapshots for THIS book only; it re-fetches next time."
+
+msgid "menu_clear_logs_help"
+msgstr "Erase the plugin's diagnostic log file."
+
+msgid "menu_view_log_help"
+msgstr "Open the last 100 lines of the plugin log for troubleshooting."
+
+msgid "menu_beta_channel_help"
+msgstr "Choose whether plugin updates include pre-release (beta) builds."
+
+msgid "updater_check_help"
+msgstr "Check GitHub for a newer plugin version and install it over the air."
+
+msgid "menu_about_help"
+msgstr "Show plugin version and description; also checks for updates."
+

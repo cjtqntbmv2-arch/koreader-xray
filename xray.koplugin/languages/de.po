@@ -1004,3 +1004,21 @@ msgstr "API-Schlüssel je Anbieter eingeben und Endpunkt/Modell für Custom-Slot
 msgid "menu_view_config_help"
 msgstr "Schreibgeschützte Übersicht aktiver Modelle und gesetzter Schlüssel."
 
+msgid "menu_clear_cache_help"
+msgstr "X-Ray-Daten und Offline-Schnappschüsse nur DIESES Buchs löschen; wird neu abgerufen."
+
+msgid "menu_clear_logs_help"
+msgstr "Diagnose-Protokolldatei des Plugins löschen."
+
+msgid "menu_view_log_help"
+msgstr "Die letzten 100 Zeilen des Protokolls zur Fehlersuche öffnen."
+
+msgid "menu_beta_channel_help"
+msgstr "Wählen, ob Updates Vorabversionen (Beta) enthalten."
+
+msgid "updater_check_help"
+msgstr "GitHub auf eine neuere Plugin-Version prüfen und installieren."
+
+msgid "menu_about_help"
+msgstr "Plugin-Version und Beschreibung anzeigen; prüft auch auf Updates."
+
