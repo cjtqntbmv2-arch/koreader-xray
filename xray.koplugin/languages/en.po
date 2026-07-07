@@ -614,6 +614,9 @@ msgstr "Merging..."
 msgid "model_free"
 msgstr "free"
 
+msgid "model_none"
+msgstr "None (disable fallback)"
+
 msgid "model_paid"
 msgstr "paid"
 

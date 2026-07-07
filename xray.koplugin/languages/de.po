@@ -614,6 +614,9 @@ msgstr "Führe zusammen..."
 msgid "model_free"
 msgstr "kostenlos"
 
+msgid "model_none"
+msgstr "Keins (Ausweich deaktivieren)"
+
 msgid "model_paid"
 msgstr "kostenpflichtig"
 

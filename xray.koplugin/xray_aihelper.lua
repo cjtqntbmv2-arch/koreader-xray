@@ -202,15 +202,23 @@ function AIHelper:makeRequest(url, headers, request_body, timeout, maxtime)
     end
 end
 
+-- Build the ordered list of models to try: primary, then secondary unless disabled.
+function AIHelper:buildModelsToTry()
+    local primary = self.settings.primary_ai or DEFAULT_AI.primary
+    if self.settings.secondary_ai_enabled == false then
+        return { primary }
+    end
+    local secondary = self.settings.secondary_ai or DEFAULT_AI.secondary
+    return { primary, secondary }
+end
+
 -- Build all possible HTTP request parameters (primary and fallback) for a comprehensive fetch.
 -- Returns: { {url, headers, body, provider, model}, ... } or nil, error_code, error_msg
 function AIHelper:buildComprehensiveRequest(title, author, context, prompt_override)
     local prompt = prompt_override or self:createPrompt(title, author, context, "comprehensive_xray")
-    local primary = self.settings.primary_ai or DEFAULT_AI.primary
-    local secondary = self.settings.secondary_ai or DEFAULT_AI.secondary
 
     local requests = {}
-    for _, ai in ipairs({ primary, secondary }) do
+    for _, ai in ipairs(self:buildModelsToTry()) do
         local config = self.providers[ai.provider]
         if config and config.api_key and config.api_key ~= "" then
             local url, headers, body
@@ -1514,10 +1522,7 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
 end
 
 function AIHelper:executeUnifiedRequest(prompt)
-    local primary = self.settings.primary_ai or DEFAULT_AI.primary
-    local secondary = self.settings.secondary_ai or DEFAULT_AI.secondary
-    
-    local models_to_try = { primary, secondary }
+    local models_to_try = self:buildModelsToTry()
     local last_err = "No models configured."
     
     for _, ai in ipairs(models_to_try) do
@@ -2045,6 +2050,7 @@ function AIHelper:setUnifiedModel(type, provider, model)
         self.settings.primary_ai = { provider = provider, model = model }
     elseif type == "secondary" then
         self.settings.secondary_ai = { provider = provider, model = model }
+        self.settings.secondary_ai_enabled = true
     end
     self:saveSettings()
     return true

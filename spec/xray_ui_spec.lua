@@ -430,6 +430,23 @@ describe("xray_ui", function()
             assert.is_true(plugin.book_data.series_context_dismissed)
         end)
     end)
+
+    describe("getAIModelSelectionMenu None option", function()
+        it("offers a None entry for secondary that disables the fallback", function()
+            plugin.ai_helper.saveSettings = function(s, new)   -- mock lacks it
+                for k, v in pairs(new or {}) do s.settings[k] = v end
+            end
+            local menu = plugin:getAIModelSelectionMenu("secondary")
+            local none = menu[1]
+            assert.are.equal("model_none", none.text)
+            none.callback()
+            assert.are.equal(false, plugin.ai_helper.settings.secondary_ai_enabled)
+        end)
+        it("has no None entry for primary", function()
+            local menu = plugin:getAIModelSelectionMenu("primary")
+            assert.are_not.equal("model_none", menu[1].text)
+        end)
+    end)
 end)
 
 describe("quick xray menu", function()

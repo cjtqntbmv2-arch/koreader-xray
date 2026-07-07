@@ -372,4 +372,25 @@ describe("createPrompt description-length placeholders", function()
             assert.is_true(result:find("n=5") ~= nil)
         end)
     end)
+
+    describe("buildModelsToTry secondary toggle", function()
+        local AIHelper = require("xray_aihelper")
+        it("omits the secondary model when secondary_ai_enabled is false", function()
+            AIHelper.settings = {
+                primary_ai   = { provider = "gemini", model = "g-pri" },
+                secondary_ai = { provider = "gemini", model = "g-sec" },
+                secondary_ai_enabled = false,
+            }
+            local list = AIHelper:buildModelsToTry()
+            assert.are.equal(1, #list)
+            assert.are.equal("g-pri", list[1].model)
+        end)
+        it("includes the secondary model by default", function()
+            AIHelper.settings = {
+                primary_ai   = { provider = "gemini", model = "g-pri" },
+                secondary_ai = { provider = "gemini", model = "g-sec" },
+            }
+            assert.are.equal(2, #AIHelper:buildModelsToTry())
+        end)
+    end)
 end)

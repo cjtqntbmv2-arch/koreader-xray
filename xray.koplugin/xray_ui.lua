@@ -4006,7 +4006,22 @@ function M:getAIModelSelectionMenu(setting_type)
     local custom2_model = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.custom2_model or nil
     
     local menu_items = {}
-    
+
+    if setting_type == "secondary" then
+        table.insert(menu_items, {
+            text = self.loc:t("model_none"),
+            keep_menu_open = true,
+            checked_func = function()
+                return (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.secondary_ai_enabled == false or false
+            end,
+            callback = function()
+                self.ai_helper:saveSettings({ secondary_ai_enabled = false })
+                UIManager:setDirty(nil, "ui")
+            end,
+            separator = true,
+        })
+    end
+
     for _, p in ipairs(providers) do
         local provider_id = p.id
         local provider_name = p.display_name
