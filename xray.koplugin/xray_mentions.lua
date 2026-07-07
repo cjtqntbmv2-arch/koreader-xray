@@ -490,7 +490,7 @@ function M:showReturnBanner(return_page, entity, mentions, current_page)
             end,
         },
         {
-            text = (self.loc:t("back_to_reading") or "Back"),
+            text = (self.loc:t("back_to_reading") or "Back to Reading"),
             callback = function() plugin:_doReturnJump(return_page) end,
         },
         {

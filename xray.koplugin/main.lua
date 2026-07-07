@@ -953,7 +953,7 @@ function XRayPlugin:getSubMenuItems()
                         }
                     },
                     {
-                        text = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
+                        text = self.loc:t("spoiler_preference_title") or "Spoiler Preference",
                         help_text = self.loc:t("spoiler_preference_help"),
                         keep_menu_open = true,
                         callback = function() self:showSpoilerSettings() end,
@@ -1031,7 +1031,7 @@ function XRayPlugin:getSubMenuItems()
                 callback = function() self:clearLogs() end,
             },
             {
-                text = self.loc:t("menu_view_log") or "View Log",
+                text = self.loc:t("menu_view_log") or "X-Ray Log",
                 help_text = self.loc:t("menu_view_log_help"),
                 keep_menu_open = true,
                 callback = function() self:viewLog() end,

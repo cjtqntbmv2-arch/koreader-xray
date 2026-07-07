@@ -306,7 +306,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
             or  (self.loc:t("fetching_ai",  self.ai_provider or "AI") or "Fetching X-Ray...")
         wait_msg = ButtonDialog:new{
             title = fetch_text,
-            text  = title .. "\n\n" .. (self.loc:t("fetching_wait") or "This may take a moment.\nTap Cancel to stop."),
+            text  = title .. "\n\n" .. (self.loc:t("fetching_wait") or "⏳ Please wait...\nThis process may take 10-50 seconds."),
             buttons = {{{
                 text = self.loc:t("cancel") or "Cancel",
                 callback = function()
@@ -860,10 +860,10 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
     if not is_silent then
         local fetch_complete = self.loc:t("ai_fetch_complete_msg") or "AI Fetch Complete!"
         local cache_success = self.loc:t("cache_save_success") or "✓ Cache updated."
-        local cache_fail = self.loc:t("cache_save_failed") or "✗ Cache failed."
-        local label_chars = self.loc:t("entity_label_characters") or "Characters"
-        local label_locs = self.loc:t("entity_label_locations") or "Locations"
-        local label_events = self.loc:t("menu_timeline") or "Events"
+        local cache_fail = self.loc:t("cache_save_failed") or "Failed to save cache"
+        local label_chars = self.loc:t("entity_label_characters") or "characters"
+        local label_locs = self.loc:t("entity_label_locations") or "locations"
+        local label_events = self.loc:t("menu_timeline") or "Timeline"
         local summary = string.format("%s\n\n%s: %d\n%s: %d\n%s: %d\n\n%s", 
             fetch_complete,
             label_chars, #self.characters,
@@ -1016,7 +1016,7 @@ function M:fetchMoreCharacters()
         local is_cancelled = false
         local ButtonDialog = require("ui/widget/buttondialog")
         wait_msg = ButtonDialog:new{
-            title = (self.loc:t("fetching_ai") or "Fetching AI...") .. "\n\n" .. (self.loc:t("extracting_more_characters") or "Extracting additional characters...") .. "\n\n" .. title,
+            title = (self.loc:t("fetching_ai") or "Analyzing book to generate X-Ray data...") .. "\n\n" .. (self.loc:t("extracting_more_characters") or "Extracting additional characters...") .. "\n\n" .. title,
             buttons = {{{
                 text = self.loc:t("cancel") or "Cancel",
                 callback = function()
@@ -1186,7 +1186,7 @@ function M:fetchMoreTerms()
         local ButtonDialog = require("ui/widget/buttondialog")
 
         local wait_msg = ButtonDialog:new{
-            title = (self.loc:t("fetching_ai") or "Fetching AI...") .. "\n\n" .. (self.loc:t("extracting_more_terms") or "Extracting additional terms...") .. "\n\n" .. title,
+            title = (self.loc:t("fetching_ai") or "Analyzing book to generate X-Ray data...") .. "\n\n" .. (self.loc:t("extracting_more_terms") or "Extracting additional terms...") .. "\n\n" .. title,
             buttons = {{{
                 text = self.loc:t("cancel") or "Cancel",
                 callback = function()
@@ -1684,7 +1684,7 @@ function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
 
             local progress_text = self.loc:t("fetching_series_context", current_idx, total_count)
             wait_msg = ButtonDialog:new{
-                title = progress_text .. "\n\n" .. book_title .. "\n\n" .. (self.loc:t("fetching_wait") or "This may take a moment.\nTap Cancel to stop."),
+                title = progress_text .. "\n\n" .. book_title .. "\n\n" .. (self.loc:t("fetching_wait") or "⏳ Please wait...\nThis process may take 10-50 seconds."),
                 buttons = {{{
                     text = self.loc:t("cancel") or "Cancel",
                     callback = function()

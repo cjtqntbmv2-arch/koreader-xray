@@ -1194,7 +1194,7 @@ function ChapterAnalyzer:scanMentionsAsync(ui, entity, toc, min_page, max_page, 
         for idx = 1, num_sections do
             local p = (idx - 1) * step + 1
             table.insert(scan_toc, {
-                title = (ui.loc and ui.loc:t("this_page") or "Section") .. " " .. idx,
+                title = (ui.loc and ui.loc:t("this_page") or "This Page") .. " " .. idx,
                 page = p,
                 xpointer = "page:" .. p
             })

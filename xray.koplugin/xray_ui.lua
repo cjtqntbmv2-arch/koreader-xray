@@ -690,7 +690,7 @@ function M:checkBookLanguageMatch()
                             self:applyLanguageLogic()
                             UIManager:close(mismatch_dialog)
                             UIManager:show(InfoMessage:new{
-                                text = self.loc:t("language_changed_reopen") or "Language changed.",
+                                text = self.loc:t("language_changed_reopen") or "Language changed. Reopen the menu to see the changes.",
                                 timeout = 3
                             })
                         end
@@ -800,7 +800,7 @@ function M:showCharacters()
             local ButtonDialog = require("ui/widget/buttondialog")
             local merge_dialog
             merge_dialog = ButtonDialog:new{
-                title = self.loc:t("merge_duplicates") or "Merge Duplicates",
+                title = self.loc:t("merge_duplicates") or "Merge Duplicates...",
                 buttons = {{
                     {
                         text = "✦ " .. (self.loc:t("ai_scan") or "AI Scan"),
@@ -869,7 +869,7 @@ function M:showCharacters()
                 UIManager:show(ConfirmBox:new{
                     text = string.format(
                         self.loc:t("pending_duplicates_prompt") or
-                        "AI found %d possible duplicate character(s) from the last fetch. Review now?",
+                        "AI found %d possible duplicate(s) from the last fetch. Review now?",
                         #pairs
                     ),
                     ok_text     = self.loc:t("review") or "Review",
@@ -1222,11 +1222,11 @@ function M:showCharacterDetails(character, opts)
                         full_text = full_text .. table.concat(attrs, " | ") .. "\n"
                     end
                     if #meaningful_aliases > 0 then
-                        full_text = full_text .. (self.loc:t("label_aliases") or "Aliases") .. ": " .. table.concat(meaningful_aliases, ", ") .. "\n"
+                        full_text = full_text .. (self.loc:t("label_aliases") or "ALIASES") .. ": " .. table.concat(meaningful_aliases, ", ") .. "\n"
                     end
                     full_text = full_text .. "\n" .. resolved_desc
                     if character.ai_reasoning then
-                        full_text = full_text .. "\n\n[" .. (self.loc:t("label_reasoning") or "AI Reasoning") .. "]\n" .. character.ai_reasoning
+                        full_text = full_text .. "\n\n[" .. (self.loc:t("label_reasoning") or "AI REASONING") .. "]\n" .. character.ai_reasoning
                     end
                     local viewer = TextViewer:new{
                         title = character.name,
@@ -1617,7 +1617,7 @@ function M:showTermDetails(term, opts)
                         full_text = full_text .. table.concat(attrs, " | ") .. "\n"
                     end
                     if #meaningful_aliases > 0 then
-                        full_text = full_text .. (self.loc:t("label_aliases") or "Aliases") .. ": " .. table.concat(meaningful_aliases, ", ") .. "\n"
+                        full_text = full_text .. (self.loc:t("label_aliases") or "ALIASES") .. ": " .. table.concat(meaningful_aliases, ", ") .. "\n"
                     end
                     full_text = full_text .. "\n" .. resolved_definition
                     local viewer = TextViewer:new{
@@ -1750,7 +1750,7 @@ function M:showBookTypeSettings()
         end
 
         info_dialog = ButtonDialog:new{
-            title = (self.loc:t("menu_book_mode") or "Book Type") .. "\n\n" .. (self.loc:t("book_mode_desc") or "Select the type for this book:"),
+            title = (self.loc:t("menu_book_mode") or "Book Type") .. "\n\n" .. (self.loc:t("book_mode_desc") or "Select the mode for this book."),
             buttons = {
                 {
                     { 
@@ -1771,7 +1771,7 @@ function M:showBookTypeSettings()
                         text = self.loc:t("menu_about") or "About", 
                         callback = function()
                             UIManager:show(InfoMessage:new{
-                                text = self.loc:t("book_type_about") or "The Book Type determines which AI extraction strategy is used.\n\n- Fiction: Focuses on characters, timeline, and world-building terms (factions, spells, lore, etc.).\n- Non-Fiction: Focuses on technical terms, concepts, and historical figures.\n\n'Auto-Detect' will let the AI decide after the first fetch.",
+                                text = self.loc:t("book_type_about") or "The Book Type determines which AI extraction strategy is used and which features are available.\n\n- Fiction: Focuses on narrative, characters, and plot timeline.\n- Non-Fiction: Focuses on terms, concepts, and historical figures.\n\n'Auto-Detect' will let the AI decide after the first fetch.",
                                 timeout = 30
                             })
                         end
@@ -1821,7 +1821,7 @@ function M:showMentionsSettings()
                     text = self.loc:t("menu_about") or "About",
                     callback = function()
                         UIManager:show(InfoMessage:new{
-                            text = self.loc:t("mentions_setting_desc") or "Mentions scanning allows you to find every occurrence of a character or location in the book. This happens automatically in the background to ensure the reader stays responsive.\n\nDisabling this will stop all background scanning and hide the 'Find Mentions' button.",
+                            text = self.loc:t("mentions_setting_desc") or "Mentions scanning allows you to find every occurrence of a character or location in the book. This happens automatically in the background to ensure the reader stays responsive.\n\nDisabling this will hide the 'Find Mentions' button.",
                             timeout = 30
                         })
                     end
@@ -1897,7 +1897,7 @@ function M:showAutoDupeCheckSettings()
         }
         
         info_dialog = ButtonDialog:new{
-            title = self.loc:t("auto_dupe_check_setting_title") or "AI Duplicate Check",
+            title = self.loc:t("auto_dupe_check_setting_title") or "Duplicate Check",
             text = self.loc:t("auto_dupe_check_preference_desc") or "Select your preference for automatic AI duplicate detection:",
             buttons = buttons,
         }
@@ -2089,7 +2089,7 @@ function M:walkDuplicatePairs(list, list_name, pairs_found)
             saveAndRefresh()
             local msg = merge_count > 0
                 and self.loc:t("ai_merged_n", merge_count)
-                or  (self.loc:t("no_merges_performed") or "No merges performed.")
+                or  (self.loc:t("no_merges_performed") or "No pairs were merged.")
             UIManager:show(InfoMessage:new{ text = msg, timeout = 3 })
             self:log("XRayPlugin: Duplicate walk complete. " .. tostring(merge_count) .. " merge(s) performed.")
             if list_name == "characters" then self:showCharacters()
@@ -2489,7 +2489,7 @@ function M:showAutoUpdateSettings()
                         text = self.loc:t("menu_about") or "About",
                         callback = function()
                             UIManager:show(InfoMessage:new{
-                                text = self.loc:t("auto_update_freq_about") or "Auto-update checks for new chapter data in the background as you read.\n\nLIMITS & PERFORMANCE\nFrequent background requests can drain BATTERY LIFE and may hit AI PROVIDER RATE LIMITS.\n\nMODES\n• Ultra: Checks every N pages you configure (mid-chapter)\n• Aggressive: Checks every time you enter a new chapter\n• Balanced: Checks at most every 5 minutes (recommended)\n• Economical: Checks at most every 15 minutes\n• Sparse: Checks at most every 30 minutes\n• Disabled: No background requests\n\nNote: skipped chapters will be included in the next update.",
+                                text = self.loc:t("auto_update_freq_about") or "Auto-update checks for new chapter data in the background as you read.\n\nLIMITS & PERFORMANCE\nFrequent background requests can drain BATTERY LIFE and may hit AI PROVIDER RATE LIMITS (especially on Pro models).\n\nMODES\n• Ultra: Checks every N pages you configure (mid-chapter)\n• Aggressive: Checks every time you enter a new chapter\n• Balanced: Checks at most every 5 minutes (recommended)\n• Economical: Checks at most every 15 minutes\n• Sparse: Checks at most every 30 minutes\n• Disabled: No background requests\n\nNote: If a chapter is skipped due to frequency limits, X-Ray will automatically include it in the next background fetch.",
                                 timeout = 120
                             })
                         end
@@ -2518,7 +2518,7 @@ function M:showSpoilerSettings()
         local current_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
         
         info_dialog = ButtonDialog:new{
-            title = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
+            title = self.loc:t("spoiler_preference_title") or "Spoiler Preference",
             text = self.loc:t("spoiler_preference_desc") or "Spoiler-free shows X-Ray data only up to your current reading position. Show everything displays all fetched data immediately - for non-fiction and re-reads.",
             buttons = {
                 {
@@ -2688,7 +2688,7 @@ function M:showAuthorInfo()
     if not self.author_info or not self.author_info.description or self.author_info.description == "" or self.author_info.description == (self.loc:t("msg_no_bio") or "No biography available.") then
         local ButtonDialog = require("ui/widget/buttondialog")
         local ask_dialog
-        ask_dialog = ButtonDialog:new{ title = (self.loc:t("menu_fetch_author") or "Fetch Author Info") .. "\n\n" .. (self.loc:t("no_author_data_fetch") or "No author biography available. Fetch now?"), buttons = {{{ text = self.loc:t("cancel"), callback = function() UIManager:close(ask_dialog) end }, { text = self.loc:t("fetch_button") or "Fetch", is_enter_default = true, callback = function() UIManager:close(ask_dialog); UIManager:nextTick(function() self:fetchAuthorInfo() end) end }}} }
+        ask_dialog = ButtonDialog:new{ title = (self.loc:t("menu_fetch_author") or "Fetch Author Info (AI)") .. "\n\n" .. (self.loc:t("no_author_data_fetch") or "No author info available.\n\nWould you like to fetch it from AI?"), buttons = {{{ text = self.loc:t("cancel"), callback = function() UIManager:close(ask_dialog) end }, { text = self.loc:t("fetch_button") or "Fetch", is_enter_default = true, callback = function() UIManager:close(ask_dialog); UIManager:nextTick(function() self:fetchAuthorInfo() end) end }}} }
         UIManager:show(ask_dialog); return
     end
     local lines = { "NAME: " .. (self.author_info.name or "Unknown"), "BORN: " .. (self.author_info.birthDate or "---"), "DIED: " .. (self.author_info.deathDate or "---"), "", "BIOGRAPHY:", (self.author_info.description or "No biography available.") }
@@ -2699,7 +2699,7 @@ function M:showLocations()
     self.locations = self.locations or {}
     local items = {}
     if #self.locations == 0 then
-        table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Fetch X-Ray Data"),
+        table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Update X-Ray Data"),
             keep_menu_open = true, callback = function() self:updateFromAI() end })
     end
     if #self.locations > 0 then
@@ -2707,7 +2707,7 @@ function M:showLocations()
             local ButtonDialog = require("ui/widget/buttondialog")
             local merge_dialog
             merge_dialog = ButtonDialog:new{
-                title = self.loc:t("merge_duplicates") or "Merge Duplicates",
+                title = self.loc:t("merge_duplicates") or "Merge Duplicates...",
                 buttons = {{
                     {
                         text = "✦ " .. (self.loc:t("ai_scan") or "AI Scan"),
@@ -2769,7 +2769,7 @@ function M:showLocations()
                 UIManager:show(ConfirmBox:new{
                     text = string.format(
                         self.loc:t("pending_duplicates_prompt") or
-                        "AI found %d possible duplicate location(s) from the last fetch. Review now?",
+                        "AI found %d possible duplicate(s) from the last fetch. Review now?",
                         #pairs
                     ),
                     ok_text     = self.loc:t("review") or "Review",
@@ -3165,7 +3165,7 @@ function M:viewLog(page_num)
 
     if not snapshot or snapshot == "" then
         UIManager:show(InfoMessage:new{
-            text = self.loc:t("log_empty") or "Log is empty or currently unavailable.",
+            text = self.loc:t("log_empty") or "Log is empty.",
             timeout = 3,
         })
         return
@@ -3653,7 +3653,7 @@ function M:showHistoricalFigures()
     self.historical_figures = self.historical_figures or {}
     local items = {}
     if #self.historical_figures == 0 then
-        table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Fetch X-Ray Data"),
+        table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Update X-Ray Data"),
             keep_menu_open = true, callback = function() self:updateFromAI() end })
     end
     for _, fig in ipairs(self.historical_figures) do
@@ -3692,7 +3692,7 @@ function M:showQuickXRayMenu()
         { text = self.loc:t("menu_locations") or "Locations", callback = function() self:showLocations() end },
         { text = self.loc:t("menu_terms") or "Glossary", callback = function() self:showTerms() end },
         { text = self.loc:t("menu_historical_figures") or "Historical Figures", callback = function() self:showHistoricalFigures() end },
-        { text = self.loc:t("menu_update_xray") or "Update X-Ray Data (Merge)", callback = function() self:updateFromAI() end, separator = true },
+        { text = self.loc:t("menu_update_xray") or "Update X-Ray Data", callback = function() self:updateFromAI() end, separator = true },
         { text = self.loc:t("quick_menu_full") or "All options...", callback = function() self:showFullXRayMenu() end },
     }
     self.xray_menu = self:newMenu("xray_menu", {
@@ -4222,7 +4222,7 @@ function M:showReasoningEffortSettings()
         local current = self.ai_helper.settings and self.ai_helper.settings.reasoning_effort or "none"
         
         info_dialog = ButtonDialog:new{
-            title = self.loc:t("menu_reasoning_effort") or "AI Model Reasoning Effort",
+            title = self.loc:t("menu_reasoning_effort") or "AI Reasoning Effort",
             text = "Controls internal 'thinking' time for supported reasoning models.",
             buttons = {
                 {
