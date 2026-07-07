@@ -516,7 +516,7 @@ msgid "menu_fetch_series_context"
 msgstr "Fetch / Refresh Series Context"
 
 msgid "menu_frequency"
-msgstr "Frequency"
+msgstr "Auto-fetch Frequency"
 
 msgid "menu_historical_figures"
 msgstr "Historical Figures"
@@ -549,7 +549,7 @@ msgid "menu_reasoning_effort"
 msgstr "AI Reasoning Effort"
 
 msgid "menu_secondary_ai_model"
-msgstr "Secondary AI Model"
+msgstr "Fallback AI Model"
 
 msgid "menu_series_context"
 msgstr "Series Context"
@@ -564,16 +564,16 @@ msgid "menu_timeline"
 msgstr "Timeline"
 
 msgid "menu_ui_popup_intext"
-msgstr "Use Footnote Style for In-text Lookups"
+msgstr "Footnote popup for tap-a-word lookups"
 
 msgid "menu_ui_popup_menu"
-msgstr "Use Footnote Style for Menu Lookups"
+msgstr "Footnote popup for dictionary-button lookups"
 
 msgid "menu_update_xray"
 msgstr "Update X-Ray Data"
 
 msgid "menu_view_config"
-msgstr "View All Config Values"
+msgstr "View Configuration (read-only)"
 
 msgid "menu_view_log"
 msgstr "X-Ray Log"

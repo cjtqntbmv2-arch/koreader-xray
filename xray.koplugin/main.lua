@@ -826,7 +826,7 @@ function XRayPlugin:getSubMenuItems()
     })
 
     table.insert(items, {
-        text = self.loc:t("menu_update_xray") or "Update X-Ray Data (Merge)",
+        text = self.loc:t("menu_update_xray") or "Update X-Ray Data",
         keep_menu_open = true,
         callback = function() self:updateFromAI() end,
         separator = true,
@@ -924,7 +924,7 @@ function XRayPlugin:getSubMenuItems()
                         callback = function() self:showBookTypeSettings() end,
                     },
                     {
-                        text = self.loc:t("menu_desc_length_settings") or "Description Length Settings",
+                        text = self.loc:t("menu_desc_length_settings") or "Description Length",
                         keep_menu_open = true,
                         callback = function() self:showDescriptionLengthSettings() end,
                     },
@@ -1034,7 +1034,7 @@ function XRayPlugin:getSubMenuItems()
     })
 
     table.insert(items, {
-        text = _t(self, "menu_about", "About X-Ray"),
+        text = _t(self, "menu_about", "About"),
         keep_menu_open = true,
         callback = function() self:showAbout() end,
     })

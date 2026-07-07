@@ -3238,7 +3238,7 @@ function M:toggleXRayMode()
     local function showSettings()
         if info_dialog then UIManager:close(info_dialog) end
         info_dialog = ButtonDialog:new{
-            title = self.loc:t("menu_xray_mode") or "X-Ray Mode Settings",
+            title = self.loc:t("menu_xray_mode") or "In-text X-Ray Lookups",
             text = self.loc:t("xray_mode_desc"),
             buttons = {
                 {
