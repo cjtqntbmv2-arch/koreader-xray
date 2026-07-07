@@ -446,6 +446,21 @@ describe("xray_ui", function()
             local menu = plugin:getAIModelSelectionMenu("primary")
             assert.are_not.equal("model_none", menu[1].text)
         end)
+        it("unchecks the provider row once None disables the fallback", function()
+            plugin.ai_helper.saveSettings = function(s, new)   -- mock lacks it
+                for k, v in pairs(new or {}) do s.settings[k] = v end
+            end
+            plugin.ai_helper.settings.secondary_ai = { provider = "gemini", model = "gemini-2.5-flash" }
+            local menu = plugin:getAIModelSelectionMenu("secondary")
+            local gemini_row
+            for _, item in ipairs(menu) do
+                if item.text == "Gemini" then gemini_row = item end
+            end
+            assert.is_not_nil(gemini_row)
+            assert.truthy(gemini_row.checked_func())
+            menu[1].callback()
+            assert.falsy(gemini_row.checked_func())
+        end)
     end)
 end)
 

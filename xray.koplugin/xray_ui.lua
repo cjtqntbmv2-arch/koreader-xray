@@ -4031,6 +4031,7 @@ function M:getAIModelSelectionMenu(setting_type)
             keep_menu_open = true,
             checked_func = function()
                 if not self.ai_helper or not self.ai_helper.settings then return false end
+                if setting_type == "secondary" and self.ai_helper.settings.secondary_ai_enabled == false then return false end
                 local current = setting_type == "primary" and self.ai_helper.settings.primary_ai or self.ai_helper.settings.secondary_ai
                 if type(current) ~= "table" then return false end
                 return current.provider == provider_id
@@ -4044,6 +4045,7 @@ function M:getAIModelSelectionMenu(setting_type)
                         text = model_id .. " [" .. (model_cost == "free" and self.loc:t("model_free") or self.loc:t("model_paid")) .. "]",
                         checked_func = function()
                             if not self.ai_helper or not self.ai_helper.settings then return false end
+                            if setting_type == "secondary" and self.ai_helper.settings.secondary_ai_enabled == false then return false end
                             local current = setting_type == "primary" and self.ai_helper.settings.primary_ai or self.ai_helper.settings.secondary_ai
                             if type(current) ~= "table" then return false end
                             return current.provider == provider_id and current.model == model_id
@@ -4063,6 +4065,7 @@ function M:getAIModelSelectionMenu(setting_type)
         text = "Custom API 1: " .. (custom1_model or "(configure in API Keys)"),
         checked_func = function()
             if not self.ai_helper or not self.ai_helper.settings then return false end
+            if setting_type == "secondary" and self.ai_helper.settings.secondary_ai_enabled == false then return false end
             local current = setting_type == "primary" and self.ai_helper.settings.primary_ai or self.ai_helper.settings.secondary_ai
             if type(current) ~= "table" then return false end
             return current.provider == "custom1" and current.model == (custom1_model or "custom1")
@@ -4076,6 +4079,7 @@ function M:getAIModelSelectionMenu(setting_type)
         text = "Custom API 2: " .. (custom2_model or "(configure in API Keys)"),
         checked_func = function()
             if not self.ai_helper or not self.ai_helper.settings then return false end
+            if setting_type == "secondary" and self.ai_helper.settings.secondary_ai_enabled == false then return false end
             local current = setting_type == "primary" and self.ai_helper.settings.primary_ai or self.ai_helper.settings.secondary_ai
             if type(current) ~= "table" then return false end
             return current.provider == "custom2" and current.model == (custom2_model or "custom2")
