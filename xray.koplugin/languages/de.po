@@ -137,6 +137,9 @@ msgstr "Abbrechen"
 msgid "character_not_found"
 msgstr "Kein Charakter gefunden, der auf '%s' passt"
 
+msgid "clear_cache_confirm"
+msgstr "Alle X-Ray-Daten und Offline-Schnappschüsse für DIESES Buch löschen? Sie werden neu abgerufen."
+
 msgid "close"
 msgstr "Schließen"
 

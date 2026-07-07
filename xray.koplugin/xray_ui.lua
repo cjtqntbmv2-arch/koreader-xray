@@ -2807,6 +2807,17 @@ function M:showAbout()
 end
 
 function M:clearCache()
+    local confirm
+    confirm = ConfirmBox:new{
+        text = self.loc:t("clear_cache_confirm"),
+        ok_text = self.loc:t("menu_clear_cache") or "Clear Cache",
+        cancel_text = self.loc:t("cancel") or "Cancel",
+        ok_callback = function() self:doClearCache() end,
+    }
+    UIManager:show(confirm)
+end
+
+function M:doClearCache()
     if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
     self.cache_manager:clearCache(self.ui.document.file)
     self.characters = {}; self.locations = {}; self.timeline = {}; self.historical_figures = {}; self.author_info = nil

@@ -462,6 +462,22 @@ describe("xray_ui", function()
             assert.falsy(gemini_row.checked_func())
         end)
     end)
+
+    describe("clearCache confirmation", function()
+        it("shows a ConfirmBox and does not wipe until confirmed", function()
+            plugin.characters = { { name = "Alice" } }
+            plugin.ui = { document = { file = "/b.epub" } }
+            plugin.cache_manager = { clearCache = function() end }
+            plugin:clearCache()
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("ConfirmBox", last.type)
+            -- data still intact before confirmation
+            assert.are.equal(1, #plugin.characters)
+            -- confirm
+            last.args.ok_callback()
+            assert.are.equal(0, #plugin.characters)
+        end)
+    end)
 end)
 
 describe("quick xray menu", function()

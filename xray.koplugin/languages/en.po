@@ -137,6 +137,9 @@ msgstr "Cancel"
 msgid "character_not_found"
 msgstr "No character found matching '%s'"
 
+msgid "clear_cache_confirm"
+msgstr "Delete all X-Ray data and offline snapshots for THIS book? It will be re-fetched next time."
+
 msgid "close"
 msgstr "Close"
 
