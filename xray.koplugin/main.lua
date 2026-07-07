@@ -777,17 +777,6 @@ function XRayPlugin:autoLoadCache()
     end
 end
 
-function XRayPlugin:getMenuCounts()
-    return {
-        characters = self.characters and #self.characters or 0,
-        locations = self.locations and #self.locations or 0,
-        timeline = self.timeline and #self.timeline or 0,
-        historical_figures = self.historical_figures and #self.historical_figures or 0,
-        terms = self.terms and #self.terms or 0,
-    }
-end
-
-
 function XRayPlugin:getSubMenuItems()
     local items = {
         {
