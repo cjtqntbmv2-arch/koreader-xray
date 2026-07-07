@@ -44,6 +44,9 @@ msgstr "Select your preference for automatic AI duplicate detection:"
 msgid "auto_dupe_check_setting_desc"
 msgstr "When enabled, X-Ray automatically asks the AI to check for duplicate characters and locations after every data fetch. If duplicates are detected, you will be prompted to review and merge them.\n\nDisabling this will stop all background duplicate scanning. You can still merge duplicates manually via the Characters or Locations menu.\n\nNote: each check uses one AI API call. Users on free-tier or quota-limited plans may prefer to disable this."
 
+msgid "auto_dupe_check_setting_help"
+msgstr "Ask the AI to detect duplicates after every fetch (uses one extra API call)."
+
 msgid "auto_dupe_check_setting_title"
 msgstr "Duplicate Check"
 
@@ -449,6 +452,9 @@ msgstr "Scanning... %1 of %2 chapters"
 msgid "mentions_setting_desc"
 msgstr "Mentions scanning allows you to find every occurrence of a character or location in the book. This happens automatically in the background to ensure the reader stays responsive.\n\nDisabling this will hide the 'Find Mentions' button."
 
+msgid "mentions_setting_help"
+msgstr "Configure scanning for where a character or term is mentioned in the book."
+
 msgid "mentions_setting_title"
 msgstr "Mentions Settings"
 
@@ -458,14 +464,23 @@ msgstr "Mentions: %s"
 msgid "menu_about"
 msgstr "About"
 
+msgid "menu_about_help"
+msgstr "Show plugin version and description; also checks for updates."
+
 msgid "menu_ai_settings"
 msgstr "AI Settings"
 
 msgid "menu_api_keys"
 msgstr "API Keys & Providers"
 
+msgid "menu_api_keys_help"
+msgstr "Enter API keys per provider and set endpoint/model for the two custom slots."
+
 msgid "menu_author_info"
 msgstr "Author Info"
+
+msgid "menu_author_info_help"
+msgstr "Author biography and life dates; fetched on demand."
 
 msgid "menu_auto_update_frequency"
 msgstr "Auto X-Ray Settings"
@@ -473,17 +488,32 @@ msgstr "Auto X-Ray Settings"
 msgid "menu_beta_channel"
 msgstr "Beta Channel Settings"
 
+msgid "menu_beta_channel_help"
+msgstr "Choose whether plugin updates include pre-release (beta) builds."
+
 msgid "menu_book_mode"
 msgstr "Book Type"
+
+msgid "menu_book_mode_help"
+msgstr "Tell X-Ray whether this book is fiction or non-fiction so it fetches the right entries."
 
 msgid "menu_characters"
 msgstr "Characters"
 
+msgid "menu_characters_help"
+msgstr "Browse AI bios for every character; search, merge duplicates, or fetch more."
+
 msgid "menu_clear_cache"
 msgstr "Clear Cache"
 
+msgid "menu_clear_cache_help"
+msgstr "Delete X-Ray data and offline snapshots for THIS book only; it re-fetches next time."
+
 msgid "menu_clear_logs"
 msgstr "Clear Logs"
+
+msgid "menu_clear_logs_help"
+msgstr "Erase the plugin's diagnostic log file."
 
 msgid "menu_config_header"
 msgstr "--- Current Configuration ---"
@@ -496,6 +526,9 @@ msgstr "Custom %s Model"
 
 msgid "menu_desc_length_settings"
 msgstr "Description Length"
+
+msgid "menu_desc_length_settings_help"
+msgstr "Set how detailed each entry is; longer entries mean fewer returned per fetch."
 
 msgid "menu_display_ui_settings"
 msgstr "Display & UI Settings"
@@ -518,20 +551,38 @@ msgstr "Fetch More Terms"
 msgid "menu_fetch_series_context"
 msgstr "Fetch / Refresh Series Context"
 
+msgid "menu_fetch_series_context_help"
+msgstr "Fetch or re-fetch the recap of earlier books in this series now."
+
 msgid "menu_frequency"
 msgstr "Auto-fetch Frequency"
+
+msgid "menu_frequency_help"
+msgstr "How often X-Ray auto-fetches as you read: every few pages, each chapter, or never."
 
 msgid "menu_historical_figures"
 msgstr "Historical Figures"
 
+msgid "menu_historical_figures_help"
+msgstr "Real-world historical figures the book references, with a short note on each."
+
 msgid "menu_language"
 msgstr "Language"
+
+msgid "menu_language_help"
+msgstr "Set the language for AI-generated X-Ray content and the plugin interface."
 
 msgid "menu_linked_entries_settings"
 msgstr "Linked Entries Settings"
 
+msgid "menu_linked_entries_settings_help"
+msgstr "Control tappable cross-links between related characters, places, and terms."
+
 msgid "menu_locations"
 msgstr "Locations"
+
+msgid "menu_locations_help"
+msgstr "Settings and places in the book; merge duplicates or view details."
 
 msgid "menu_maintenance"
 msgstr "Maintenance"
@@ -542,17 +593,32 @@ msgstr "Mentions Settings"
 msgid "menu_prefetch_auto"
 msgstr "Auto-prepare for offline when online"
 
+msgid "menu_prefetch_auto_help"
+msgstr "Automatically prepare the whole book for offline use whenever you're online."
+
 msgid "menu_prefetch_offline"
 msgstr "Prepare book for offline reading"
+
+msgid "menu_prefetch_offline_help"
+msgstr "Fetch and cache X-Ray for the whole book now, so lookups work offline later."
 
 msgid "menu_primary_ai_model"
 msgstr "Primary AI Model"
 
+msgid "menu_primary_ai_model_help"
+msgstr "The main AI model tried first for every fetch; pick a provider then a model."
+
 msgid "menu_reasoning_effort"
 msgstr "AI Reasoning Effort"
 
+msgid "menu_reasoning_effort_help"
+msgstr "Thinking depth for reasoning models (GPT-5.x, Claude, Gemini 2.5+); ignored by others."
+
 msgid "menu_secondary_ai_model"
 msgstr "Fallback AI Model"
+
+msgid "menu_secondary_ai_model_help"
+msgstr "Backup AI tried automatically only if the primary fails or has no key; set None to disable."
 
 msgid "menu_series_context"
 msgstr "Series Context"
@@ -563,29 +629,53 @@ msgstr "Settings"
 msgid "menu_terms"
 msgstr "Glossary"
 
+msgid "menu_terms_help"
+msgstr "Book-specific terms, jargon, and concepts with AI definitions."
+
 msgid "menu_timeline"
 msgstr "Timeline"
+
+msgid "menu_timeline_help"
+msgstr "Plot timeline chapter by chapter, limited to your current page."
 
 msgid "menu_ui_popup_intext"
 msgstr "Footnote popup for tap-a-word lookups"
 
+msgid "menu_ui_popup_intext_help"
+msgstr "Show lookups from tapping a word in the text as a compact footnote popup."
+
 msgid "menu_ui_popup_menu"
 msgstr "Footnote popup for dictionary-button lookups"
+
+msgid "menu_ui_popup_menu_help"
+msgstr "Show lookups opened from the dictionary/selection button as a compact footnote popup."
 
 msgid "menu_update_xray"
 msgstr "Update X-Ray Data"
 
+msgid "menu_update_xray_help"
+msgstr "Fetch fresh AI data for your current progress and merge it into the existing X-Ray."
+
 msgid "menu_view_config"
 msgstr "View Configuration (read-only)"
 
+msgid "menu_view_config_help"
+msgstr "Read-only summary of active models and which provider keys are set."
+
 msgid "menu_view_log"
 msgstr "X-Ray Log"
+
+msgid "menu_view_log_help"
+msgstr "Open the last 100 lines of the plugin log for troubleshooting."
 
 msgid "menu_xray"
 msgstr "X-Ray"
 
 msgid "menu_xray_mode"
 msgstr "In-text X-Ray Lookups"
+
+msgid "menu_xray_mode_help"
+msgstr "Add an X-Ray button to the dictionary and text-selection popups for instant lookups."
 
 msgid "merge_back"
 msgstr "← Back"
@@ -661,12 +751,6 @@ msgstr "No X-Ray data found for this book. Would you like to fetch it from AI no
 
 msgid "no_duplicates_found"
 msgstr "No duplicates found."
-
-msgid "no_historical_data"
-msgstr "No historical figure data yet.\n\nPlease use 'Fetch X-Ray Data' first.\n\nAI will detect real historical\nfigures mentioned in the book."
-
-msgid "no_location_data"
-msgstr "No location data yet. Please use 'Fetch X-Ray Data' first."
 
 msgid "no_merges_performed"
 msgstr "No pairs were merged."
@@ -794,6 +878,9 @@ msgstr "Search Terms"
 msgid "series_ask_later_msg"
 msgstr "Series recap postponed. We will ask again when you open/resume this book."
 
+msgid "series_context_enabled_help"
+msgstr "Allow X-Ray to fetch and use a recap of previous books in this series."
+
 msgid "series_context_enabled_toggle"
 msgstr "Enable Series Context"
 
@@ -832,6 +919,9 @@ msgstr "Spoiler-free Mode (Up to %d%% of the book)"
 
 msgid "spoiler_preference_desc"
 msgstr "Spoiler-free shows X-Ray data only up to your current reading position. Show everything displays all fetched data immediately - for non-fiction and re-reads."
+
+msgid "spoiler_preference_help"
+msgstr "Choose whether X-Ray hides content past your current page or shows all fetched data."
 
 msgid "spoiler_preference_title"
 msgstr "Spoiler Preference"
@@ -874,6 +964,9 @@ msgstr "Update cancelled."
 
 msgid "updater_check"
 msgstr "Check for Updates"
+
+msgid "updater_check_help"
+msgstr "Check GitHub for a newer plugin version and install it over the air."
 
 msgid "updater_checking"
 msgstr "Checking for updates..."
@@ -928,103 +1021,4 @@ msgstr "Adds an 'X-Ray' button to dictionary and selection menus for instant loo
 
 msgid "yes"
 msgstr "Yes"
-
-msgid "menu_characters_help"
-msgstr "Browse AI bios for every character; search, merge duplicates, or fetch more."
-
-msgid "menu_timeline_help"
-msgstr "Plot timeline chapter by chapter, limited to your current page."
-
-msgid "menu_historical_figures_help"
-msgstr "Real-world historical figures the book references, with a short note on each."
-
-msgid "menu_locations_help"
-msgstr "Settings and places in the book; merge duplicates or view details."
-
-msgid "menu_terms_help"
-msgstr "Book-specific terms, jargon, and concepts with AI definitions."
-
-msgid "menu_author_info_help"
-msgstr "Author biography and life dates; fetched on demand."
-
-msgid "menu_update_xray_help"
-msgstr "Fetch fresh AI data for your current progress and merge it into the existing X-Ray."
-
-msgid "menu_ui_popup_intext_help"
-msgstr "Show lookups from tapping a word in the text as a compact footnote popup."
-
-msgid "menu_ui_popup_menu_help"
-msgstr "Show lookups opened from the dictionary/selection button as a compact footnote popup."
-
-msgid "menu_linked_entries_settings_help"
-msgstr "Control tappable cross-links between related characters, places, and terms."
-
-msgid "mentions_setting_help"
-msgstr "Configure scanning for where a character or term is mentioned in the book."
-
-msgid "menu_frequency_help"
-msgstr "How often X-Ray auto-fetches as you read: every few pages, each chapter, or never."
-
-msgid "auto_dupe_check_setting_help"
-msgstr "Ask the AI to detect duplicates after every fetch (uses one extra API call)."
-
-msgid "menu_prefetch_offline_help"
-msgstr "Fetch and cache X-Ray for the whole book now, so lookups work offline later."
-
-msgid "menu_prefetch_auto_help"
-msgstr "Automatically prepare the whole book for offline use whenever you're online."
-
-msgid "menu_book_mode_help"
-msgstr "Tell X-Ray whether this book is fiction or non-fiction so it fetches the right entries."
-
-msgid "menu_desc_length_settings_help"
-msgstr "Set how detailed each entry is; longer entries mean fewer returned per fetch."
-
-msgid "series_context_enabled_help"
-msgstr "Allow X-Ray to fetch and use a recap of previous books in this series."
-
-msgid "menu_fetch_series_context_help"
-msgstr "Fetch or re-fetch the recap of earlier books in this series now."
-
-msgid "spoiler_preference_help"
-msgstr "Choose whether X-Ray hides content past your current page or shows all fetched data."
-
-msgid "menu_xray_mode_help"
-msgstr "Add an X-Ray button to the dictionary and text-selection popups for instant lookups."
-
-msgid "menu_language_help"
-msgstr "Set the language for AI-generated X-Ray content and the plugin interface."
-
-msgid "menu_primary_ai_model_help"
-msgstr "The main AI model tried first for every fetch; pick a provider then a model."
-
-msgid "menu_secondary_ai_model_help"
-msgstr "Backup AI tried automatically only if the primary fails or has no key; set None to disable."
-
-msgid "menu_reasoning_effort_help"
-msgstr "Thinking depth for reasoning models (GPT-5.x, Claude, Gemini 2.5+); ignored by others."
-
-msgid "menu_api_keys_help"
-msgstr "Enter API keys per provider and set endpoint/model for the two custom slots."
-
-msgid "menu_view_config_help"
-msgstr "Read-only summary of active models and which provider keys are set."
-
-msgid "menu_clear_cache_help"
-msgstr "Delete X-Ray data and offline snapshots for THIS book only; it re-fetches next time."
-
-msgid "menu_clear_logs_help"
-msgstr "Erase the plugin's diagnostic log file."
-
-msgid "menu_view_log_help"
-msgstr "Open the last 100 lines of the plugin log for troubleshooting."
-
-msgid "menu_beta_channel_help"
-msgstr "Choose whether plugin updates include pre-release (beta) builds."
-
-msgid "updater_check_help"
-msgstr "Check GitHub for a newer plugin version and install it over the air."
-
-msgid "menu_about_help"
-msgstr "Show plugin version and description; also checks for updates."
 

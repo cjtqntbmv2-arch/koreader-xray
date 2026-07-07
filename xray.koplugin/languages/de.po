@@ -44,6 +44,9 @@ msgstr "Wählen Sie Ihre Einstellung für die automatische KI-Duplikatserkennung
 msgid "auto_dupe_check_setting_desc"
 msgstr "Wenn aktiviert, fordert X-Ray die KI nach jedem Datenabruf automatisch auf, nach doppelten Charakteren und Orten zu suchen. Wenn Duplikate erkannt werden, werden Sie gefragt, ob Sie diese überprüfen und zusammenführen möchten.\n\nDas Deaktivieren stoppt alle Hintergrund-Duplikatsprüfungen. Sie können Duplikate weiterhin manuell über das Menü 'Charaktere' oder 'Orte' zusammenführen.\n\nHinweis: Jede Prüfung verbraucht einen KI-API-Aufruf. Benutzer mit kostenlosen Kontingenten oder begrenzten Plänen möchten dies möglicherweise deaktivieren."
 
+msgid "auto_dupe_check_setting_help"
+msgstr "KI nach jedem Abruf Duplikate erkennen lassen (ein zusätzlicher API-Aufruf)."
+
 msgid "auto_dupe_check_setting_title"
 msgstr "Duplikatsprüfung"
 
@@ -449,6 +452,9 @@ msgstr "Suche läuft... %1 von %2 Kapiteln"
 msgid "mentions_setting_desc"
 msgstr "Das Scannen nach Erwähnungen ermöglicht es Ihnen, jedes Vorkommen einer Figur oder eines Ortes im Buch zu finden. Dies geschieht automatisch im Hintergrund, damit das Lesegerät reaktionsfähig bleibt.\n\nDas Deaktivieren dieser Funktion blendet die Schaltfläche 'Erwähnungen finden' aus."
 
+msgid "mentions_setting_help"
+msgstr "Suche steuern, wo eine Figur oder ein Begriff im Buch erwähnt wird."
+
 msgid "mentions_setting_title"
 msgstr "Erwähnungen-Einstellungen"
 
@@ -458,14 +464,23 @@ msgstr "Erwähnungen: %s"
 msgid "menu_about"
 msgstr "Über"
 
+msgid "menu_about_help"
+msgstr "Plugin-Version und Beschreibung anzeigen; prüft auch auf Updates."
+
 msgid "menu_ai_settings"
 msgstr "KI-Einstellungen"
 
 msgid "menu_api_keys"
 msgstr "API-Schlüssel & Anbieter"
 
+msgid "menu_api_keys_help"
+msgstr "API-Schlüssel je Anbieter eingeben und Endpunkt/Modell für Custom-Slots setzen."
+
 msgid "menu_author_info"
 msgstr "Autor-Info"
+
+msgid "menu_author_info_help"
+msgstr "Autor-Biografie und Lebensdaten; bei Bedarf abgerufen."
 
 msgid "menu_auto_update_frequency"
 msgstr "Auto X-Ray Einstellungen"
@@ -473,17 +488,32 @@ msgstr "Auto X-Ray Einstellungen"
 msgid "menu_beta_channel"
 msgstr "Beta Channel Einstellungen"
 
+msgid "menu_beta_channel_help"
+msgstr "Wählen, ob Updates Vorabversionen (Beta) enthalten."
+
 msgid "menu_book_mode"
 msgstr "Book Mode"
+
+msgid "menu_book_mode_help"
+msgstr "X-Ray mitteilen, ob dieses Buch Belletristik oder Sachbuch ist."
 
 msgid "menu_characters"
 msgstr "Charaktere"
 
+msgid "menu_characters_help"
+msgstr "KI-Biografien aller Figuren; suchen, Duplikate zusammenführen oder mehr abrufen."
+
 msgid "menu_clear_cache"
 msgstr "Cache leeren"
 
+msgid "menu_clear_cache_help"
+msgstr "X-Ray-Daten und Offline-Schnappschüsse nur DIESES Buchs löschen; wird neu abgerufen."
+
 msgid "menu_clear_logs"
 msgstr "Logs löschen"
+
+msgid "menu_clear_logs_help"
+msgstr "Diagnose-Protokolldatei des Plugins löschen."
 
 msgid "menu_config_header"
 msgstr "--- Aktuelle Konfiguration ---"
@@ -496,6 +526,9 @@ msgstr "Benutzerdefiniertes %s-Modell"
 
 msgid "menu_desc_length_settings"
 msgstr "Länge der Beschreibung"
+
+msgid "menu_desc_length_settings_help"
+msgstr "Festlegen, wie ausführlich jeder Eintrag ist; länger = weniger pro Abruf."
 
 msgid "menu_display_ui_settings"
 msgstr "Anzeige- & Benutzeroberflächen-Einstellungen"
@@ -518,20 +551,38 @@ msgstr "Weitere Begriffe abrufen"
 msgid "menu_fetch_series_context"
 msgstr "Series Context abrufen / aktualisieren"
 
+msgid "menu_fetch_series_context_help"
+msgstr "Zusammenfassung früherer Serienbände jetzt abrufen oder aktualisieren."
+
 msgid "menu_frequency"
 msgstr "Auto-Abruf-Häufigkeit"
+
+msgid "menu_frequency_help"
+msgstr "Wie oft X-Ray beim Lesen automatisch abruft: alle paar Seiten, pro Kapitel oder nie."
 
 msgid "menu_historical_figures"
 msgstr "Historische Personen"
 
+msgid "menu_historical_figures_help"
+msgstr "Reale historische Personen, auf die das Buch verweist, mit kurzer Notiz."
+
 msgid "menu_language"
 msgstr "Sprache"
+
+msgid "menu_language_help"
+msgstr "Sprache für KI-Inhalte und Oberfläche festlegen."
 
 msgid "menu_linked_entries_settings"
 msgstr "Einstellungen für verknüpfte Einträge"
 
+msgid "menu_linked_entries_settings_help"
+msgstr "Antippbare Querverweise zwischen verwandten Einträgen steuern."
+
 msgid "menu_locations"
 msgstr "Orte"
+
+msgid "menu_locations_help"
+msgstr "Schauplätze und Orte im Buch; Duplikate zusammenführen oder Details ansehen."
 
 msgid "menu_maintenance"
 msgstr "Wartung"
@@ -542,17 +593,32 @@ msgstr "Erwähnungen-Einstellungen"
 msgid "menu_prefetch_auto"
 msgstr "Bei WLAN automatisch für offline vorbereiten"
 
+msgid "menu_prefetch_auto_help"
+msgstr "Das ganze Buch automatisch für Offline-Nutzung vorbereiten, sobald online."
+
 msgid "menu_prefetch_offline"
 msgstr "Buch für Offline-Lektüre vorbereiten"
+
+msgid "menu_prefetch_offline_help"
+msgstr "X-Ray fürs ganze Buch jetzt abrufen und zwischenspeichern für spätere Offline-Nutzung."
 
 msgid "menu_primary_ai_model"
 msgstr "Primäres KI-Modell"
 
+msgid "menu_primary_ai_model_help"
+msgstr "Das zuerst genutzte KI-Hauptmodell; Anbieter und Modell wählen."
+
 msgid "menu_reasoning_effort"
 msgstr "KI-Denkaufwand"
 
+msgid "menu_reasoning_effort_help"
+msgstr "Denktiefe für Reasoning-Modelle (GPT-5.x, Claude, Gemini 2.5+); andere ignorieren es."
+
 msgid "menu_secondary_ai_model"
 msgstr "Ausweich-KI-Modell"
+
+msgid "menu_secondary_ai_model_help"
+msgstr "Ausweich-KI nur bei Ausfall/fehlendem Schlüssel des Hauptmodells; „Keins" deaktiviert."
 
 msgid "menu_series_context"
 msgstr "Reihen-Kontext"
@@ -563,29 +629,53 @@ msgstr "Einstellungen"
 msgid "menu_terms"
 msgstr "Glossar"
 
+msgid "menu_terms_help"
+msgstr "Buchspezifische Begriffe und Konzepte mit KI-Definitionen."
+
 msgid "menu_timeline"
 msgstr "Zeitstrahl"
+
+msgid "menu_timeline_help"
+msgstr "Handlungs-Zeitleiste Kapitel für Kapitel, begrenzt auf deine aktuelle Seite."
 
 msgid "menu_ui_popup_intext"
 msgstr "Fußnoten-Popup für Wort-Antippen im Text"
 
+msgid "menu_ui_popup_intext_help"
+msgstr "Suchen per Wort-Antippen im Text als kompaktes Fußnoten-Popup anzeigen."
+
 msgid "menu_ui_popup_menu"
 msgstr "Fußnoten-Popup für Wörterbuch-Schaltfläche"
+
+msgid "menu_ui_popup_menu_help"
+msgstr "Suchen über die Wörterbuch-Schaltfläche als kompaktes Fußnoten-Popup anzeigen."
 
 msgid "menu_update_xray"
 msgstr "X-Ray Daten aktualisieren (Zusammenführen)"
 
+msgid "menu_update_xray_help"
+msgstr "Frische KI-Daten für deinen Fortschritt abrufen und ins vorhandene X-Ray einfügen."
+
 msgid "menu_view_config"
 msgstr "Konfiguration anzeigen (schreibgeschützt)"
 
+msgid "menu_view_config_help"
+msgstr "Schreibgeschützte Übersicht aktiver Modelle und gesetzter Schlüssel."
+
 msgid "menu_view_log"
 msgstr "Protokoll anzeigen"
+
+msgid "menu_view_log_help"
+msgstr "Die letzten 100 Zeilen des Protokolls zur Fehlersuche öffnen."
 
 msgid "menu_xray"
 msgstr "X-Ray"
 
 msgid "menu_xray_mode"
 msgstr "X-Ray Modus-Einstellungen"
+
+msgid "menu_xray_mode_help"
+msgstr "X-Ray-Schaltfläche zu Wörterbuch- und Auswahl-Popups für Sofortsuche hinzufügen."
 
 msgid "merge_back"
 msgstr "← Zurück"
@@ -661,12 +751,6 @@ msgstr "Keine X-Ray-Daten für dieses Buch gefunden. Möchten Sie diese jetzt vo
 
 msgid "no_duplicates_found"
 msgstr "Keine Duplikate gefunden."
-
-msgid "no_historical_data"
-msgstr "Noch keine Daten zu historischen Personen.\n\nBitte nutzen Sie zuerst 'X-Ray Daten abrufen'.\n\nKI wird reale historische Personen im Buch erkennen."
-
-msgid "no_location_data"
-msgstr "Noch keine Ortsdaten. Bitte nutzen Sie zuerst 'X-Ray Daten abrufen'."
 
 msgid "no_merges_performed"
 msgstr "Keine Zusammenführungen durchgeführt."
@@ -794,6 +878,9 @@ msgstr "Suchbegriffe"
 msgid "series_ask_later_msg"
 msgstr "Serienzusammenfassung verschoben. Wir fragen erneut, wenn Sie dieses Buch öffnen/fortsetzen."
 
+msgid "series_context_enabled_help"
+msgstr "X-Ray erlauben, eine Zusammenfassung früherer Serienbände zu nutzen."
+
 msgid "series_context_enabled_toggle"
 msgstr "Series Context aktivieren"
 
@@ -832,6 +919,9 @@ msgstr "Spoiler-freier Modus (Bis zu %d%% des Buches)"
 
 msgid "spoiler_preference_desc"
 msgstr "Spoilerfrei zeigt X-Ray-Daten nur bis zu deiner aktuellen Leseposition. Alles anzeigen zeigt alle abgerufenen Daten sofort – für Sachbücher und Re-Reads."
+
+msgid "spoiler_preference_help"
+msgstr "Wählen, ob X-Ray Inhalte hinter deiner Seite verbirgt oder alles Abgerufene zeigt."
 
 msgid "spoiler_preference_title"
 msgstr "Spoiler-Einstellung"
@@ -874,6 +964,9 @@ msgstr "Update abgebrochen."
 
 msgid "updater_check"
 msgstr "Nach Updates suchen"
+
+msgid "updater_check_help"
+msgstr "GitHub auf eine neuere Plugin-Version prüfen und installieren."
 
 msgid "updater_checking"
 msgstr "Suche nach Updates..."
@@ -928,103 +1021,4 @@ msgstr "Fügt eine 'X-Ray'-Schaltfläche zu Wörterbuch- und Auswahlmenüs für 
 
 msgid "yes"
 msgstr "Ja"
-
-msgid "menu_characters_help"
-msgstr "KI-Biografien aller Figuren; suchen, Duplikate zusammenführen oder mehr abrufen."
-
-msgid "menu_timeline_help"
-msgstr "Handlungs-Zeitleiste Kapitel für Kapitel, begrenzt auf deine aktuelle Seite."
-
-msgid "menu_historical_figures_help"
-msgstr "Reale historische Personen, auf die das Buch verweist, mit kurzer Notiz."
-
-msgid "menu_locations_help"
-msgstr "Schauplätze und Orte im Buch; Duplikate zusammenführen oder Details ansehen."
-
-msgid "menu_terms_help"
-msgstr "Buchspezifische Begriffe und Konzepte mit KI-Definitionen."
-
-msgid "menu_author_info_help"
-msgstr "Autor-Biografie und Lebensdaten; bei Bedarf abgerufen."
-
-msgid "menu_update_xray_help"
-msgstr "Frische KI-Daten für deinen Fortschritt abrufen und ins vorhandene X-Ray einfügen."
-
-msgid "menu_ui_popup_intext_help"
-msgstr "Suchen per Wort-Antippen im Text als kompaktes Fußnoten-Popup anzeigen."
-
-msgid "menu_ui_popup_menu_help"
-msgstr "Suchen über die Wörterbuch-Schaltfläche als kompaktes Fußnoten-Popup anzeigen."
-
-msgid "menu_linked_entries_settings_help"
-msgstr "Antippbare Querverweise zwischen verwandten Einträgen steuern."
-
-msgid "mentions_setting_help"
-msgstr "Suche steuern, wo eine Figur oder ein Begriff im Buch erwähnt wird."
-
-msgid "menu_frequency_help"
-msgstr "Wie oft X-Ray beim Lesen automatisch abruft: alle paar Seiten, pro Kapitel oder nie."
-
-msgid "auto_dupe_check_setting_help"
-msgstr "KI nach jedem Abruf Duplikate erkennen lassen (ein zusätzlicher API-Aufruf)."
-
-msgid "menu_prefetch_offline_help"
-msgstr "X-Ray fürs ganze Buch jetzt abrufen und zwischenspeichern für spätere Offline-Nutzung."
-
-msgid "menu_prefetch_auto_help"
-msgstr "Das ganze Buch automatisch für Offline-Nutzung vorbereiten, sobald online."
-
-msgid "menu_book_mode_help"
-msgstr "X-Ray mitteilen, ob dieses Buch Belletristik oder Sachbuch ist."
-
-msgid "menu_desc_length_settings_help"
-msgstr "Festlegen, wie ausführlich jeder Eintrag ist; länger = weniger pro Abruf."
-
-msgid "series_context_enabled_help"
-msgstr "X-Ray erlauben, eine Zusammenfassung früherer Serienbände zu nutzen."
-
-msgid "menu_fetch_series_context_help"
-msgstr "Zusammenfassung früherer Serienbände jetzt abrufen oder aktualisieren."
-
-msgid "spoiler_preference_help"
-msgstr "Wählen, ob X-Ray Inhalte hinter deiner Seite verbirgt oder alles Abgerufene zeigt."
-
-msgid "menu_xray_mode_help"
-msgstr "X-Ray-Schaltfläche zu Wörterbuch- und Auswahl-Popups für Sofortsuche hinzufügen."
-
-msgid "menu_language_help"
-msgstr "Sprache für KI-Inhalte und Oberfläche festlegen."
-
-msgid "menu_primary_ai_model_help"
-msgstr "Das zuerst genutzte KI-Hauptmodell; Anbieter und Modell wählen."
-
-msgid "menu_secondary_ai_model_help"
-msgstr "Ausweich-KI nur bei Ausfall/fehlendem Schlüssel des Hauptmodells; „Keins" deaktiviert."
-
-msgid "menu_reasoning_effort_help"
-msgstr "Denktiefe für Reasoning-Modelle (GPT-5.x, Claude, Gemini 2.5+); andere ignorieren es."
-
-msgid "menu_api_keys_help"
-msgstr "API-Schlüssel je Anbieter eingeben und Endpunkt/Modell für Custom-Slots setzen."
-
-msgid "menu_view_config_help"
-msgstr "Schreibgeschützte Übersicht aktiver Modelle und gesetzter Schlüssel."
-
-msgid "menu_clear_cache_help"
-msgstr "X-Ray-Daten und Offline-Schnappschüsse nur DIESES Buchs löschen; wird neu abgerufen."
-
-msgid "menu_clear_logs_help"
-msgstr "Diagnose-Protokolldatei des Plugins löschen."
-
-msgid "menu_view_log_help"
-msgstr "Die letzten 100 Zeilen des Protokolls zur Fehlersuche öffnen."
-
-msgid "menu_beta_channel_help"
-msgstr "Wählen, ob Updates Vorabversionen (Beta) enthalten."
-
-msgid "updater_check_help"
-msgstr "GitHub auf eine neuere Plugin-Version prüfen und installieren."
-
-msgid "menu_about_help"
-msgstr "Plugin-Version und Beschreibung anzeigen; prüft auch auf Updates."
 
