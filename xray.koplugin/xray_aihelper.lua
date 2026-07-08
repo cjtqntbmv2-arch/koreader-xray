@@ -172,8 +172,9 @@ function AIHelper:setTrapWidget(trap_widget) self.trap_widget = trap_widget end
 function AIHelper:resetTrapWidget() self.trap_widget = nil end
 
 function AIHelper:makeRequest(url, headers, request_body, timeout, maxtime)
-    -- Increased default timeout to 600s (10m) to accommodate reasoning models at xhigh effort
-    timeout = timeout or 600; maxtime = maxtime or 1200
+    local reasoning = self.settings and self.settings.reasoning_effort
+    timeout = timeout or (reasoning and 600 or 180)
+    maxtime = maxtime or (reasoning and 1200 or 360)
     local function performRequest()
         local http_req = require("socket.http"); local https_req = require("ssl.https")
         local ltn12_req = require("ltn12"); local socketutil_req = require("socketutil")
@@ -446,8 +447,14 @@ function AIHelper:makeRequestAsync(request_params, result_file)
             local ltn12_req = require("ltn12")
             local socketutil_req = require("socketutil")
             https_req.cert_verify = false
-            -- Increased timeout to 600s (10m) to accommodate reasoning models computing in the background
-            socketutil_req:set_timeout(600, 1200)
+            -- Reasoning models can legitimately compute for minutes; everything
+            -- else gets tight timeouts so a dead socket can't pin the radio.
+            local reasoning = self.settings and self.settings.reasoning_effort
+            if reasoning then
+                socketutil_req:set_timeout(600, 1200)
+            else
+                socketutil_req:set_timeout(180, 360)
+            end
 
             local requests = request_params
             if request_params.url then requests = { request_params } end -- Handle single request fallback
