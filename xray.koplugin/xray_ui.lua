@@ -1745,7 +1745,6 @@ function M:showBookTypeSettings()
             self.cache_manager:asyncSaveCache(self.ui.document.file, cache)
             self.book_type = (mode == "auto") and nil or mode
             UIManager:show(InfoMessage:new{ text = self.loc:t("book_type_saved") or "Book Type saved!", timeout = 3 })
-            UIManager:setDirty(nil, "ui")
             UIManager:nextTick(function() showSettings() end)
         end
 
@@ -1803,7 +1802,6 @@ function M:showMentionsSettings()
                     text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
                     callback = function()
                         self.ai_helper:saveSettings({ mentions_enabled = true })
-                        UIManager:setDirty(nil, "ui")
                         UIManager:nextTick(function() showSettings() end)
                     end
                 },
@@ -1811,7 +1809,6 @@ function M:showMentionsSettings()
                     text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
                     callback = function()
                         self.ai_helper:saveSettings({ mentions_enabled = false })
-                        UIManager:setDirty(nil, "ui")
                         UIManager:nextTick(function() showSettings() end)
                     end
                 }
@@ -1864,7 +1861,6 @@ function M:showAutoDupeCheckSettings()
                     text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
                     callback = function()
                         self.ai_helper:saveSettings({ auto_dupe_check_enabled = true })
-                        UIManager:setDirty(nil, "ui")
                         UIManager:nextTick(function() showSettings() end)
                     end
                 },
@@ -1872,7 +1868,6 @@ function M:showAutoDupeCheckSettings()
                     text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
                     callback = function()
                         self.ai_helper:saveSettings({ auto_dupe_check_enabled = false })
-                        UIManager:setDirty(nil, "ui")
                         UIManager:nextTick(function() showSettings() end)
                     end
                 }
@@ -1925,7 +1920,6 @@ function M:showLinkedEntriesSettings()
                     text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
                     callback = function()
                         self.ai_helper:saveSettings({ linked_entries_enabled = true })
-                        UIManager:setDirty(nil, "ui")
                         UIManager:nextTick(function() showSettings() end)
                     end
                 },
@@ -1933,7 +1927,6 @@ function M:showLinkedEntriesSettings()
                     text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
                     callback = function()
                         self.ai_helper:saveSettings({ linked_entries_enabled = false })
-                        UIManager:setDirty(nil, "ui")
                         UIManager:nextTick(function() showSettings() end)
                     end
                 }
@@ -1965,7 +1958,6 @@ function M:showLinkedEntriesSettings()
                         text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
                         callback = function()
                             self.ai_helper:saveSettings({ linked_entries_enabled = true })
-                            UIManager:setDirty(nil, "ui")
                             UIManager:nextTick(function() showSettings() end)
                         end
                     },
@@ -1973,7 +1965,6 @@ function M:showLinkedEntriesSettings()
                         text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
                         callback = function()
                             self.ai_helper:saveSettings({ linked_entries_enabled = false })
-                            UIManager:setDirty(nil, "ui")
                             UIManager:nextTick(function() showSettings() end)
                         end
                     }
@@ -2526,7 +2517,6 @@ function M:showSpoilerSettings()
                         text = (current_setting == "spoiler_free" and "[✓] " or "[  ] ") .. (self.loc:t("spoiler_free_menu_option") or "Spoiler-free (recommended)"),
                         callback = function()
                             self.ai_helper:saveSettings({ spoiler_setting = "spoiler_free" })
-                            UIManager:setDirty(nil, "ui")
                             UIManager:nextTick(function() showSettings() end)
                         end
                     },
@@ -2534,7 +2524,6 @@ function M:showSpoilerSettings()
                         text = (current_setting == "full_book" and "[✓] " or "[  ] ") .. (self.loc:t("full_book_option") or "Show everything (full book)"),
                         callback = function()
                             self.ai_helper:saveSettings({ spoiler_setting = "full_book" })
-                            UIManager:setDirty(nil, "ui")
                             UIManager:nextTick(function() showSettings() end)
                         end
                     }
@@ -3255,7 +3244,6 @@ function M:toggleXRayMode()
                         callback = function()
                             self.xray_mode_enabled = true
                             if self.ai_helper then self.ai_helper:saveSettings({ xray_mode_enabled = true }) end
-                            UIManager:setDirty(nil, "ui")
                             UIManager:nextTick(function() showSettings() end)
                         end
                     },
@@ -3264,7 +3252,6 @@ function M:toggleXRayMode()
                         callback = function()
                             self.xray_mode_enabled = false
                             if self.ai_helper then self.ai_helper:saveSettings({ xray_mode_enabled = false }) end
-                            UIManager:setDirty(nil, "ui")
                             UIManager:nextTick(function() showSettings() end)
                         end
                     }
