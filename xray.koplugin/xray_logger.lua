@@ -4,6 +4,9 @@
 local Logger = {
     path = nil,
     max_size = 512 * 1024, -- 512 KB
+    -- Gated: every log line is a full flash open/append/close cycle. Off by
+    -- default; enabled via the debug_logging setting in xray_config.lua.
+    enabled = false,
 }
 
 function Logger:init(path)
@@ -22,7 +25,7 @@ function Logger:init(path)
 end
 
 function Logger:log(message)
-    if not self.path then return end
+    if not self.enabled or not self.path then return end
     local log_path = self.path .. "/xray.log"
     
     pcall(function()

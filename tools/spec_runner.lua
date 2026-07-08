@@ -139,6 +139,7 @@ _G.assert.same = _G.assert.are.same
 -- List of spec files to execute
 local specs = {
     "spec/xray_utils_spec.lua",
+    "spec/xray_logger_spec.lua",
     "spec/xray_cachemanager_spec.lua",
     "spec/xray_chapteranalyzer_spec.lua",
     "spec/xray_data_spec.lua",

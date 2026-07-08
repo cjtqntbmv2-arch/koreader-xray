@@ -29,9 +29,6 @@ function CacheManager:getCachePath(book_path)
     -- Use KOReader's sidecar directory
     local cache_dir = DocSettings:getSidecarDir(book_path)
     local cache_file = cache_dir .. "/xray_cache.lua"
-    
-    logger.info("CacheManager: Cache path:", cache_file)
-    AIHelper:log("CacheManager: Cache path: " .. tostring(cache_file))
     return cache_file
 end
 

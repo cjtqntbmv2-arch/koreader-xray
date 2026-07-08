@@ -113,6 +113,8 @@ function XRayPlugin:init()
     local AIHelper = require(plugin_path .. "xray_aihelper")
     self.ai_helper = AIHelper
     self.ai_helper:init(self.path)
+    XRayLogger.enabled = ((self.ai_helper.settings and self.ai_helper.settings.debug_logging)
+        or self.ai_helper.config_debug_logging) == true
     self.ai_provider = self.ai_helper.default_provider or "gemini"
     
     self.xray_mode_enabled = true

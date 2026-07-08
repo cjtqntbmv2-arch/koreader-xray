@@ -32,6 +32,13 @@ This plugin brings Kindle-style X-Ray features to KOReader. It uses AI to track 
 
 Open a book and pick X-Ray from the reader menu. On first use the plugin walks you through storing an API key for your preferred AI provider (Gemini, OpenAI, DeepSeek, Claude, or a custom OpenAI/Anthropic-compatible endpoint). Keys are stored on-device in `xray_config.lua` and survive plugin updates.
 
+## Troubleshooting
+
+Debug logging is off by default (each log line costs a flash write on
+e-readers). To enable it for troubleshooting, add `debug_logging = true`
+to your `xray_config.lua`, restart KOReader, and use "View Log" in the
+X-Ray menu.
+
 ## Credits
 
 Based on [koreader-xray-plugin](https://github.com/ultimatejimmy/koreader-xray-plugin) by Jimmy Pautz (MIT).

@@ -976,7 +976,10 @@ function AIHelper:loadConfig()
         if config.deepseek_api_key then self.providers.deepseek.api_key = config.deepseek_api_key; self.config_keys.deepseek = config.deepseek_api_key end
         if config.claude_api_key then self.providers.claude.api_key = config.claude_api_key; self.config_keys.claude = config.claude_api_key end
         if config.default_provider then self.default_provider = config.default_provider end
-        
+        if config.debug_logging ~= nil then
+            self.config_debug_logging = config.debug_logging
+        end
+
         for _, slot in ipairs({"custom1", "custom2"}) do
             if config[slot .. "_api_key"]  then self.providers[slot].api_key  = config[slot .. "_api_key"];  self.config_keys[slot] = config[slot .. "_api_key"] end
             if config[slot .. "_endpoint"] then self.providers[slot].endpoint = config[slot .. "_endpoint"] end
