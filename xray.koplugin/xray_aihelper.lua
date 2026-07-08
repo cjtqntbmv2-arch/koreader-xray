@@ -712,7 +712,8 @@ function AIHelper:makeRequestAsync(request_params, result_file)
                     ffi.C.close(read_fd) 
                 end)
             end
-            self._async_child_pid = pid
+            self._async_child_pids = self._async_child_pids or {}
+            self._async_child_pids[result_file] = pid
             return pid
         end
     end
@@ -744,7 +745,8 @@ function AIHelper:makeRequestAsync(request_params, result_file)
             return true -- unreachable
         elseif pid and pid > 0 then
             self:log("AIHelper: Manual fork started PID " .. tostring(pid))
-            self._async_child_pid = pid
+            self._async_child_pids = self._async_child_pids or {}
+            self._async_child_pids[result_file] = pid
             return pid
         end
     end
@@ -765,13 +767,14 @@ function AIHelper:checkAsyncResult(result_file)
     f:close()
     os.remove(result_file)
 
-    -- Reap child process to prevent zombies
-    if self._async_child_pid then
+    -- Reap this request's child to prevent zombies
+    local pid = self._async_child_pids and self._async_child_pids[result_file]
+    if pid then
         pcall(function()
             local posix_sys = require("posix.sys.wait")
-            posix_sys.wait(self._async_child_pid, posix_sys.WNOHANG)
+            posix_sys.wait(pid, posix_sys.WNOHANG)
         end)
-        self._async_child_pid = nil
+        self._async_child_pids[result_file] = nil
     end
 
     -- Parse: first line = code, second line = provider, rest = response body
@@ -852,23 +855,38 @@ function AIHelper:checkAsyncResult(result_file)
     end
 end
 
+function AIHelper:_killPid(pid)
+    pcall(function()
+        local ffi = require("ffi")
+        ffi.cdef[[
+            int kill(int pid, int sig);
+            int waitpid(int pid, int *status, int options);
+        ]]
+        ffi.C.kill(pid, 9) -- SIGKILL
+        ffi.C.waitpid(pid, nil, 1) -- WNOHANG = 1
+    end)
+    pcall(function()
+        local posix_sys = require("posix.sys.wait")
+        posix_sys.wait(pid, posix_sys.WNOHANG)
+    end)
+end
+
 function AIHelper:cancelAsyncChild()
-    if self._async_child_pid then
-        self:log("AIHelper: Cancelling async child process PID " .. tostring(self._async_child_pid))
-        pcall(function()
-            local ffi = require("ffi")
-            ffi.cdef[[
-                int kill(int pid, int sig);
-                int waitpid(int pid, int *status, int options);
-            ]]
-            ffi.C.kill(self._async_child_pid, 9) -- SIGKILL
-            ffi.C.waitpid(self._async_child_pid, nil, 1) -- WNOHANG = 1
-        end)
-        pcall(function()
-            local posix_sys = require("posix.sys.wait")
-            posix_sys.wait(self._async_child_pid, posix_sys.WNOHANG)
-        end)
-        self._async_child_pid = nil
+    if self._async_child_pids then
+        for rf, pid in pairs(self._async_child_pids) do
+            self:log("AIHelper: Cancelling async child PID " .. tostring(pid))
+            self:_killPid(pid)
+        end
+        self._async_child_pids = {}
+    end
+end
+
+function AIHelper:cancelAsyncChildFor(result_file)
+    local pid = self._async_child_pids and self._async_child_pids[result_file]
+    if pid then
+        self:log("AIHelper: Cancelling async child PID " .. tostring(pid) .. " for " .. tostring(result_file))
+        self:_killPid(pid)
+        self._async_child_pids[result_file] = nil
     end
 end
 

@@ -394,3 +394,32 @@ describe("createPrompt description-length placeholders", function()
         end)
     end)
 end)
+
+describe("async child pid bookkeeping", function()
+    local function mkHelper()
+        local AIHelper = require("xray_aihelper")
+        local h = setmetatable({ settings = {} }, { __index = AIHelper })
+        h.log = function() end
+        local killed = {}
+        h._killPid = function(_, pid) table.insert(killed, pid) end
+        return h, killed
+    end
+
+    it("cancelAsyncChildFor kills only the matching child", function()
+        local h, killed = mkHelper()
+        h._async_child_pids = { ["/tmp/a.json"] = 111, ["/tmp/b.json"] = 222 }
+        h:cancelAsyncChildFor("/tmp/a.json")
+        assert.same({ 111 }, killed)
+        assert.falsy(h._async_child_pids["/tmp/a.json"])
+        assert.are.equal(222, h._async_child_pids["/tmp/b.json"])
+    end)
+
+    it("cancelAsyncChild kills all children", function()
+        local h, killed = mkHelper()
+        h._async_child_pids = { ["/tmp/a.json"] = 111, ["/tmp/b.json"] = 222 }
+        h:cancelAsyncChild()
+        table.sort(killed)
+        assert.same({ 111, 222 }, killed)
+        assert.same({}, h._async_child_pids)
+    end)
+end)

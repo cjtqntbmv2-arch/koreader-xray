@@ -4572,6 +4572,7 @@ function M:checkSeriesContext()
             if poll_count < max_polls then
                 UIManager:scheduleIn(2, pollDetect)
             else
+                pcall(function() self.ai_helper:cancelAsyncChildFor(result_file) end)
                 self:log("XRayPlugin: Series: Async series check timed out")
             end
         elseif result == false then

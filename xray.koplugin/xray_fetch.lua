@@ -445,12 +445,14 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
             local max_polls = 300 -- 10 minutes at 2s intervals
             local function poll()
                 if is_cancelled or self.destroyed or self.fetch_abort_requested then
+                    pcall(function() self.ai_helper:cancelAsyncChildFor(result_file) end)
                     pcall(function() os.remove(result_file) end)
                     self.bg_fetch_active = false
                     self:log("XRayPlugin: Fetch cancelled or plugin destroyed")
                     return
                 end
                 if not self.ui or not self.ui.document then
+                    pcall(function() self.ai_helper:cancelAsyncChildFor(result_file) end)
                     pcall(function() os.remove(result_file) end)
                     self.bg_fetch_active = false
                     return
@@ -461,6 +463,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                     if poll_count < max_polls then
                         UIManager:scheduleIn(2, poll)
                     else
+                        pcall(function() self.ai_helper:cancelAsyncChildFor(result_file) end)
                         if wait_msg then UIManager:close(wait_msg) end
                         self.bg_fetch_active = false
                         self:log("XRayPlugin: Fetch timed out")
@@ -919,6 +922,7 @@ function M:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
                     UIManager:scheduleIn(2, poll)
                 else
                     self:log("XRayPlugin: Async duplicate check for " .. list_name .. " timed out")
+                    pcall(function() self.ai_helper:cancelAsyncChildFor(result_file) end)
                     pcall(function() os.remove(result_file) end)
                     on_done(nil)
                 end
