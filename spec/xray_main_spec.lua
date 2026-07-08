@@ -71,6 +71,28 @@ describe("onPageUpdate battery short-circuit", function()
         assert.are.equal(after_first, normalize_calls) -- every later page must be string-work-free
     end)
 
+    it("resolves the chapter without re-fetching the TOC on every page", function()
+        local plugin = mkPlugin()
+        plugin.auto_fetch_enabled = true
+        -- hasApiKey=false: falls Seite 50 den Fetch-Trigger erreicht, bricht er
+        -- vor jedem Netz-Zugriff ab (unabhängig vom NetworkMgr-Fake-Zustand)
+        plugin.ai_helper = { settings = {}, hasApiKey = function() return false end }
+        plugin.chapters_fetched = {}
+        plugin.timeline = { { chapter = "Chapter 1", page = 1 } }
+        local toc_calls = 0
+        plugin.ui.document.getToc = function()
+            toc_calls = toc_calls + 1
+            return { { page = 1, title = "Chapter 1" }, { page = 50, title = "Chapter 2" } }
+        end
+        plugin:onPageUpdate(5)
+        plugin:onPageUpdate(6)
+        plugin:onPageUpdate(7)
+        assert.are.equal(1, toc_calls)
+
+        plugin:onPageUpdate(50)   -- Kapitelgrenze überschritten → neu auflösen
+        assert.are.equal(2, toc_calls)
+    end)
+
     it("nests Duplicate Check under Content & Fetch, not Auto X-Ray Settings", function()
         local plugin = mkPlugin()          -- REQUIRED: no shared `plugin` in this spec
         local items = plugin:getSubMenuItems()

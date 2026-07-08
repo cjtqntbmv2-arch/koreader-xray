@@ -353,6 +353,7 @@ function XRayPlugin:onReaderReady()
     self.chapters_fetched = {}
     self.bg_fetch_pending = false
     self.series_check_attempted = nil
+    self._chapter_range_cache = nil
 
     -- Initialize language based on logic (auto, book, or manual)
     self:applyLanguageLogic()
@@ -412,6 +413,30 @@ function XRayPlugin:onNetworkConnected()
         if self.destroyed then return end
         if self.maybeStartAutoPrefetch then self:maybeStartAutoPrefetch() end
     end)
+end
+
+-- Resolve the chapter for a page via a cached [start,end) range so the common
+-- case (turning pages inside one chapter) never re-marshals the TOC.
+function XRayPlugin:resolveChapterForPage(pageno)
+    local c = self._chapter_range_cache
+    if c and pageno >= c.start_page and pageno < c.end_page then
+        return c.title, c.title and c.start_page or nil
+    end
+    local toc = self.ui.document:getToc()
+    if not toc or #toc == 0 then return nil end
+    local title, start_page, end_page = nil, 0, math.huge
+    for _, entry in ipairs(toc) do
+        if entry.page and entry.page <= pageno then
+            title, start_page = entry.title, entry.page
+        else
+            -- exakt wie der alte Loop: auch ein Eintrag OHNE page beendet
+            -- den Scan (else-Zweig brach bisher in beiden Fällen ab)
+            if entry.page then end_page = entry.page end
+            break
+        end
+    end
+    self._chapter_range_cache = { title = title, start_page = start_page, end_page = end_page }
+    return title, title and start_page or nil
 end
 
 function XRayPlugin:onPageUpdate(pageno)
@@ -509,23 +534,7 @@ function XRayPlugin:onPageUpdate(pageno)
     end
 
     -- 2. Standard chapter-based mode checks (requires TOC)
-    -- Resolve current chapter title from TOC
-    local toc = self.ui.document:getToc()
-    if not toc or #toc == 0 then
-        return
-    end
-
-    local chapter_title = nil
-    local chapter_page = nil
-    for _, entry in ipairs(toc) do
-        if entry.page and entry.page <= pageno then
-            chapter_title = entry.title
-            chapter_page = entry.page
-        else
-            break
-        end
-    end
-
+    local chapter_title, chapter_page = self:resolveChapterForPage(pageno)
     if not chapter_title then
         return
     end
