@@ -127,6 +127,21 @@ describe("xray_mentions", function()
         end)
     end)
 
+    describe("mention search cache", function()
+        it("re-uses findAllText results for repeated jumps to the same entity", function()
+            plugin.ui.view = {}
+            local search_calls = 0
+            plugin.ui.document.findAllText = function() search_calls = search_calls + 1; return {} end
+
+            local entity = { name = "Rand al'Thor", aliases = { "Dragon Reborn" } }
+            plugin:highlightMentionsOnPage(10, entity)
+            local first = search_calls
+            assert.is_true(first > 0)
+            plugin:highlightMentionsOnPage(11, entity)
+            assert.are.equal(first, search_calls)
+        end)
+    end)
+
     describe("Jump Logic with Flag", function()
         it("should set the pending_return_banner flag instead of showing immediately", function()
             plugin.last_pageno = 100

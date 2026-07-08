@@ -358,17 +358,26 @@ function M:highlightMentionsOnPage(page, entity)
             table.insert(names_to_search, entity)
         end
 
-        local combined_res = {}
-        for _, name in ipairs(names_to_search) do
-            if self.log then self:log("XRayPlugin: highlightMentionsOnPage searching for name/alias: " .. tostring(name)) end
-            local res = self.ui.document:findAllText(name, true, 0, 500, false)
-            if res and #res > 0 then
-                for _, r in ipairs(res) do
-                    table.insert(combined_res, r)
+        -- findAllText scans the ENTIRE book per name; on repeated jumps
+        -- (prev/next banner) the results are identical. Session cache, keyed
+        -- by the full name set; invalidated on book change and re-render.
+        self._mention_search_cache = self._mention_search_cache or {}
+        local cache_key = table.concat(names_to_search, "\1")
+        local combined_res = self._mention_search_cache[cache_key]
+        if not combined_res then
+            combined_res = {}
+            for _, name in ipairs(names_to_search) do
+                if self.log then self:log("XRayPlugin: highlightMentionsOnPage searching for name/alias: " .. tostring(name)) end
+                local res = self.ui.document:findAllText(name, true, 0, 500, false)
+                if res and #res > 0 then
+                    for _, r in ipairs(res) do
+                        table.insert(combined_res, r)
+                    end
                 end
             end
+            self._mention_search_cache[cache_key] = combined_res
         end
-        
+
         if self.log then self:log("XRayPlugin: findAllText combined matches: " .. tostring(#combined_res)) end
         
         if #combined_res > 0 then

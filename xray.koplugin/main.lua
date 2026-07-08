@@ -356,6 +356,7 @@ function XRayPlugin:onReaderReady()
     self.bg_fetch_pending = false
     self.series_check_attempted = nil
     self._chapter_range_cache = nil
+    self._mention_search_cache = nil
 
     -- Initialize language based on logic (auto, book, or manual)
     self:applyLanguageLogic()
@@ -401,6 +402,15 @@ function XRayPlugin:onReaderReady()
             order_module.insertSorted("tools", "xray", 1)
         end
     end)
+end
+
+-- CRE fires this on repagination (font/layout change), which shifts page
+-- numbers baked into cached search/range results. Only fires for rolling/CRE
+-- documents; PDF/paged documents don't repaginate this way.
+function XRayPlugin:onDocumentRerendered()
+    self._mention_search_cache = nil
+    self._chapter_range_cache = nil
+    self._timeline_toc_fingerprint = nil
 end
 
 
