@@ -279,6 +279,7 @@ function XRayPlugin:onResume()
     self.fetch_abort_requested = false
     -- Let the opt-in auto-prefetch retry after wake-up (it aborted on suspend)
     self.auto_prefetch_attempted = false
+    self.series_check_attempted = nil
 end
 
 
@@ -351,6 +352,7 @@ function XRayPlugin:onReaderReady()
     self.last_bg_fetch_page = nil
     self.chapters_fetched = {}
     self.bg_fetch_pending = false
+    self.series_check_attempted = nil
 
     -- Initialize language based on logic (auto, book, or manual)
     self:applyLanguageLogic()

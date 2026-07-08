@@ -4491,6 +4491,15 @@ function M:checkSeriesContext()
         return
     end
 
+    -- One attempt per session: onNetworkConnected fires on every resume from
+    -- suspend; without this flag a failed/aborted AI check repeats the full
+    -- LLM request on every reconnect. onReaderReady resets it.
+    if self.series_check_attempted then
+        self:log("XRayPlugin: Series: checkSeriesContext: already attempted this session, skipping")
+        return
+    end
+    self.series_check_attempted = true
+
     local props = self.ui.document:getProps() or {}
     local function sanitizeMetadata(val)
         if type(val) == "string" then return val

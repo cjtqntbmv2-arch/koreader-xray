@@ -439,6 +439,51 @@ describe("xray_ui", function()
             assert.is_true(asyncSave_called)
             assert.is_true(plugin.book_data.series_context_dismissed)
         end)
+
+        it("runs the series check only once per session", function()
+            package.loaded["ui/network/manager"] = {
+                isConnected = function() return true end,
+                isOnline = function() return true end
+            }
+            local detect_calls = 0
+            plugin.series_manager = {
+                detectSeries = function() detect_calls = detect_calls + 1; return nil end
+            }
+            plugin.ai_helper = {
+                settings = { series_context_enabled = true },
+                createPrompt = function() return "p" end,
+                buildComprehensiveRequest = function() return nil end, -- aborts before async
+            }
+            plugin.book_data = {}
+
+            plugin:checkSeriesContext()
+            plugin:checkSeriesContext() -- simulated second onNetworkConnected
+
+            assert.are.equal(1, detect_calls)
+            assert.is_true(plugin.series_check_attempted == true)
+        end)
+
+        it("does not consume the attempt while offline", function()
+            package.loaded["ui/network/manager"] = {
+                isConnected = function() return false end,
+                isOnline = function() return false end
+            }
+            local detect_calls = 0
+            plugin.series_manager = {
+                detectSeries = function() detect_calls = detect_calls + 1; return nil end
+            }
+            plugin.ai_helper = {
+                settings = { series_context_enabled = true },
+                createPrompt = function() return "p" end,
+                buildComprehensiveRequest = function() return nil end,
+            }
+            plugin.book_data = {}
+
+            plugin:checkSeriesContext()
+
+            assert.are.equal(0, detect_calls)
+            assert.falsy(plugin.series_check_attempted)
+        end)
     end)
 
     describe("getAIModelSelectionMenu None option", function()
