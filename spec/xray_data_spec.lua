@@ -119,6 +119,53 @@ describe("xray_data", function()
         end)
     end)
 
+    describe("assignTimelinePages battery guards", function()
+        local M = require("xray_data")
+
+        local function mkHost()
+            local host = { normalize_calls = 0 }
+            for k, v in pairs(M) do host[k] = v end
+            local orig = host.normalizeChapterName
+            host.normalizeChapterName = function(self, name)
+                self.normalize_calls = self.normalize_calls + 1
+                return orig(self, name)
+            end
+            return host
+        end
+
+        it("skips re-matching when fully assigned and the TOC is unchanged", function()
+            local host = mkHost()
+            local toc = { { page = 3, title = "One" }, { page = 9, title = "Two" } }
+            local timeline = { { chapter = "One", page = 3 }, { chapter = "Two", page = 9 } }
+            host:assignTimelinePages(timeline, toc, true)   -- 1st run: matches + records TOC fingerprint
+            host.normalize_calls = 0
+            host:assignTimelinePages(timeline, toc, true)   -- steady state (every menu open)
+            assert.are.equal(0, host.normalize_calls)
+        end)
+
+        it("re-runs the matching after repagination (TOC pages shifted)", function()
+            local host = mkHost()
+            local timeline = { { chapter = "One", page = 3 } }
+            host:assignTimelinePages(timeline, { { page = 3, title = "One" } }, true)
+            host.normalize_calls = 0
+            host:assignTimelinePages(timeline, { { page = 7, title = "One" } }, true)
+            assert.is_true(host.normalize_calls > 0)
+            assert.are.equal(7, timeline[1].page)   -- page repair still happens
+        end)
+
+        it("memoizes failed findText lookups per event", function()
+            local host = mkHost()
+            local find_calls = 0
+            host.ui = { document = { findText = function() find_calls = find_calls + 1; return nil end } }
+            local ev = { chapter = "Unfindable Chapter Name" }
+            host:assignTimelinePages({ ev }, {}, true)
+            assert.are.equal(1, find_calls)
+            assert.is_true(ev._findtext_failed == true)
+            host:assignTimelinePages({ ev }, {}, true)
+            assert.are.equal(1, find_calls)   -- no second book-wide scan
+        end)
+    end)
+
     describe("sortDataByFrequency", function()
         it("should rank protagonists higher", function()
             local list = {

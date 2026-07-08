@@ -259,6 +259,24 @@ end
 function M:assignTimelinePages(timeline, toc, allow_findtext)
     if not toc or not timeline or #timeline == 0 then return end
 
+    -- Steady state: showTimeline() calls this on every open. Skip the whole
+    -- matching only when every event is placed AND the TOC still looks the
+    -- same -- after a repagination the pages must be re-repaired (the full
+    -- run deliberately overwrites ev.page via the queue pops).
+    local fingerprint = #toc .. ":" .. tostring(toc[1] and toc[1].page)
+        .. ":" .. tostring(toc[#toc] and toc[#toc].page)
+    local all_assigned = true
+    for _, ev in ipairs(timeline) do
+        if ev.source ~= "series_prior" and not ev.page then
+            all_assigned = false
+            break
+        end
+    end
+    if all_assigned and self._timeline_toc_fingerprint == fingerprint then
+        return
+    end
+    self._timeline_toc_fingerprint = fingerprint
+
     -- Build ORDERED QUEUES (not single-value maps) for each match strategy.
     -- key → list of pages in TOC order, so the Nth event with that key gets the Nth page.
     local q_norm   = {}  -- normalized title → {page, page, ...}
@@ -346,13 +364,17 @@ function M:assignTimelinePages(timeline, toc, allow_findtext)
             end
 
             -- Strategy 6: NO-TOC FALLBACK - search document text for the chapter heading.
-            if allow_findtext and not page and self.ui and self.ui.document and self.ui.document.findText then
+            -- findText scans the whole book; never repeat a search that already failed.
+            if allow_findtext and not page and not ev._findtext_failed
+                and self.ui and self.ui.document and self.ui.document.findText then
                 if #norm > 3 and not norm:match("^section") then
                     local success, results = pcall(function()
                         return self.ui.document:findText(ev.chapter or "", 20)
                     end)
                     if success and results and #results > 0 then
                         page = results[1].page
+                    else
+                        ev._findtext_failed = true
                     end
                 end
             end
