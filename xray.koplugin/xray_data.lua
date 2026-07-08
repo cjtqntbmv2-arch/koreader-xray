@@ -14,6 +14,11 @@ local word_to_num = {
     ["forty-six"]=46,["forty-seven"]=47,["forty-eight"]=48,["forty-nine"]=49,fifty=50,
 }
 
+-- Memo for normalizeChapterName: chapter names repeat across timeline events,
+-- TOC entries and page turns. Bounded reset guards long multi-book sessions.
+local norm_cache = {}
+local norm_cache_size = 0
+
 local roman_map = { i = 1, v = 5, x = 10, l = 50, c = 100, d = 500, m = 1000 }
 
 local function romanToDecimal(s)
@@ -219,22 +224,33 @@ end
 
 function M:normalizeChapterName(name)
     if not name then return "" end
+    local hit = norm_cache[name]
+    if hit then return hit end
+
     local s = name:lower():gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-    -- Replace written-out numbers with digits using word boundaries
-    for word, num in pairs(word_to_num) do
-        s = s:gsub("%f[%a]" .. word .. "%f[%A]", tostring(num))
-    end
+    -- Replace written-out numbers with digits in ONE pass (was: 50 dynamic
+    -- gsub patterns per call). %a+ tokenizes on word boundaries implicitly.
+    s = s:gsub("%a+", function(w)
+        local num = word_to_num[w]
+        return num and tostring(num) or nil
+    end)
     -- Strip common prefixes like "chapter" so "chapter 13" and "13" both become "13"
     s = s:gsub("^chapter%s*", ""):gsub("^ch%.?%s*", "")
     s = s:gsub("^part%s*", ""):gsub("^book%s*", "")
-    
+
     -- Try to convert Roman numerals if the remaining string is a valid Roman numeral
     -- We only do this if it's not already a digit
     if not s:match("^%d+$") and s:match("^[ivxlcdm]+$") then
         local dec = romanToDecimal(s)
         if dec then s = tostring(dec) end
     end
-    
+
+    if norm_cache_size > 2000 then
+        norm_cache = {}
+        norm_cache_size = 0
+    end
+    norm_cache[name] = s
+    norm_cache_size = norm_cache_size + 1
     return s
 end
 

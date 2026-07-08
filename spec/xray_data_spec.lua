@@ -28,6 +28,27 @@ describe("xray_data", function()
             assert.are.equal("intro", xray_data:normalizeChapterName("Chapter Intro"))
             assert.are.equal("prologue", xray_data:normalizeChapterName("Book Prologue"))
         end)
+
+        -- Characterization test: pins current behavior (incl. the memo, once
+        -- added) before/across the single-gsub refactor. Note the hyphenated
+        -- word_to_num keys ("twenty-one" etc.) never fire, in old or new code
+        -- (see xray_data.lua comment) -- "twenty-one" normalizes to "20-1".
+        it("normalizes consistently and memo returns identical results", function()
+            local cases = {
+                { "Chapter Twenty", "20" },
+                { "chapter twenty-one", "20-1" },
+                { "CHAPTER 13", "13" },
+                { "Part Three", "3" },
+                { "XIV", "14" },
+                { "  The   Dragon  Reborn ", "the dragon reborn" },
+                { "Ch. 7", "7" },
+            }
+            for _, c in ipairs(cases) do
+                local first = xray_data:normalizeChapterName(c[1])
+                assert.are.equal(c[2], first)
+                assert.are.equal(first, xray_data:normalizeChapterName(c[1]))
+            end
+        end)
     end)
 
     describe("isNonNarrativeChapter", function()
