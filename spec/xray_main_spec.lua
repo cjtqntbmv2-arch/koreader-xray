@@ -90,3 +90,39 @@ describe("onPageUpdate battery short-circuit", function()
         assert.is_not_nil(find(content.sub_item_table, "auto_dupe_check_setting_title"))
     end)
 end)
+
+describe("auto-fetch retry cap", function()
+    it("increments the same key the cap checks and stops after 3 attempts", function()
+        local plugin = mkPlugin()
+        plugin.auto_fetch_enabled = true
+        plugin.chapters_fetched = {}
+        plugin.timeline = {}
+        plugin.fetch_attempts = {}
+        plugin.ai_helper = {
+            settings = { auto_fetch_cooldown = 0 },
+            hasApiKey = function() return true end,
+        }
+        plugin.ui.document.getToc = function()
+            return { { page = 1, title = "Chapter 1" } }
+        end
+        plugin.ui.document.getPageCount = function() return 100 end
+        plugin.ui.getCurrentPage = function() return 5 end
+        local net = package.loaded["ui/network/manager"]
+        local old_conn, old_online = net.isConnected, net.isOnline
+        net.isConnected = function() return true end
+        net.isOnline = function() return true end
+        local fetches = 0
+        plugin.continueWithFetch = function() fetches = fetches + 1 end
+
+        for i = 1, 5 do
+            plugin.last_auto_chapter = nil          -- Kapitel-Hopping simulieren
+            plugin.chapters_fetched = plugin.chapters_fetched or {}
+            plugin:onPageUpdate(5)
+        end
+
+        net.isConnected, net.isOnline = old_conn, old_online
+        assert.are.equal(3, fetches)
+        assert.are.equal(3, plugin.fetch_attempts["Chapter 1_1"] or 0)
+        assert.is_true(plugin.chapters_fetched["Chapter 1_1"] == true)
+    end)
+end)

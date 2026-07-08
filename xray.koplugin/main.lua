@@ -582,11 +582,11 @@ function XRayPlugin:onPageUpdate(pageno)
     UIManager:scheduleIn(2, function()
         if self.destroyed then return end
         self.bg_fetch_pending = false
-        self:triggerBackgroundMergeFetch(chapter_title)
+        self:triggerBackgroundMergeFetch(chapter_title, unique_id)
     end)
 end
 
-function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
+function XRayPlugin:triggerBackgroundMergeFetch(chapter_title, unique_id)
     if self.bg_fetch_active then return end
     if not self.ui or not self.ui.document then return end
     -- Checkpoint-prefetch guards: no auto-merge while the prefetch loop runs,
@@ -633,7 +633,8 @@ function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
         end
         
         self.fetch_attempts = self.fetch_attempts or {}
-        self.fetch_attempts[chapter_title] = (self.fetch_attempts[chapter_title] or 0) + 1
+        local attempt_key = unique_id or chapter_title
+        self.fetch_attempts[attempt_key] = (self.fetch_attempts[attempt_key] or 0) + 1
         self:continueWithFetch(reading_percent, is_update, last_fetch_page, true) -- is_silent=true
     else
         -- Silently skip if offline
