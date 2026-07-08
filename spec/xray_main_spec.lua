@@ -153,8 +153,9 @@ describe("autoLoadCache staged timers", function()
             elseif type(b) == "function" then b()
             elseif type(c) == "function" then c() end
         end
-        plugin:autoLoadCache()
+        local ok = pcall(function() plugin:autoLoadCache() end)
         UIManager.scheduleIn = orig
+        assert.is_true(ok)
 
         assert.is_true(#delays > 0)
         for _, d in ipairs(delays) do
