@@ -185,6 +185,20 @@ describe("xray_data", function()
             host:assignTimelinePages({ ev }, {}, true)
             assert.are.equal(1, find_calls)   -- no second book-wide scan
         end)
+
+        it("does not memoize a transient findText crash", function()
+            local host = mkHost()
+            local find_calls = 0
+            host.ui = { document = { findText = function()
+                find_calls = find_calls + 1
+                error("engine busy")
+            end } }
+            local ev = { chapter = "Unfindable Chapter Name" }
+            host:assignTimelinePages({ ev }, {}, true)
+            assert.falsy(ev._findtext_failed)
+            host:assignTimelinePages({ ev }, {}, true)
+            assert.are.equal(2, find_calls)   -- retried, not memoized
+        end)
     end)
 
     describe("sortDataByFrequency", function()

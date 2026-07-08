@@ -171,8 +171,21 @@ end
 function AIHelper:setTrapWidget(trap_widget) self.trap_widget = trap_widget end
 function AIHelper:resetTrapWidget() self.trap_widget = nil end
 
+-- Reasoning models legitimately run for minutes; both the effort setting and
+-- the per-provider is_reasoning flags mark such a model as configured.
+function AIHelper:_reasoningConfigured()
+    if not self.settings then return false end
+    if self.settings.reasoning_effort then return true end
+    for k, v in pairs(self.settings) do
+        if v and type(k) == "string" and k:sub(-13) == "_is_reasoning" then
+            return true
+        end
+    end
+    return false
+end
+
 function AIHelper:makeRequest(url, headers, request_body, timeout, maxtime)
-    local reasoning = self.settings and self.settings.reasoning_effort
+    local reasoning = self:_reasoningConfigured()
     timeout = timeout or (reasoning and 600 or 180)
     maxtime = maxtime or (reasoning and 1200 or 360)
     local function performRequest()
@@ -449,7 +462,7 @@ function AIHelper:makeRequestAsync(request_params, result_file)
             https_req.cert_verify = false
             -- Reasoning models can legitimately compute for minutes; everything
             -- else gets tight timeouts so a dead socket can't pin the radio.
-            local reasoning = self.settings and self.settings.reasoning_effort
+            local reasoning = self:_reasoningConfigured()
             if reasoning then
                 socketutil_req:set_timeout(600, 1200)
             else

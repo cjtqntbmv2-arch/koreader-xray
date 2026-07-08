@@ -423,3 +423,31 @@ describe("async child pid bookkeeping", function()
         assert.same({}, h._async_child_pids)
     end)
 end)
+
+describe("_reasoningConfigured", function()
+    local function mkHelper(settings)
+        local AIHelper = require("xray_aihelper")
+        local h = setmetatable({ settings = settings }, { __index = AIHelper })
+        return h
+    end
+
+    it("returns false for empty settings", function()
+        local h = mkHelper({})
+        assert.is_false(h:_reasoningConfigured())
+    end)
+
+    it("returns true when reasoning_effort is set", function()
+        local h = mkHelper({ reasoning_effort = "high" })
+        assert.is_true(h:_reasoningConfigured())
+    end)
+
+    it("returns true when a provider is_reasoning flag is set", function()
+        local h = mkHelper({ custom1_is_reasoning = true })
+        assert.is_true(h:_reasoningConfigured())
+    end)
+
+    it("returns false when a provider is_reasoning flag is explicitly false", function()
+        local h = mkHelper({ custom1_is_reasoning = false })
+        assert.is_false(h:_reasoningConfigured())
+    end)
+end)

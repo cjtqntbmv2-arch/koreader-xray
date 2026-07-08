@@ -1,8 +1,7 @@
 -- xray_prefetch_spec.lua
 require("spec.spec_helper")
 
--- The network manager is not part of spec_helper's fakes; the prefetch loop
--- requires it lazily at call time.
+-- Override spec_helper's offline NetworkMgr default: the prefetch loop needs online.
 local net_backup = package.loaded["ui/network/manager"]
 package.loaded["ui/network/manager"] = {
     isConnected = function() return true end,

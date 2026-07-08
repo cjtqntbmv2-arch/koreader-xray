@@ -392,7 +392,7 @@ function M:assignTimelinePages(timeline, toc, allow_findtext)
                     end)
                     if success and results and #results > 0 then
                         page = results[1].page
-                    else
+                    elseif success then
                         ev._findtext_failed = true
                     end
                 end

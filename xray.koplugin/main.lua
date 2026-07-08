@@ -357,6 +357,7 @@ function XRayPlugin:onReaderReady()
     self.series_check_attempted = nil
     self._chapter_range_cache = nil
     self._mention_search_cache = nil
+    self._timeline_toc_fingerprint = nil
 
     -- Initialize language based on logic (auto, book, or manual)
     self:applyLanguageLogic()
