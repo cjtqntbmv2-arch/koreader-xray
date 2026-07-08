@@ -358,6 +358,16 @@ describe("xray_ui", function()
     end)
 
     describe("checkSeriesContext", function()
+        local net_backup
+
+        before_each(function()
+            net_backup = package.loaded["ui/network/manager"]
+        end)
+
+        after_each(function()
+            package.loaded["ui/network/manager"] = net_backup
+        end)
+
         it("should show ButtonDialog with three options if online and series detected", function()
             -- Mock NetworkMgr
             package.loaded["ui/network/manager"] = {

@@ -86,6 +86,11 @@ package.loaded["ui/uimanager"] = {
     end,
     setDirty = function() end
 }
+package.loaded["ui/network/manager"] = {
+    isConnected = function() return false end,
+    isOnline = function() return false end,
+    runWhenOnline = function() end,
+}
 package.loaded["ui/widget/infomessage"] = {
     new = function(a, b) return { type = "InfoMessage", args = b or a } end
 }
