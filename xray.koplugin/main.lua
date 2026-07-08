@@ -727,7 +727,7 @@ function XRayPlugin:autoLoadCache()
         end
 
         -- Stage 2: Restore Sort Order (Deferred 500ms)
-        UIManager:scheduleIn(500, function()
+        UIManager:scheduleIn(0.5, function()
             if self.destroyed then return end
             if not self.ui or not self.ui.document then return end
             self:log("XRayPlugin: Stage 2 - Restoring sort order")
@@ -740,7 +740,7 @@ function XRayPlugin:autoLoadCache()
             restoreOrder(self.historical_figures)
             
             -- Stage 3: Repair Page Numbers & Deduplicate (Deferred another 500ms)
-            UIManager:scheduleIn(500, function()
+            UIManager:scheduleIn(0.5, function()
                 if self.destroyed then return end
                 if not self.ui or not self.ui.document then return end
                 self:log("XRayPlugin: Stage 3 - Repairing pages and deduplicating")
@@ -759,7 +759,7 @@ function XRayPlugin:autoLoadCache()
 
                 self:log("XRayPlugin: Chunked post-load complete")
             end)
-        UIManager:scheduleIn(200, function()
+        UIManager:scheduleIn(0.2, function()
             if self.destroyed then return end
             pcall(function()
                 local ok_order, reader_menu_order = pcall(require, "ui/elements/reader_menu_order")

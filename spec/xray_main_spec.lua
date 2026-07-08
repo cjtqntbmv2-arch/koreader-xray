@@ -126,3 +126,39 @@ describe("auto-fetch retry cap", function()
         assert.is_true(plugin.chapters_fetched["Chapter 1_1"] == true)
     end)
 end)
+
+describe("autoLoadCache staged timers", function()
+    it("schedules all post-load stages within 2 seconds", function()
+        local plugin = mkPlugin()
+        -- autoLoadCache würde sonst updateSnapshotViewForPage → self.ui:getCurrentPage()
+        -- aufrufen, das der Mock nicht hat (spec_helper hat nur ui.paging)
+        plugin.updateSnapshotViewForPage = nil
+        plugin.cache_manager = {
+            loadCache = function() return { characters = {}, locations = {},
+                timeline = {}, historical_figures = {}, terms = {} } end
+        }
+        plugin.assignTimelinePages = function() end
+        plugin.sortTimelineByTOC = function() end
+        plugin.deduplicateByName = function(_, list) return list end
+        plugin.ui.document.file = "/tmp/book.epub"
+        plugin.ui.document.getToc = function() return {} end
+
+        local UIManager = package.loaded["ui/uimanager"]
+        local orig = UIManager.scheduleIn
+        local delays = {}
+        UIManager.scheduleIn = function(a, b, c)
+            local d = (type(a) == "number" and a) or (type(b) == "number" and b) or 0
+            table.insert(delays, d)
+            if type(a) == "function" then a()
+            elseif type(b) == "function" then b()
+            elseif type(c) == "function" then c() end
+        end
+        plugin:autoLoadCache()
+        UIManager.scheduleIn = orig
+
+        assert.is_true(#delays > 0)
+        for _, d in ipairs(delays) do
+            assert.is_true(d <= 2)
+        end
+    end)
+end)
