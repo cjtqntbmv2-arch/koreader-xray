@@ -1285,12 +1285,12 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
         if context.existing_characters and #context.existing_characters > 0 then
             local existing_lines = {}
             local sample_text = context.book_text or ""
+            local sample_lower = sample_text:lower()
             for _, c in ipairs(context.existing_characters) do
                 if c.name and c.description then
                     -- Optimized context trimming checks (Name, aliases, first-name fallback)
                     local found_in_sample = false
                     local name_lower = c.name:lower()
-                    local sample_lower = sample_text:lower()
                     if sample_lower:find(name_lower, 1, true) then
                         found_in_sample = true
                     else
@@ -1334,11 +1334,11 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
         if context.existing_historical_figures and #context.existing_historical_figures > 0 then
             local existing_lines = {}
             local sample_text = context.book_text or ""
+            local sample_lower = sample_text:lower()
             for _, h in ipairs(context.existing_historical_figures) do
                 if h.name and h.biography then
                     local found_in_sample = false
                     local name_lower = h.name:lower()
-                    local sample_lower = sample_text:lower()
                     if sample_lower:find(name_lower, 1, true) then
                         found_in_sample = true
                     else
@@ -1381,11 +1381,11 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
         if context.existing_locations and #context.existing_locations > 0 then
             local existing_lines = {}
             local sample_text = context.book_text or ""
+            local sample_lower = sample_text:lower()
             for _, l in ipairs(context.existing_locations) do
                 if l.name and l.description then
                     local found_in_sample = false
                     local name_lower = l.name:lower()
-                    local sample_lower = sample_text:lower()
                     if sample_lower:find(name_lower, 1, true) then
                         found_in_sample = true
                     else

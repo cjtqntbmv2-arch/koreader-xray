@@ -3,6 +3,34 @@ local logger = require("logger")
 local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
 local AIHelper = require(plugin_path .. "xray_aihelper")
 
+-- Non-narrative TOC entries to exclude
+local NON_NARRATIVE_PATTERNS = {
+    "^cover$", "^title", "^copyright", "^table of contents", "^contents$",
+    "^dedication", "^acknowledgment", "^also by", "^about the author",
+    "^epigraph$", "^foreword$", "^preface$",
+    "^appendix", "^glossary", "^index$", "^notes$", "^bibliography",
+    "^colophon", "^frontispiece",
+}
+
+-- Honorifics: fast-path blocklist for known titles.
+-- Short honorifics (< 3 chars) are already caught by the length check;
+-- 3-char ones (mr., mrs, sir, dr., etc.) need explicit listing since they
+-- can have plausible frequency ratios in heavily character-focused chapters.
+local HONORIFICS = {
+    ["mr"] = true, ["mr."] = true, ["mrs"] = true, ["mrs."] = true, ["ms"] = true, ["ms."] = true,
+    ["dr"] = true, ["dr."] = true, ["sir"] = true, ["rev"] = true, ["rev."] = true, ["lt"] = true, ["lt."] = true,
+    ["col"] = true, ["col."] = true, ["sgt"] = true, ["sgt."] = true, ["gen"] = true, ["gen."] = true,
+    ["miss"] = true, ["lord"] = true, ["lady"] = true, ["dame"] = true, ["prof"] = true, ["prof."] = true,
+    ["capt"] = true, ["capt."] = true, ["st"] = true, ["st."] = true, ["jr"] = true, ["jr."] = true,
+
+    -- International
+    ["m"] = true, ["m."] = true, ["mme"] = true, ["mme."] = true, ["mlle"] = true, ["mlle."] = true, ["mgr"] = true,
+    ["herr"] = true, ["frau"] = true, ["hr"] = true, ["hr."] = true, ["fr"] = true, ["fr."] = true,
+    ["sr"] = true, ["sr."] = true, ["sra"] = true, ["sra."] = true, ["don"] = true, ["dona"] = true, ["doña"] = true,
+    ["bey"] = true, ["hanım"] = true,
+    ["пан"] = true, ["пані"] = true, ["г-н"] = true, ["г-жа"] = true,
+}
+
 local ChapterAnalyzer = {}
 
 function ChapterAnalyzer:new(o)
@@ -638,18 +666,10 @@ function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit
     max_chapters = max_chapters or 200
     total_limit = total_limit or 150000
     
-    -- Non-narrative TOC entries to exclude
-    local non_narrative_patterns = {
-        "^cover$", "^title", "^copyright", "^table of contents", "^contents$",
-        "^dedication", "^acknowledgment", "^also by", "^about the author",
-        "^epigraph$", "^foreword$", "^preface$",
-        "^appendix", "^glossary", "^index$", "^notes$", "^bibliography",
-        "^colophon", "^frontispiece",
-    }
     local function isNonNarrative(title)
         if not title then return false end
         local lower = title:lower():gsub("^%s+", ""):gsub("%s+$", "")
-        for _, pat in ipairs(non_narrative_patterns) do
+        for _, pat in ipairs(NON_NARRATIVE_PATTERNS) do
             if lower:match(pat) then return true end
         end
         return false
@@ -959,25 +979,6 @@ function ChapterAnalyzer:findMentionsInChapter(ui, entity, toc_entry, next_toc_e
         return n
     end
 
-    -- Honorifics: fast-path blocklist for known titles.
-    -- Short honorifics (< 3 chars) are already caught by the length check;
-    -- 3-char ones (mr., mrs, sir, dr., etc.) need explicit listing since they
-    -- can have plausible frequency ratios in heavily character-focused chapters.
-    local honorifics = {
-        ["mr"] = true, ["mr."] = true, ["mrs"] = true, ["mrs."] = true, ["ms"] = true, ["ms."] = true,
-        ["dr"] = true, ["dr."] = true, ["sir"] = true, ["rev"] = true, ["rev."] = true, ["lt"] = true, ["lt."] = true,
-        ["col"] = true, ["col."] = true, ["sgt"] = true, ["sgt."] = true, ["gen"] = true, ["gen."] = true,
-        ["miss"] = true, ["lord"] = true, ["lady"] = true, ["dame"] = true, ["prof"] = true, ["prof."] = true,
-        ["capt"] = true, ["capt."] = true, ["st"] = true, ["st."] = true, ["jr"] = true, ["jr."] = true,
-        
-        -- International
-        ["m"] = true, ["m."] = true, ["mme"] = true, ["mme."] = true, ["mlle"] = true, ["mlle."] = true, ["mgr"] = true,
-        ["herr"] = true, ["frau"] = true, ["hr"] = true, ["hr."] = true, ["fr"] = true, ["fr."] = true,
-        ["sr"] = true, ["sr."] = true, ["sra"] = true, ["sra."] = true, ["don"] = true, ["dona"] = true, ["doña"] = true,
-        ["bey"] = true, ["hanım"] = true,
-        ["пан"] = true, ["пані"] = true, ["г-н"] = true, ["г-жа"] = true,
-    }
-
     -- 2. Type-Aware Entity Classification
     -- Characters and Historical Figures have a 'role' but not a term 'definition'.
     local is_person = (entity.role ~= nil) and (entity.definition == nil)
@@ -997,7 +998,7 @@ function ChapterAnalyzer:findMentionsInChapter(ui, entity, toc_entry, next_toc_e
 
     local function isTooGeneric(term)
         local term_l = term:lower()
-        if #term < 2 or honorifics[term_l] then return true end
+        if #term < 2 or HONORIFICS[term_l] then return true end
         -- Relax the multiplier for people and terms to prevent self-suppression in high-frequency fiction
         local limit
         if is_person then
@@ -1019,13 +1020,13 @@ function ChapterAnalyzer:findMentionsInChapter(ui, entity, toc_entry, next_toc_e
         local last_name  = name:match("(%S+)$")
         if first_name and first_name ~= name then
             local fl = first_name:lower()
-            if not honorifics[fl] and not isTooGeneric(fl) then
+            if not HONORIFICS[fl] and not isTooGeneric(fl) then
                 table.insert(terms, { s = fl, l = #fl })
             end
         end
         if last_name and last_name ~= first_name and last_name ~= name then
             local ll = last_name:lower()
-            if not honorifics[ll] and not isTooGeneric(ll) then
+            if not HONORIFICS[ll] and not isTooGeneric(ll) then
                 table.insert(terms, { s = ll, l = #ll })
             end
         end
@@ -1085,7 +1086,7 @@ function ChapterAnalyzer:findMentionsInChapter(ui, entity, toc_entry, next_toc_e
         for _, alias in ipairs(entity.aliases) do
             if type(alias) == "string" then
                 local al = alias:lower()
-                if not honorifics[al] and not isTooGeneric(al) then
+                if not HONORIFICS[al] and not isTooGeneric(al) then
                     local exists = false
                     for _, t in ipairs(terms) do
                         if t.s == al then exists = true; break end

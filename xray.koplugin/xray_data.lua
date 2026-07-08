@@ -21,6 +21,15 @@ local norm_cache_size = 0
 
 local roman_map = { i = 1, v = 5, x = 10, l = 50, c = 100, d = 500, m = 1000 }
 
+local NON_NARRATIVE_TITLE_PATTERNS = {
+    "^cover$", "^title", "^half%-title", "^copyright", "^table of contents",
+    "^contents$", "^dedication", "^acknowledgment", "^also by", "^other books",
+    "^about the author", "^about the", "^epigraph$", "^foreword$",
+    "^preface$", "^appendix", "^glossary", "^index$", "^notes$",
+    "^bibliography", "^colophon", "^frontispiece", "^books by",
+    "^praise for", "^reviews", "^blurb",
+}
+
 local function romanToDecimal(s)
     local res = 0
     local prev = 0
@@ -153,6 +162,8 @@ function M:promoteName(entity, new_name)
         table.insert(entity.aliases, old_name)
     end
     entity.name = new_name
+    entity._norm_name = nil
+    entity._norm_aliases = nil
 end
 
 function M:deduplicateByName(list, key)
@@ -258,15 +269,7 @@ function M:isNonNarrativeChapter(title)
     if not title then return true end
     local lower = title:lower():gsub("^%s+", ""):gsub("%s+$", "")
     if lower == "" then return true end
-    local patterns = {
-        "^cover$", "^title", "^half%-title", "^copyright", "^table of contents",
-        "^contents$", "^dedication", "^acknowledgment", "^also by", "^other books",
-        "^about the author", "^about the", "^epigraph$", "^foreword$",
-        "^preface$", "^appendix", "^glossary", "^index$", "^notes$",
-        "^bibliography", "^colophon", "^frontispiece", "^books by",
-        "^praise for", "^reviews", "^blurb",
-    }
-    for _, pat in ipairs(patterns) do
+    for _, pat in ipairs(NON_NARRATIVE_TITLE_PATTERNS) do
         if lower:match(pat) then return true end
     end
     return false

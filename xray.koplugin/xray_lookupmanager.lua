@@ -27,26 +27,6 @@ function LookupManager:normalize(text)
     return clean
 end
 
--- Collect all matches from a category list using a test function.
--- Returns a list of {item, type} tables. Skips items already seen (by name).
-local function collectMatches(categories, seen, testFn)
-    local results = {}
-    for _, cat in ipairs(categories) do
-        if cat.list then
-            for _, item in ipairs(cat.list) do
-                if item.name then
-                    local norm = item.name:lower()
-                    if not seen[norm] and testFn(item.name, cat) then
-                        seen[norm] = true
-                        table.insert(results, { item = item, item_type = cat.type })
-                    end
-                end
-            end
-        end
-    end
-    return results
-end
-
 -- Perform a robust lookup and return ALL matching candidates, prioritised by
 -- pass quality (exact → contains query → query contained in name → keyword).
 -- Returns a list of {item, item_type}, which may be empty.
@@ -64,24 +44,17 @@ function LookupManager:lookupAll(text)
 
     local seen = {}  -- tracks already-added names across passes
 
-    -- Pass 1: Exact match (using cached normalized names if available)
-    local results = collectMatches(categories, seen, function(name, cat_item)
-        local item = cat_item -- the specific item from the list
-        -- Note: collectMatches passes (item.name, cat) where cat is {list, type}
-        -- Wait, collectMatches implementation is: testFn(item.name, cat)
-        -- I need the item itself to check _norm_name.
-        -- Let's check collectMatches again.
-        return nil -- dummy
-    end)
-    -- Actually, let's just rewrite the passes for performance
-    
     local final_results = {}
     
     local function addIfMatch(item, item_type, score)
         local n = (item.name or ""):lower()
         if seen[n] then return end
         
-        local norm = item._norm_name or self:normalize(item.name)
+        local norm = item._norm_name
+        if not norm then
+            norm = self:normalize(item.name)
+            item._norm_name = norm
+        end
         
         -- Exact
         if norm == query then

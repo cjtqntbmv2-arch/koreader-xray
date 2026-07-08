@@ -10,6 +10,8 @@ local Event = require("ui/event")
 local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
 local XRayConfig = require(plugin_path .. "xray_config")
 
+local HIGHLIGHT_STOPWORDS = { ["mr"]=true, ["mrs"]=true, ["ms"]=true, ["miss"]=true, ["dr"]=true, ["sir"]=true, ["lord"]=true, ["lady"]=true, ["professor"]=true, ["the"]=true, ["and"]=true }
+
 local M = {}
 
 function M:showHighlightOverlay(boxes)
@@ -314,13 +316,11 @@ function M:highlightMentionsOnPage(page, entity)
         if type(entity) == "table" then
             table.insert(names_to_search, entity.name)
             
-            local honorifics = { ["mr"]=true, ["mrs"]=true, ["ms"]=true, ["miss"]=true, ["dr"]=true, ["sir"]=true, ["lord"]=true, ["lady"]=true, ["professor"]=true, ["the"]=true, ["and"]=true }
-            
             -- Dynamically extract significant word parts (like first/last name) for highlighting
             if entity.name:match("%s") then
                 for w in entity.name:gmatch("%S+") do
                     local clean_w = w:gsub("[%p%s]+", "")
-                    if #clean_w > 3 and not honorifics[clean_w:lower()] then
+                    if #clean_w > 3 and not HIGHLIGHT_STOPWORDS[clean_w:lower()] then
                         table.insert(names_to_search, clean_w)
                     end
                 end
@@ -334,7 +334,7 @@ function M:highlightMentionsOnPage(page, entity)
                         if alias:match("%s") then
                             for w in alias:gmatch("%S+") do
                                 local clean_w = w:gsub("[%p%s]+", "")
-                                if #clean_w > 3 and not honorifics[clean_w:lower()] then
+                                if #clean_w > 3 and not HIGHLIGHT_STOPWORDS[clean_w:lower()] then
                                     table.insert(names_to_search, clean_w)
                                 end
                             end

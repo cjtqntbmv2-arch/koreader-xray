@@ -85,5 +85,12 @@ describe("xray_lookupmanager", function()
             assert.are.equal("associative coherence", results[1].item.name)
             assert.are.equal(100, results[1].score)
         end)
+
+        it("caches _norm_name onto the item after a lookup", function()
+            local item = { name = "Rand al'Thor" }
+            plugin.characters = { item }
+            lm:lookupAll("Rand al'Thor")
+            assert.truthy(item._norm_name)
+        end)
     end)
 end)
