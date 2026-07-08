@@ -598,20 +598,23 @@ function XRayPlugin:triggerBackgroundMergeFetch(chapter_title, unique_id)
     if self.active_snapshot_index then return end
     if self.isPrefetchComplete and self:isPrefetchComplete() then return end
 
+    -- Cheap local guards first; NetworkMgr:isOnline() is a blocking DNS probe
+    -- on the UI thread and must be the LAST gate.
+    -- Safety Check: Ensure API keys are configured before background activity
+    if not self.ai_helper:hasApiKey() then
+        return
+    end
+
+    -- Cooldown check to prevent API spamming
+    local cooldown = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_cooldown or 300
+    local now = os.time()
+    if self.last_bg_fetch_time and (now - self.last_bg_fetch_time) < cooldown then
+        return
+    end
+
     -- SILENT NETWORK CHECK: use isOnline() instead of runWhenOnline to avoid "white box" connecting dialogs
     local NetworkMgr = require("ui/network/manager")
     if NetworkMgr:isConnected() and NetworkMgr:isOnline() then
-        -- Safety Check: Ensure API keys are configured before background activity
-        if not self.ai_helper:hasApiKey() then
-            return
-        end
-
-        -- Cooldown check to prevent API spamming
-        local cooldown = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_cooldown or 300
-        local now = os.time()
-        if self.last_bg_fetch_time and (now - self.last_bg_fetch_time) < cooldown then
-            return
-        end
         self.last_bg_fetch_time = now
 
         local current_page = self.ui:getCurrentPage()

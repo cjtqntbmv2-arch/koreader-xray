@@ -127,6 +127,21 @@ describe("auto-fetch retry cap", function()
     end)
 end)
 
+describe("triggerBackgroundMergeFetch guard order", function()
+    it("checks api key and cooldown before touching the network", function()
+        local plugin = mkPlugin()
+        plugin.ai_helper = { settings = { auto_fetch_cooldown = 300 }, hasApiKey = function() return false end }
+        local net = package.loaded["ui/network/manager"]
+        local probes = 0
+        local old_conn, old_online = net.isConnected, net.isOnline
+        net.isConnected = function() probes = probes + 1; return true end
+        net.isOnline = function() probes = probes + 1; return true end
+        plugin:triggerBackgroundMergeFetch("Chapter 1")
+        net.isConnected, net.isOnline = old_conn, old_online
+        assert.are.equal(0, probes)  -- ohne API-Key darf kein Netz-Call laufen
+    end)
+end)
+
 describe("autoLoadCache staged timers", function()
     it("schedules all post-load stages within 2 seconds", function()
         local plugin = mkPlugin()
