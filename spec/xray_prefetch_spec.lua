@@ -3,9 +3,11 @@ require("spec.spec_helper")
 
 -- The network manager is not part of spec_helper's fakes; the prefetch loop
 -- requires it lazily at call time.
+local net_backup = package.loaded["ui/network/manager"]
 package.loaded["ui/network/manager"] = {
     isConnected = function() return true end,
     isOnline = function() return true end,
+    runWhenOnline = function() end,
 }
 
 local prefetch = require("xray_prefetch")
@@ -624,3 +626,7 @@ describe("xray_prefetch", function()
         end)
     end)
 end)
+
+-- Restore the network manager fake to spec_helper's default (offline with runWhenOnline).
+-- This file's override leaks into subsequent specs when run in a shared Lua process.
+package.loaded["ui/network/manager"] = net_backup
