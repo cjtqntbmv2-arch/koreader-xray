@@ -132,6 +132,33 @@ def test_terms_accumulate_aliases():
     assert state.terms[0]["definition"] == "a magic user"
 
 
+def test_historical_figures_field_merge_split():
+    state = BookState()
+
+    state.merge_segment(
+        clean_response(
+            {
+                "historical_figures": [
+                    {"name": "Napoleon", "biography": "Corsican-born military leader"}
+                ]
+            }
+        ),
+        checkpoint_pct=10,
+    )
+    # Segment 2 omits biography but supplies the previously-empty importance_in_book.
+    state.merge_segment(
+        clean_response(
+            {"historical_figures": [{"name": "Napoleon", "importance_in_book": "central to Act II"}]}
+        ),
+        checkpoint_pct=40,
+    )
+
+    assert len(state.historical_figures) == 1
+    fig = state.historical_figures[0]
+    assert fig["biography"] == "Corsican-born military leader"  # newest-non-empty: not blanked
+    assert fig["importance_in_book"] == "central to Act II"  # fill-if-empty
+
+
 def test_snapshot_is_deep_copy():
     state = BookState()
     state.merge_segment(
