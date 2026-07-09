@@ -619,14 +619,14 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
                         }
                     }
                 end
+                self._entity_seq_counter = self._entity_seq_counter or { n = 0 }
+                self:stampFirstAppearance(new_char, current_page, self._entity_seq_counter)
                 table.insert(self.characters, new_char)
             end
         end
-        -- Dedup then re-sort the entire character list by frequency in the current context
+        -- Dedup then re-sort the entire character list chronologically by first appearance
         self.characters = self:deduplicateByName(self.characters, "name")
-        if book_text and #book_text > 0 then
-            self:sortDataByFrequency(self.characters, book_text, "name")
-        end
+        self:sortEntityList(self.characters, "character")
         -- Merge historical figures
         for _, new_fig in ipairs(final_book_data.historical_figures or {}) do
             local found = false
@@ -714,10 +714,13 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
                         }
                     }
                 end
+                self._entity_seq_counter = self._entity_seq_counter or { n = 0 }
+                self:stampFirstAppearance(new_loc, current_page, self._entity_seq_counter)
                 table.insert(self.locations, new_loc)
             end
         end
         self.locations = self:deduplicateByName(self.locations, "name")
+        self:sortEntityList(self.locations, "location")
         -- Merge terms
         self.terms = self.terms or {}
         for _, new_term in ipairs(final_book_data.terms or {}) do
@@ -1116,14 +1119,16 @@ function M:fetchMoreCharacters()
                     end
                 end
                 if not found then
+                    self._entity_seq_counter = self._entity_seq_counter or { n = 0 }
+                    self:stampFirstAppearance(new_char, self.ui:getCurrentPage(), self._entity_seq_counter)
                     table.insert(self.characters, new_char)
                     new_count = new_count + 1
                 end
             end
-            
-            -- Re-sort by frequency based on the newly extracted samples
+
+            -- Re-sort chronologically by first appearance
             if book_text and #book_text > 0 then
-                self:sortDataByFrequency(self.characters, book_text, "name")
+                self:sortEntityList(self.characters, "character")
             end
             
             -- Save to cache

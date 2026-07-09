@@ -171,6 +171,16 @@ function M:sortEntityList(list, kind, text)
     end
 end
 
+-- Stamp first-appearance metadata exactly once. counter is a table {n=<int>}
+-- kept on the plugin (self._entity_seq_counter) so first_seq is monotonic per book.
+function M:stampFirstAppearance(item, page, counter)
+    if item.first_page then return item end
+    counter.n = (counter.n or 0) + 1
+    item.first_seq = counter.n
+    item.first_page = page
+    return item
+end
+
 function M:isMoreCompleteName(new_name, old_name)
     if not new_name or not old_name then return false end
     if #new_name <= #old_name then return false end

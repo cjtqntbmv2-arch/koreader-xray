@@ -284,4 +284,19 @@ describe("xray_data", function()
             assert.are.equal("Alpha", list[1].name)
         end)
     end)
+
+    describe("stampFirstAppearance", function()
+        it("sets first_page and a monotonic first_seq only once", function()
+            local counter = { n = 0 }
+            local a, b = { name = "A" }, { name = "B" }
+            xray_data:stampFirstAppearance(a, 10, counter)
+            xray_data:stampFirstAppearance(b, 20, counter)
+            assert.are.equal(10, a.first_page)
+            assert.are.equal(20, b.first_page)
+            assert.is_true(b.first_seq > a.first_seq)
+            -- re-stamp must not move an existing entity
+            xray_data:stampFirstAppearance(a, 999, counter)
+            assert.are.equal(10, a.first_page)
+        end)
+    end)
 end)

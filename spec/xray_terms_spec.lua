@@ -245,6 +245,7 @@ describe("xray_terms", function()
                 },
                 deduplicateByName = function(self, data, key) return data end,
                 sortDataByFrequency = function(self, data, text, key) return data end,
+                sortEntityList = function(self, data, kind, text) return data end,
                 isNonNarrativeChapter = function() return false end,
                 assignTimelinePages = function() end,
                 sortTimelineByTOC = function() end,

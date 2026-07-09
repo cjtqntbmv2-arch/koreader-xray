@@ -296,6 +296,8 @@ function _G.createMockPlugin()
         isNonNarrativeChapter = function() return false end,
         deduplicateByName = function(self, list) return list end,
         sortDataByFrequency = function(self, list) return list end,
+        sortEntityList = function(self, list) return list end,
+        stampFirstAppearance = function(self, item) return item end,
         assignTimelinePages = function() end,
         sortTimelineByTOC = function() end
     }
