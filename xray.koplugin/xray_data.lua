@@ -276,6 +276,7 @@ function M:deduplicateByName(list, key)
                             end
                             if not found and new_alias:lower() ~= existing.name:lower() then
                                 table.insert(existing.aliases, new_alias)
+                                existing._norm_aliases = nil
                                 alias_map[new_alias:lower()] = existing
                             end
                         end
@@ -521,13 +522,14 @@ function M:mergeEntries(list, primary_name, secondary_name, ai_merged_desc)
     for _, a in ipairs(primary.aliases) do existing_aliases[a:lower()] = true end
     if secondary.aliases then
         for _, a in ipairs(secondary.aliases) do
-            if type(a) == "string" and not existing_aliases[a:lower()] 
+            if type(a) == "string" and not existing_aliases[a:lower()]
                and a:lower() ~= primary.name:lower() then
                 table.insert(primary.aliases, a)
                 existing_aliases[a:lower()] = true
             end
         end
     end
+    primary._norm_aliases = nil
 
     -- 3. Merge description
     if ai_merged_desc and ai_merged_desc ~= "" then

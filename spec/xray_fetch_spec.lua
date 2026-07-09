@@ -119,6 +119,27 @@ describe("xray_fetch", function()
             -- 2 characters + 1 location must each be stamped exactly once
             assert.are.equal(3, stamp_calls)
         end)
+
+        it("invalidates a term's _norm_aliases cache when replacing its aliases", function()
+            plugin.terms = {
+                { name = "Warg", definition = "old", aliases = { "Skinchanger" }, _norm_aliases = { "skinchanger" } }
+            }
+            local new_data = {
+                characters = {},
+                locations = {},
+                historical_figures = {},
+                timeline = {},
+                terms = {
+                    { name = "Warg", definition = "new", aliases = { "Beastling" } }
+                }
+            }
+
+            plugin:finalizeXRayData(new_data, "Test Title", "Test Author", "Some text", true, true, 10)
+
+            assert.are.equal(1, #plugin.terms)
+            assert.are.equal("Beastling", plugin.terms[1].aliases[1])
+            assert.is_true(plugin.terms[1]._norm_aliases == nil)
+        end)
     end)
 
     describe("runPostFetchDuplicateCheck", function()

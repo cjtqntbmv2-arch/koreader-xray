@@ -108,6 +108,31 @@ describe("xray_data", function()
             assert.are.equal(1, #result)
             assert.are.equal("Daenerys Targaryen", result[1].name)
         end)
+
+        it("invalidates the _norm_aliases cache when merging aliases without promotion", function()
+            -- Same canonical name (no promoteName), incoming duplicate adds a
+            -- new alias -- the stale lazy cache must be dropped so lookupAll
+            -- rebuilds it and sees the new alias.
+            local kept = { name = "Alice", aliases = { "Al" }, _norm_aliases = { "al" } }
+            local dup  = { name = "Alice", aliases = { "Ally" } }
+            local result = xray_data:deduplicateByName({ kept, dup }, "name")
+            assert.are.equal(1, #result)
+            assert.are.equal(2, #kept.aliases)
+            assert.is_true(kept._norm_aliases == nil)
+        end)
+    end)
+
+    describe("mergeEntries", function()
+        it("invalidates the _norm_aliases cache when absorbing aliases without promotion", function()
+            -- Primary keeps its name (non-promote branch): secondary's name and
+            -- aliases are absorbed, so the stale lazy cache must be dropped.
+            local primary   = { name = "Alice Smith", aliases = { "Al" }, _norm_aliases = { "al" }, description = "d1" }
+            local secondary = { name = "Alice", aliases = { "Ally" }, description = "d2" }
+            local list = { primary, secondary }
+            assert.is_true(xray_data:mergeEntries(list, "Alice Smith", "Alice"))
+            assert.are.equal(1, #list)
+            assert.is_true(primary._norm_aliases == nil)
+        end)
     end)
 
     describe("assignTimelinePages", function()
