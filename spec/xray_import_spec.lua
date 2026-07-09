@@ -367,6 +367,36 @@ describe("xray_import", function()
             assert.are.equal(3, snaps[3].checkpoint_index)
         end)
 
+        it("builds snapshot n from doc_json.checkpoints[mapped[n].index], not checkpoints[n]", function()
+            -- Engineer the same collision the _resolveCheckpointPages spec uses:
+            -- checkpoint 2's snippet resolves to page 29, colliding with
+            -- checkpoint 1's TOC-derived 29, so it is dropped and
+            -- mapped = {{index=1,page=29},{index=3,page=100}}. snapshots[2]
+            -- must be built from checkpoints[3] (mapped[2].index), which alone
+            -- carries "The Long Tide" and "Saint Bede" -- copying
+            -- checkpoints[2] (the dropped one) or checkpoints[n] would produce
+            -- a snapshot missing both.
+            local self_ = with_document(mock_plugin(), 100, toc, { [SNIP2] = hits(29) })
+            self_.computeCheckpoints = function() return {} end
+            local doc = mock_doc()
+            local mapped = self_:_resolveCheckpointPages(doc)
+            assert.are.equal(2, #mapped)
+            assert.are.equal(3, mapped[2].index)
+
+            local _, snaps = self_:_buildImportedCache(doc, mapped)
+            assert.are.equal(2, snaps[2].checkpoint_index)
+
+            local has_location, has_figure = false, false
+            for _, l in ipairs(snaps[2].locations) do
+                if l.name == "The Long Tide" then has_location = true end
+            end
+            for _, f in ipairs(snaps[2].historical_figures) do
+                if f.name == "Saint Bede" then has_figure = true end
+            end
+            assert.is_true(has_location)
+            assert.is_true(has_figure)
+        end)
+
         it("carries page and percent onto each snapshot", function()
             local _, snaps = build()
             assert.are.equal(29, snaps[1].page)
@@ -405,6 +435,23 @@ describe("xray_import", function()
             assert.are.equal(47, snaps[3].characters[2].first_page)
             assert.are.equal(92, snaps[3].locations[2].first_page)
             assert.are.equal(1, snaps[3].characters[1].first_seq)
+        end)
+
+        it("recomputes first_page on a second call instead of keeping a stale value", function()
+            -- A retried import (e.g. after the user changes font size, which
+            -- changes KOReader's own pagination) must not leave first_page
+            -- pinned to the page_count of the first attempt.
+            local doc = mock_doc()
+            local self_ = with_document(mock_plugin(), 100, toc, { [SNIP2] = hits(47) })
+            self_.computeCheckpoints = function() return {} end
+            local mapped = self_:_resolveCheckpointPages(doc)
+
+            local _, snaps1 = self_:_buildImportedCache(doc, mapped)
+            assert.are.equal(14, snaps1[1].characters[1].first_page)  -- pctToPage(14, 100)
+
+            self_.ui.document.getPageCount = function() return 200 end
+            local _, snaps2 = self_:_buildImportedCache(doc, mapped)
+            assert.are.equal(28, snaps2[1].characters[1].first_page)  -- pctToPage(14, 200)
         end)
 
         it("leaves terms without first_page (they sort alphabetically)", function()
@@ -455,13 +502,21 @@ describe("xray_import", function()
 
         it("grows monotonically: every snapshot contains its predecessor's entities", function()
             local _, snaps = build()
+
+            local seen1 = {}
+            for _, c in ipairs(snaps[1].characters) do seen1[c.name] = true end
+            assert.is_nil(seen1["Corwin Vale"])  -- first appears at checkpoint 2
+
+            local grew = false
             for n = 2, #snaps do
                 local seen = {}
                 for _, c in ipairs(snaps[n].characters) do seen[c.name] = true end
                 for _, c in ipairs(snaps[n - 1].characters) do
                     assert.is_true(seen[c.name] == true)
                 end
+                if #snaps[n].characters > #snaps[n - 1].characters then grew = true end
             end
+            assert.is_true(grew)
         end)
 
         it("gives every timeline event a page and keeps them in the main cache", function()
@@ -472,6 +527,19 @@ describe("xray_import", function()
             assert.is_string(book_data.timeline[1].event)
             assert.is_string(book_data.timeline[1].chapter)
             assert.is_nil(snaps[1].timeline)
+        end)
+
+        it("hides a timeline event with a missing or non-numeric pct instead of defaulting to page 1", function()
+            -- The device's own rule (xray_prefetch.lua visibleTimeline) hides
+            -- this-book events with no page anchor; defaulting to page 1 would
+            -- show an unplaceable event to the reader from checkpoint 1 onward.
+            local doc = mock_doc()
+            doc.timeline[1].pct = nil
+            doc.timeline[2].pct = "not-a-number"
+            local book_data = build(100, doc)
+            assert.is_nil(book_data.timeline[1].page)
+            assert.is_nil(book_data.timeline[2].page)
+            assert.are.equal(92, book_data.timeline[3].page)  -- sibling keeps its page
         end)
 
         it("mirrors the last snapshot into the main cache", function()
@@ -487,6 +555,21 @@ describe("xray_import", function()
             doc.book_fingerprint.authors = { "Jane Author", "John Writer" }
             local book_data = build(100, doc)
             assert.are.equal("Jane Author, John Writer", book_data.author)
+        end)
+
+        it("treats a bare authors string as a single author instead of raising", function()
+            local doc = mock_doc()
+            doc.book_fingerprint.authors = "Jane Author"
+            local book_data = build(100, doc)
+            assert.are.equal("Jane Author", book_data.author)
+        end)
+
+        it("coerces a non-string author element instead of raising", function()
+            local doc = mock_doc()
+            doc.book_fingerprint.authors = { "Jane Author", { name = "John Writer" } }
+            local book_data = build(100, doc)
+            assert.is_string(book_data.author)
+            assert.is_true(book_data.author:find("Jane Author", 1, true) ~= nil)
         end)
 
         it("sets last_fetch_page to the last mapped checkpoint page", function()

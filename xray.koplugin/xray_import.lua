@@ -249,12 +249,27 @@ end
 local function prepareList(list, kind, page_count)
     list = coerceList(list, kind)
     for i, e in ipairs(list) do
-        if (kind == "characters" or kind == "locations") and e.first_pct and not e.first_page then
+        if (kind == "characters" or kind == "locations") and e.first_pct then
+            -- Recomputed every call, not stamped once: a retried import (e.g.
+            -- after a font-size change alters KOReader's own page_count) must
+            -- not keep a first_page computed against the previous pagination.
             e.first_page = pctToPage(e.first_pct, page_count)
         end
         e.sort_order = i
     end
     return list
+end
+
+-- fp.authors is JSON from the trust boundary: calibre normally emits an
+-- array, but a hand-edited or malformed xray.json can hand us a bare string
+-- (kept verbatim as the one author) or an array containing a non-string
+-- element (coerced with tostring). table.concat raises on either shape.
+local function joinAuthors(authors)
+    if type(authors) == "string" then return authors end
+    if type(authors) ~= "table" then return "" end
+    local out = {}
+    for _, a in ipairs(authors) do table.insert(out, tostring(a)) end
+    return table.concat(out, ", ")
 end
 
 -- Build exactly what a completed on-device prefetch leaves behind: the main
@@ -280,12 +295,17 @@ function M:_buildImportedCache(doc_json, mapped)
 
     local last = snapshots[#snapshots]
 
-    -- D2: exactly one timeline, in the main cache, page-anchored.
-    -- visibleTimeline() hides this-book events without a page, so always set it.
+    -- D2: exactly one timeline, in the main cache, page-anchored. An event
+    -- with a missing or non-numeric pct cannot be placed on the spoiler axis;
+    -- leave page nil so visibleTimeline() (xray_prefetch.lua) falls into its
+    -- conservative hidden branch, instead of pctToPage's min-1 clamp planting
+    -- it on page 1 -- which would show it to the reader from checkpoint 1
+    -- onward and invert the spoiler-safety direction.
     local timeline = {}
     for _, ev in ipairs(doc_json.timeline or {}) do
+        local pct = tonumber(ev.pct)
         table.insert(timeline, {
-            page = pctToPage(ev.pct, page_count),
+            page = pct and pctToPage(pct, page_count),
             chapter = tostring(ev.chapter or ""),
             event = tostring(ev.event or ""),
         })
@@ -313,7 +333,7 @@ function M:_buildImportedCache(doc_json, mapped)
 
     local book_data = {
         book_title = tostring(fp.title or ""),
-        author = table.concat(fp.authors or {}, ", "),
+        author = joinAuthors(fp.authors),
         book_type = doc_json.book_type,
         characters = last.characters,
         locations = last.locations,
