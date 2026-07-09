@@ -295,22 +295,35 @@ def test_d4_timeline_never_exceeds_last_checkpoint(fixture_result):
     assert offenders == []
 
 
-def test_d4_timeline_cumulative_by_checkpoint(fixture_result):
-    """Filtering the flat top-level timeline to pct <= cp.percent, for each
-    checkpoint in order, must yield a monotonically growing (never
-    shrinking) set -- i.e. an event revealed at some percent stays revealed
-    at every later checkpoint too."""
+def test_timeline_events_stamped_at_real_checkpoint_percents(fixture_result):
+    """Every timeline event's pct must be one of the actual checkpoint
+    percents. merge_segment() stamps each event with the exact checkpoint_pct
+    of the checkpoint it was merged into (xray_core/merge.py:
+    `self.timeline.append({**ev, "pct": checkpoint_pct})`, called from
+    generate.py as `state.merge_segment(results[...], cp.percent)`) -- so a
+    shuffled/constant/garbage pct that isn't a real checkpoint value must
+    fail here.
+
+    (Replaces a tautological predecessor that filtered the one fixed
+    timeline list by each checkpoint's ascending percent and asserted the
+    filtered sets grew -- true for ANY list contents whenever checkpoint
+    percents ascend, so it couldn't fail even if every event were
+    mis-stamped, e.g. pct=1 across the board.)"""
     _, doc = fixture_result
     checkpoints = doc["checkpoints"]
+    checkpoint_percents = {cp["percent"] for cp in checkpoints}
+    last_percent = checkpoints[-1]["percent"]
 
-    def upto(pct):
-        return {(ev["chapter"], ev["event"], ev["pct"]) for ev in doc["timeline"] if ev["pct"] <= pct}
+    assert doc["timeline"], "fixture produced no timeline events to check"
 
-    prev_set = set()
-    for cp in checkpoints:
-        current = upto(cp["percent"])
-        assert prev_set <= current, f"timeline shrank going into checkpoint {cp['percent']}%"
-        prev_set = current
+    event_pcts = {ev["pct"] for ev in doc["timeline"]}
+    assert event_pcts <= checkpoint_percents, (
+        "timeline event(s) stamped with a pct that isn't any checkpoint's "
+        f"percent: {sorted(event_pcts - checkpoint_percents)} not in {sorted(checkpoint_percents)}"
+    )
+    assert all(ev["pct"] <= last_percent for ev in doc["timeline"]), (
+        f"timeline event exceeds last checkpoint ({last_percent}%)"
+    )
 
 
 # ---------------------------------------------------------------------------
