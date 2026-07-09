@@ -92,7 +92,16 @@ function M:_tocEndPage(narrative, toc_title, cursor, page_count)
     for i = cursor + 1, #narrative do
         if M._normTitle(narrative[i].title) == want then
             local next_start = narrative[i + 1] and narrative[i + 1].page
-            return (next_start and (next_start - 1)) or page_count, i
+            local page = (next_start and (next_start - 1)) or page_count
+            -- Two headings can render on the same page (coarse e-reader
+            -- pagination); if that page is 1, next_start - 1 is 0, which
+            -- would silently drop checkpoint 1 in _resolveCheckpointPages.
+            -- Clamp, don't drop: the chapter genuinely ends on page 1, so
+            -- activating its snapshot there shows the reader data they have
+            -- actually reached -- computeCheckpoints guards the identical
+            -- end_page the same way (`>= 1`).
+            if page < 1 then page = 1 end
+            return page, i
         end
     end
     return nil

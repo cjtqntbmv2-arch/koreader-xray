@@ -166,6 +166,22 @@ describe("xray_import", function()
         it("returns nil for an empty title", function()
             assert.is_nil(mock_plugin():_tocEndPage(narrative, "", 0, 100))
         end)
+
+        it("clamps to page 1 when the next chapter starts on the same page", function()
+            -- Two headings can render on the same physical page on coarse
+            -- e-reader pagination; if that page is 1, next_start - 1 is 0,
+            -- which would silently drop checkpoint 1 in
+            -- _resolveCheckpointPages (xray_prefetch.lua's computeCheckpoints
+            -- guards the analogous end_page with `>= 1`; this must too).
+            local collide = {
+                { title = "Part One",  page = 1 },
+                { title = "Chapter 1", page = 1 },
+                { title = "Chapter 2", page = 5 },
+            }
+            local page, cursor = mock_plugin():_tocEndPage(collide, "Part One", 0, 100)
+            assert.are.equal(1, page)
+            assert.are.equal(1, cursor)
+        end)
     end)
 
     describe("_snippetPage", function()
@@ -234,8 +250,14 @@ describe("xray_import", function()
 
         it("treats a null chapter_anchor as absent without indexing it", function()
             -- json.decode may hand us a truthy null sentinel instead of nil.
+            -- Use a boolean, not a string: Lua strings carry a metatable, so
+            -- `("x").toc_title` is nil without erroring -- a weakened guard
+            -- (`if anchor and anchor.toc_title`) would pass a string sentinel
+            -- identically. A boolean is the sentinel some JSON decoders
+            -- actually emit for null, and indexing it DOES raise "attempt to
+            -- index a boolean value" -- the real failure this guard prevents.
             local doc = mock_doc()
-            doc.checkpoints[2].chapter_anchor = "NULL-SENTINEL"
+            doc.checkpoints[2].chapter_anchor = true
             local self_ = with_document(mock_plugin(), 100, toc, { [SNIP2] = hits(47) })
             local mapped = self_:_resolveCheckpointPages(doc)  -- must not throw
             assert.are.equal(47, mapped[2].page)
@@ -263,10 +285,20 @@ describe("xray_import", function()
 
         it("never drops the first checkpoint, so the smallest snapshot stays poorest", function()
             -- resolveSnapshotIndexForPage shows `smallest` before the first
-            -- checkpoint; if cp1 were dropped a richer snapshot would take its slot.
-            local self_ = with_document(mock_plugin(), 100, {}, {})
+            -- checkpoint; if cp1 were dropped a richer snapshot would take its
+            -- slot. Route checkpoint 1 through the TOC tier (not the percent
+            -- tier, which trivially can't collide) with two narrative entries
+            -- colliding on page 1 -- the exact shape that made an unclamped
+            -- _tocEndPage return 0 and drop checkpoint 1 entirely.
+            local collide_toc = {
+                { title = "The Harbor at Dawn", page = 1 },
+                { title = "Salt and Ledgers",   page = 1 },
+                { title = "The Long Tide",      page = 80 },
+            }
+            local self_ = with_document(mock_plugin(), 100, collide_toc, {})
             local mapped = self_:_resolveCheckpointPages(mock_doc())
             assert.are.equal(1, mapped[1].index)
+            assert.are.equal(1, mapped[1].page)
         end)
 
         it("never lets a non-final checkpoint reach page_count", function()
@@ -284,6 +316,12 @@ describe("xray_import", function()
 
         it("returns nil for a book too short to stage", function()
             assert.is_nil(with_document(mock_plugin(), 2, {}, {}):_resolveCheckpointPages(mock_doc()))
+        end)
+
+        it("proceeds for page_count == 3, the minimum stageable length", function()
+            -- Pins the boundary itself: only page_count == 2 -> nil was
+            -- covered before, so an off-by-one (e.g. `< 4`) could slip through.
+            assert.is_not_nil(with_document(mock_plugin(), 3, {}, {}):_resolveCheckpointPages(mock_doc()))
         end)
 
         it("does not pin the last checkpoint of an incomplete document to page_count", function()
