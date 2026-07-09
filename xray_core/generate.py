@@ -231,8 +231,12 @@ def _generator_version():
     version_file = Path(__file__).resolve().parent.parent / "VERSION"
     try:
         return version_file.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        return "0.1.0"  # VERSION not packaged (e.g. plugin zip) -- fall back rather than crash
+    except OSError:
+        # VERSION not packaged, or unreadable -- e.g. inside a real (unextracted)
+        # calibre plugin zip, "parent.parent" lands on the zip file itself, and
+        # reading "<zip>/VERSION" raises NotADirectoryError, not FileNotFoundError.
+        # Catch OSError broadly so every such case falls back rather than crashes.
+        return "0.1.0"
 
 
 def generate_xray(book: BookText, client, language, detail_level,
