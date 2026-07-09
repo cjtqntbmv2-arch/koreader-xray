@@ -2,6 +2,7 @@
 member copying (not filename-based -- duplicate-named entries would otherwise
 silently corrupt on read), compress_type preservation, and re-embed idempotency.
 """
+import warnings
 import zipfile
 from xml.etree import ElementTree as ET
 
@@ -10,6 +11,7 @@ from epub_fixture import build_epub
 from xray_core.embed import DATA_PATH, embed_xray, read_embedded
 
 _OPF_NS = "http://www.idpf.org/2007/opf"
+_DC_NS = "http://purl.org/dc/elements/1.1/"
 _OPF_PATH = "OEBPS/content.opf"  # epub_fixture.py's fixed layout
 
 
@@ -71,6 +73,31 @@ def test_manifest_entry_idempotent(tmp_path, minimal_doc):
     assert namelist.count(DATA_PATH) == 1
 
 
+def test_embed_preserves_opf_namespaced_attributes(tmp_path, minimal_doc):
+    """calibre-authored EPUB2 OPFs carry opf:role/opf:file-as/opf:scheme.
+    A prior implementation round-tripped the OPF through ET.tostring after
+    ET.register_namespace("", OPF_NS), which strips these attributes' opf:
+    prefix (an unprefixed attribute means "no namespace", not "default
+    namespace"). The fix must splice bytes instead, leaving them untouched.
+    """
+    book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")], opf_attrs=True)
+    out = tmp_path / "out.epub"
+
+    embed_xray(book, minimal_doc, out)
+
+    with zipfile.ZipFile(out) as zf:
+        root = ET.fromstring(zf.read(_OPF_PATH))
+
+    creator = root.find(f"{{{_OPF_NS}}}metadata/{{{_DC_NS}}}creator")
+    identifier = root.find(f"{{{_OPF_NS}}}metadata/{{{_DC_NS}}}identifier")
+    assert creator is not None
+    assert identifier is not None
+
+    assert creator.get(f"{{{_OPF_NS}}}role") == "aut"
+    assert creator.get(f"{{{_OPF_NS}}}file-as") == "Author, Jane"
+    assert identifier.get(f"{{{_OPF_NS}}}scheme") == "calibre"
+
+
 def test_preserves_compress_type(tmp_path, minimal_doc):
     book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
     with zipfile.ZipFile(book, "a") as zf:
@@ -101,12 +128,16 @@ def test_reembed_replaces_old(tmp_path, minimal_doc):
 
 def test_duplicate_named_entry_not_corrupted(tmp_path, minimal_doc):
     book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
-    with zipfile.ZipFile(book, "a") as zf:
-        zf.writestr("OEBPS/dup.txt", "first copy")
-        zf.writestr("OEBPS/dup.txt", "second copy, much longer than the first")
-    out = tmp_path / "out.epub"
-
-    embed_xray(book, minimal_doc, out)
+    # Deliberately create a malformed (duplicate-named) archive to prove embed_xray
+    # preserves both entries. zipfile.writestr warns on duplicate names; that warning
+    # is expected here, so confine it to this setup+embed block and keep suite output clean.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Duplicate name")
+        with zipfile.ZipFile(book, "a") as zf:
+            zf.writestr("OEBPS/dup.txt", "first copy")
+            zf.writestr("OEBPS/dup.txt", "second copy, much longer than the first")
+        out = tmp_path / "out.epub"
+        embed_xray(book, minimal_doc, out)
 
     with zipfile.ZipFile(out) as zf:
         dups = [i for i in zf.infolist() if i.filename == "OEBPS/dup.txt"]

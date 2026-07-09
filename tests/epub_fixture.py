@@ -71,7 +71,7 @@ _AUTHORS = ("Jane Author",)
 _LANGUAGE = "en"
 
 
-def build_epub(tmp_path, chapters, toc=True, epub3=True, encryption_uri=None):
+def build_epub(tmp_path, chapters, toc=True, epub3=True, encryption_uri=None, opf_attrs=False):
     """Write a minimal valid EPUB under `tmp_path` and return its Path.
 
     chapters: list of (title, html_body) tuples -> one xhtml spine item each.
@@ -81,6 +81,10 @@ def build_epub(tmp_path, chapters, toc=True, epub3=True, encryption_uri=None):
         CipherReference to this URI -- a spine path (e.g. "OEBPS/chapter0.xhtml")
         to simulate DRM-encrypted content, or a non-spine path (e.g.
         "OEBPS/fonts/x.otf") to simulate font-only obfuscation.
+    opf_attrs: if True, adds calibre-style opf:-prefixed attributes
+        (opf:file-as/opf:role on dc:creator, opf:scheme on dc:identifier)
+        alongside the default OPF namespace -- reproduces the real-world
+        calibre EPUB2 metadata shape.
     """
     Path(tmp_path).mkdir(parents=True, exist_ok=True)
     path = Path(tmp_path) / "book.epub"
@@ -103,14 +107,21 @@ def build_epub(tmp_path, chapters, toc=True, epub3=True, encryption_uri=None):
         )
         spine_attrs = ' toc="ncx"'
 
-    creators = "".join(f"<dc:creator>{a}</dc:creator>" for a in _AUTHORS)
+    metadata_ns = ' xmlns:dc="http://purl.org/dc/elements/1.1/"'
+    creator_attrs = ""
+    identifier_attrs = ""
+    if opf_attrs:
+        metadata_ns += ' xmlns:opf="http://www.idpf.org/2007/opf"'
+        creator_attrs = ' opf:file-as="Author, Jane" opf:role="aut"'
+        identifier_attrs = ' opf:scheme="calibre"'
+    creators = "".join(f"<dc:creator{creator_attrs}>{a}</dc:creator>" for a in _AUTHORS)
     opf = f"""<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="{'3.0' if epub3 else '2.0'}" unique-identifier="bookid">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <metadata{metadata_ns}>
     <dc:title>{_TITLE}</dc:title>
     {creators}
     <dc:language>{_LANGUAGE}</dc:language>
-    <dc:identifier id="bookid">urn:uuid:00000000-0000-0000-0000-000000000000</dc:identifier>
+    <dc:identifier id="bookid"{identifier_attrs}>urn:uuid:00000000-0000-0000-0000-000000000000</dc:identifier>
   </metadata>
   <manifest>
     {"".join(manifest_items)}
