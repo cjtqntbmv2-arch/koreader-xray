@@ -638,7 +638,7 @@ function ChapterAnalyzer:getAnnotationsForAnalysis(ui)
 end
 
 -- Get detailed samples (Start/Mid/End) from each chapter
-function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit, is_full_book, start_page, known_chapters, end_page, full_text)
+function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit, is_full_book, start_page, known_chapters, end_page, full_text, full_text_budget)
     if not ui or not ui.document then return nil, nil end
 
     local toc = ui.document:getToc()
@@ -761,7 +761,10 @@ function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit
     if #active_chapters > 0 then
         logger.info("ChapterAnalyzer: Detailed sampling for", #active_chapters, "chapters. Budget per chapter:", per_chapter_budget)
         AIHelper:log("ChapterAnalyzer: Sampling " .. #active_chapters .. " chapters with " .. per_chapter_budget .. " chars each.")
-        
+
+        full_text_budget = full_text_budget or 120000
+        local full_emitted = 0
+
         for i, chapter in ipairs(active_chapters) do
             local is_current_chapter = false
             if not is_full_book and current_page and chapter.page and chapter.page <= current_page then
@@ -782,7 +785,8 @@ function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit
             end)
             
             if success and chapter_text and #chapter_text > 100 then
-                if full_text then
+                if full_text and full_emitted < full_text_budget then
+                    full_emitted = full_emitted + #chapter_text
                     table.insert(samples, string.format(
                         "CHAPTER [%s]:\n%s",
                         chapter.title or tostring(i),

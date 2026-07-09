@@ -237,4 +237,23 @@ describe("xray_chapteranalyzer", function()
             assert.is_true(out:find("%[MID%]") ~= nil)
         end)
     end)
+
+    describe("full_text per-segment budget", function()
+        local ca = require("xray_chapteranalyzer")
+        it("falls back to slicing once the budget is exceeded", function()
+            local big = ("W"):rep(50000)  -- one chapter alone > the test budget
+            local ui = { document = {
+                getToc = function() return {
+                    { title = "C1", page = 1,  xpointer = "xp1" },
+                    { title = "C2", page = 50, xpointer = "xp2" },
+                    { title = "C3", page = 90, xpointer = "xp3" },
+                } end,
+                getTextFromXPointer = function(_, xp) return big .. xp end,
+                getPageCount = function() return 100 end,
+            } }
+            -- 9th arg = full_text_budget; small enough to force fallback after chapter 1
+            local out = ca:getDetailedChapterSamples(ui, 200, 150000, true, nil, nil, nil, true, 60000)
+            assert.is_true(out:find("%[MID%]") ~= nil)  -- a later chapter got sliced
+        end)
+    end)
 end)
