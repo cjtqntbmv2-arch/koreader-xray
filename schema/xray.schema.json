@@ -1,0 +1,137 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/calibre-xray/schema/xray.schema.json",
+  "title": "xray.json interchange format (v1)",
+  "description": "Produced by the calibre-xray desktop generator, consumed by the KOReader xray plugin importer. This file documents the full intended shape by hand; xray_core/schema.py is the enforced, hand-rolled validator (stdlib only, no jsonschema) and only checks the subset noted per-field below as 'enforced'. Two rules cannot be expressed in plain JSON Schema and are enforced only in schema.py: checkpoints[].percent must strictly ascend across the array, and the last checkpoint's percent must equal last_percent.",
+  "type": "object",
+  "required": [
+    "schema_version", "generator", "generator_version", "detail_level",
+    "language", "book_fingerprint", "complete", "last_percent",
+    "book_type", "timeline", "checkpoints"
+  ],
+  "properties": {
+    "schema_version": { "const": 1, "description": "enforced: must equal 1" },
+    "generator": { "type": "string" },
+    "generator_version": { "type": "string" },
+    "detail_level": { "type": "string", "description": "e.g. \"normal\", \"detailed\"" },
+    "language": { "type": "string", "description": "e.g. \"en\", \"de\"" },
+    "book_fingerprint": {
+      "type": "object",
+      "description": "enforced: all four keys required, with these types",
+      "required": ["calibre_uuid", "title", "authors", "text_hash"],
+      "properties": {
+        "calibre_uuid": { "type": "string" },
+        "title": { "type": "string" },
+        "authors": { "type": "array", "items": { "type": "string" } },
+        "text_hash": { "type": "string", "description": "\"sha256:<hex>\" over normalize_text(full_text)" }
+      }
+    },
+    "complete": { "type": "boolean" },
+    "last_percent": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "book_type": { "type": "string", "description": "e.g. \"fiction\", \"non-fiction\"" },
+    "timeline": {
+      "type": "array",
+      "description": "not deep-validated by schema.py beyond being a list",
+      "items": {
+        "type": "object",
+        "properties": {
+          "chapter": { "type": "string" },
+          "event": { "type": "string" },
+          "pct": { "type": "integer", "minimum": 0, "maximum": 100 }
+        }
+      }
+    },
+    "checkpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "enforced: percent, snippet_anchor, snapshot",
+        "required": ["percent", "snippet_anchor", "snapshot"],
+        "properties": {
+          "percent": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "snippet_anchor": {
+            "type": "string",
+            "minLength": 1,
+            "description": "80-120 chars, sentence-cut, whitespace-normalized (by convention; only non-empty is enforced)"
+          },
+          "chapter_anchor": {
+            "description": "may be null (densified/10%-fallback checkpoints); not enforced by schema.py",
+            "type": ["object", "null"],
+            "properties": {
+              "toc_title": { "type": "string" },
+              "spine_index": { "type": "integer" }
+            }
+          },
+          "snapshot": {
+            "type": "object",
+            "required": ["characters", "locations", "terms", "historical_figures"],
+            "properties": {
+              "characters": {
+                "type": "array",
+                "description": "enforced: name, first_pct, first_seq per entry",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "first_pct", "first_seq"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "role": { "type": "string" },
+                    "description": { "type": "string" },
+                    "gender": { "type": "string" },
+                    "occupation": { "type": "string" },
+                    "aliases": { "type": "array", "items": { "type": "string" } },
+                    "first_pct": { "type": "integer" },
+                    "first_seq": { "type": "integer" }
+                  }
+                }
+              },
+              "locations": {
+                "type": "array",
+                "description": "enforced: name, first_pct, first_seq per entry",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "first_pct", "first_seq"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "importance": { "type": "string" },
+                    "aliases": { "type": "array", "items": { "type": "string" } },
+                    "first_pct": { "type": "integer" },
+                    "first_seq": { "type": "integer" }
+                  }
+                }
+              },
+              "terms": {
+                "type": "array",
+                "description": "alphabetically ordered; not deep-validated by schema.py beyond being a list",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "aliases": { "type": "array", "items": { "type": "string" } },
+                    "expanded": { "type": "string" },
+                    "category": { "type": "string" },
+                    "definition": { "type": "string" }
+                  }
+                }
+              },
+              "historical_figures": {
+                "type": "array",
+                "description": "ordered by role weight; not deep-validated by schema.py beyond being a list",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "biography": { "type": "string" },
+                    "role": { "type": "string" },
+                    "importance_in_book": { "type": "string" },
+                    "context_in_book": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
