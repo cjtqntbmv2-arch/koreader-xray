@@ -291,6 +291,18 @@ describe("AIHelper", function()
             assert.is_true(prompt:find("applies to NEW characters", 1, true) ~= nil)
         end)
 
+        it("segment completeness names locations and terms too", function()
+            local prompt = AIHelper:createPrompt("Book", "Author", {
+                reading_percent = 40,
+                prefetch_segment = true,
+                chapter_samples = "CHAPTER [1]: text",
+                book_text = "text",
+            }, "comprehensive_xray")
+            local p = prompt:lower()
+            assert.is_true(p:find("every location") ~= nil)
+            assert.is_true(p:find("every term") ~= nil)
+        end)
+
         it("appends a name collision warning to the duplicate check prompt", function()
             local captured
             local orig = AIHelper.executeUnifiedRequest

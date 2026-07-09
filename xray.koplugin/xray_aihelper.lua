@@ -1493,6 +1493,7 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
                 .. "\n- This fetch covers ONE bounded text segment of the book. Extract EVERY character who speaks or acts within the provided samples, including minor ones."
                 .. "\n- For this segment fetch, these rules take precedence over the ANTI-TRUNCATION PROTOCOL and the character count guidance in Step 1 above."
                 .. "\n- The character count target of {NUM_CHARS} applies to NEW characters found in this segment, NOT to the total list."
+                .. "\n- Apply the SAME exhaustive rule to LOCATIONS and to TERMS/world-building elements: list EVERY location and EVERY term that appears in this segment, including minor ones, with short definitions, counting only NEW entries for this segment."
                 .. "\n- Give minor characters short descriptions. If output space runs short, drop the least important characters first."
         end
     end
