@@ -398,8 +398,8 @@ def build_prompt(language, detail_level, title, author, percent, segment_text,
     if mode == "enrich" and prior_names:
         prompt += _enrich_block(prior_names, caps["char"])
     prompt += _NAME_RULES[language] + _SEGMENT_ADDENDUM[language]
-    prompt += _CONTEXT_FOOTER[language]
     prompt = _apply_caps(prompt, caps)
     prompt += "\n\nBOOK TEXT CONTEXT:\n" + segment_text
+    prompt += _CONTEXT_FOOTER[language]  # must trail segment_text: it tells the model to act on "the context above"
 
     return system, prompt

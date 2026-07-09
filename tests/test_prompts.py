@@ -1,4 +1,4 @@
-from xray_core.prompts import DETAIL_CAPS, build_prompt
+from xray_core.prompts import CONTEXT_FOOTER_DE, DETAIL_CAPS, build_prompt
 
 TITLE, AUTHOR, PERCENT = "Dracula", "Bram Stoker", 45
 SEGMENT = "Jonathan Harker arrives at the castle and meets Count Dracula."
@@ -55,6 +55,23 @@ def test_pretraining_guard_present():
     system, _ = build_prompt("en", "normal", TITLE, AUTHOR, PERCENT, SEGMENT)
 
     assert "ONLY information present in the provided text" in system
+
+
+def test_pretraining_guard_present_de():
+    system, _ = build_prompt("de", "normal", TITLE, AUTHOR, PERCENT, SEGMENT)
+
+    assert "TRAININGSWISSEN" in system
+    assert "AUSSCHLIESSLICH Informationen aus dem bereitgestellten Text" in system
+
+
+def test_context_footer_is_last_for_de():
+    """context_footer must trail segment_text -- it tells the model to act on
+    "the context above", so the book text has to actually be above it."""
+    _, user = build_prompt("de", "normal", TITLE, AUTHOR, PERCENT, SEGMENT)
+    footer = CONTEXT_FOOTER_DE.strip()
+
+    assert user.rstrip().endswith(footer)
+    assert user.index(SEGMENT) < user.index(footer)
 
 
 def test_enrich_mode_uses_prior():
