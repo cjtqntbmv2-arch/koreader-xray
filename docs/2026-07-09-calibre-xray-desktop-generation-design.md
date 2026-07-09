@@ -30,8 +30,10 @@ Parallelisierung, schont Akku, ermöglicht höheren Detailgrad.
 
 ## calibre-Seite
 
-1. **Textextraktion**: calibres EPUB-Container-API, Spine-Reihenfolge, Kapitel als
-   Klartext mit Zeichen-Offsets. Keine externen Dependencies (calibre bringt HTTP mit).
+1. **Textextraktion**: reine Python-Stdlib (zipfile/ElementTree/html.parser), Spine-
+   Reihenfolge, Kapitel als Klartext mit Zeichen-Offsets — NICHT calibres Container-API,
+   damit derselbe Extraktor in CLI und Plugin läuft und ohne calibre testbar ist.
+   (Implementierungsstand siehe `docs/plans/2026-07-09-calibre-xray-plugin.md` + grill-findings.)
 2. **Checkpoint-Planer**: 1:1-Port von `computeCheckpoints` (xray_prefetch.lua) —
    gleiche Konstanten (MAX_CHECKPOINTS, MAX_INTERVAL_PCT, HARD_CAP), gleicher
    `isNonNarrativeChapter`-Filter, gleiche Fallback-Regel (<2 narrative Anker → fixe
@@ -94,10 +96,16 @@ Snapshot-Strukturen Feld für Feld wie das heutige `.sdr`-Cache-Format, nur JSON
 
 - DRM/leerer Text → klare Ablehnung im calibre-Job.
 - API-Abbruch → Job wiederaufnehmbar (fertige Checkpoints bleiben), `complete=false`.
-- Buch neu konvertiert → `text_hash`-Mismatch → Import verweigert mit Warnung.
-- Altes Plugin trifft neues Schema → Versions-Gate mit verständlicher Meldung.
+- Buch-Identität: Gate = Titel/Autor (case-insensitiv, gleiches OPF beide Seiten) +
+  Schema-Version + Struktur-Sanity. `text_hash` nur **beratend/gespeichert**, NIE
+  Ablehnungsgrund (Python-`\s`/Lua-`%s`-NBSP-Divergenz macht exakten Vergleich unbrauchbar).
+- Auslieferung überlebt calibre „Convert Book": eingebettete `xray/xray.json` wird ins
+  OPF-Manifest eingetragen (Hilfsressource, nicht Spine).
+- Einbetten überschreibt die Bibliotheks-EPUB: Temp-EPUB vor `add_format(replace=True)`
+  validieren (testzip + read_epub), sonst Original unangetastet lassen.
+- Altes Plugin trifft neueres Schema → Versions-Gate; neueres Plugin trifft älteres
+  `schema_version` → akzeptieren (`<= SUPPORTED`), fehlende neue Felder als absent behandeln.
 - Mehrere calibre-Formate → generiert/eingebettet wird nur EPUB.
-- Buch-Identität: Matching über Fingerprint, nicht Dateiname.
 
 ## Tests
 

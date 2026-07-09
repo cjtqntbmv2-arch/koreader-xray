@@ -4,20 +4,24 @@
 
 **Goal:** calibre plugin that generates spoiler-staged X-Ray data (characters, locations, terms, timeline) from an EPUB via Gemini and embeds it as `xray/xray.json` into the library EPUB.
 
-**Architecture:** Pure-stdlib core library `xray_core/` (extraction → checkpoints → Gemini → merge/staging → JSON), thin calibre glue in `calibre_plugin/`. Checkpoint algorithm and merge logic are 1:1 ports of the Lua originals in `../koreader-xray-plugin-main/xray.koplugin/` (the authoritative reference). Embedding happens at the end of the generation job into the library EPUB (no send-hook).
+**Architecture:** Pure-stdlib core library `xray_core/` (extraction → checkpoints → Gemini → parallel-extract/ordered-merge/enrich → JSON), thin calibre glue in `calibre_plugin/`. Checkpoint algorithm and merge logic are close ports of the Lua originals in `../koreader-xray-plugin-main/xray.koplugin/` (the authoritative reference) with the deliberate divergences listed in Global Constraints and the grill-findings doc. Embedding happens at the end of the generation job into the library EPUB (no send-hook) and registers the data in the OPF manifest so it survives calibre's Convert Book.
 
-**Tech Stack:** Python ≥3.8 stdlib only in `xray_core/` (zipfile, html.parser, urllib.request, concurrent.futures, hashlib, re, json). pytest as dev-only test runner. calibre plugin API (`InterfaceActionBase`, `JSONConfig`, `ThreadedJob`) only inside `calibre_plugin/`.
+**Tech Stack:** Python ≥3.8 stdlib only in `xray_core/` (zipfile, html.parser, xml.etree.ElementTree, urllib.request, concurrent.futures, threading, hashlib, dataclasses, argparse, os, re, time, json). pytest as dev-only test runner. calibre plugin API (`InterfaceActionBase`, `JSONConfig`, `ThreadedJob`) only inside `calibre_plugin/`. NB: `concurrent.futures.Executor.shutdown(cancel_futures=)` is 3.9+ — cancel pending work via `future.cancel()` to stay on the 3.8 floor.
 
 ## Global Constraints
 
 - `xray_core/` must never import `calibre` or any third-party package (testable via plain `python3 -m pytest`).
-- Spec is `docs/2026-07-09-calibre-xray-desktop-generation-design.md`; Lua reference repo: `../koreader-xray-plugin-main/xray.koplugin/`.
+- Spec is `docs/2026-07-09-calibre-xray-desktop-generation-design.md`; Lua reference repo: `../koreader-xray-plugin-main/xray.koplugin/`. **Grill findings + binding decisions: `docs/plans/grill-findings-2026-07-09.md` — read it; it overrides any stale prose below.**
+- The port is faithful to the Lua original EXCEPT the deliberate divergences enumerated in the grill findings (§F/§H) and in the tasks below. Where a task's text and the Lua original disagree, the task text governs.
 - Checkpoint constants (verbatim from `xray_prefetch.lua:9-11`): `MAX_CHECKPOINTS = 10`, `HARD_CAP = 12`, `MAX_INTERVAL_PCT = 15`.
 - Full-text budget per segment: `120000` chars (K2, from `xray_chapteranalyzer.lua` `full_text_budget`).
-- Gemini defaults (from `xray_aihelper.lua`): model `gemini-3.5-flash`, endpoint `https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent`, header `x-goog-api-key`, `generationConfig = {temperature: 0.2, maxOutputTokens: 16384, responseMimeType: "application/json"}`, for `gemini-3*` models additionally `thinkingConfig = {includeThoughts: true, thinkingLevel: "medium"}`.
-- Detail caps: `normal` = Lua defaults (`char_desc 200, loc_desc 100, timeline_event 80, hist_bio 100, term_def 100`); `detailed` = (`400, 200, 150, 200, 200`). Count caps use the Lua formulas: `num_chars = min(60, max(10, 50*200//char_len))`, `num_locs = min(20, max(3, 8*100//loc_len))`, `num_hist = min(15, max(3, 8*100//hist_len))`, `num_terms = min(20, max(5, 15*100//term_len))`.
-- Spoiler invariant (D4): a snapshot never contains data past its checkpoint; snapshots are cumulative (snapshot N ⊇ snapshot N−1); boundaries round down.
+- Gemini defaults (from `xray_aihelper.lua`): model `gemini-3.5-flash`, endpoint `https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent`, header `x-goog-api-key`, `generationConfig = {temperature: 0.2, maxOutputTokens: 16384, responseMimeType: "application/json"}`. **`thinkingConfig` is gated behind a config flag `use_thinking` defaulting OFF** (Lua parity: a fresh config sends none, `xray_aihelper.lua:254`; and thinking shares the 16384 output budget, worsening truncation). When enabled + model matches `gemini-3*`: `thinkingConfig = {includeThoughts: true, thinkingLevel: "medium"}`.
+- **Output completeness:** every Gemini response's `candidates[0].finishReason` MUST be checked. `MAX_TOKENS` (truncation) is NOT a complete segment — `fix_truncated_json` salvage alone is insufficient. On truncation, split the chunk and re-fetch (see Task 7); never silently accept truncated JSON as a full segment.
+- Detail caps (real Lua tiers, `xray_ui.lua:2604`; clamp ranges `xray_aihelper.lua`): `normal` = Lua default (`char 200, loc 100, timeline 80, hist_bio 100, term 100`); `detailed` = Lua very-detailed = clamp maxima (`char 500, loc 300, timeline 200, hist_bio 400, term 300`). Count caps use the Lua formulas: `num_chars = min(60, max(10, 50*200//char_len))`, `num_locs = min(20, max(3, 8*100//loc_len))`, `num_hist = min(15, max(3, 8*100//hist_len))`, `num_terms = min(20, max(5, 15*100//term_len))`.
+- Spoiler invariant (D4): a snapshot never contains data past its checkpoint; snapshots are cumulative (snapshot N ⊇ snapshot N−1); boundaries round down. **Merge is a deterministic sequential pass in checkpoint-then-chunk index order (a barrier after parallel fetch), never concurrent — a later checkpoint's result can never enter an earlier snapshot regardless of fetch completion order.**
 - Entity chronology: desktop stamps `first_pct` (checkpoint percent of first appearance) + `first_seq` (monotonic counter) instead of the device's `first_page`; the KOReader importer maps `first_pct` → page. Characters/locations sort by (`first_pct`, `first_seq`); terms alphabetical; historical figures by role-weight frequency.
+- **Book-identity gate (device-side, informational here):** import is gated on `schema_version` + structural sanity + case-insensitive title/author (both sides read the same OPF). `text_hash` is STORED but ADVISORY only — never a refusal reason (Python `\s`/Lua `%s` NBSP divergence makes exact-match DOA). `calibre_uuid` is informational (unverifiable on-device).
+- **Delivery:** the embedded `xray/xray.json` MUST be registered in the OPF manifest (auxiliary resource, not in spine) so it survives calibre's Convert Book. See Task 8.
 - All JSON output UTF-8, `ensure_ascii=False`.
 - Commit after every green task; conventional-commit messages; never commit API keys or personal test EPUBs.
 
@@ -200,9 +204,12 @@ def plan_checkpoints(book):
                         if 0 <= e.offset < total and not is_non_narrative(e.title)),
                        key=lambda e: e.offset)
     ends, anchors = [], {}   # anchors: end offset -> TocEntry (for chapter_anchor)
+    # end offset is EXCLUSIVE (= start of next chapter), so Task 7's slice
+    # full_text[prev:end] is exact. (Lua used page-closed `next-1`; in char space the
+    # exclusive bound is correct — no vestigial -1, which would drop one char per boundary.)
     for i, e in enumerate(narrative):
         nxt = narrative[i + 1].offset if i + 1 < len(narrative) else None
-        end = (nxt - 1) if nxt is not None else total
+        end = nxt if nxt is not None else total
         if 0 < end <= total and (not ends or ends[-1] != end):
             ends.append(end); anchors[end] = e
     if not ends or ends[-1] != total:
@@ -239,7 +246,7 @@ def plan_checkpoints(book):
     return cps
 ```
 
-`make_snippet_anchor(text, end_offset)`: take `normalize_text(text[max(0, end_offset-400):end_offset])`; if it is empty/whitespace (textless zone), extend the window backwards in 400-char steps until text is found; cut the result at the last sentence boundary (`. ! ? …` followed by space) so the snippet ends on a sentence, then keep the final 80–120 chars (never cut inside a word: if the 120-char cut lands mid-word, advance to the next space).
+`make_snippet_anchor(text, end_offset)`: take `normalize_text(text[max(0, end_offset-400):end_offset])`; if it is empty/whitespace (textless zone, e.g. image-only front matter), extend the window backwards in 400-char steps until text is found (bounded — if none found back to offset 0, return `""` and let the checkpoint fall back to chapter/percent anchors). Cut the result at the last sentence boundary (`. ! ? …` followed by space) so the snippet ends on a sentence, then keep the final 80–120 chars (never cut inside a word: if the cut lands mid-word, advance to the next space). **Uniqueness (spoiler-safety):** the snippet is the marker the device searches for, and its END is the checkpoint boundary — so it MUST occur exactly once in `text`. If the 80–120-char candidate occurs more than once, grow it leftward (up to ~300 chars) until unique; this both disambiguates the device-side match and removes any need for occurrence-ranking heuristics (an earlier duplicate could otherwise place a later-inclusive snapshot too early → spoiler).
 
 - [ ] **Step 1: Write failing tests**
 
@@ -253,6 +260,8 @@ def test_hard_cap_12():                  # 40 chapters -> <= 12 checkpoints
 def test_last_checkpoint_is_100():
 def test_snippet_anchor_sentence_cut():  # snippet 80-120 chars, ends at sentence end, normalized
 def test_snippet_anchor_skips_textless():# end_offset inside whitespace run -> snippet from preceding text
+def test_snippet_anchor_grows_until_unique(): # repeated phrase near cut -> snippet lengthened until 1 occurrence
+def test_snippet_anchor_empty_when_no_text(): # image-only front matter, no preceding text -> "" (fallback to chapter/pct)
 ```
 
 - [ ] **Step 2: Run** → FAIL
@@ -274,24 +283,30 @@ def test_snippet_anchor_skips_textless():# end_offset inside whitespace run -> s
   ```python
   DETAIL_CAPS = {
     "normal":   {"char": 200, "loc": 100, "tl": 80,  "hist": 100, "term": 100},
-    "detailed": {"char": 400, "loc": 200, "tl": 150, "hist": 200, "term": 200},
+    "detailed": {"char": 500, "loc": 300, "tl": 200, "hist": 400, "term": 300},   # Lua very-detailed = clamp maxima
   }
-  def build_prompt(language, detail_level, title, author, percent, segment_text, prior_names) -> tuple[str, str]
-      # returns (system_instruction, user_prompt)
+  def build_prompt(language, detail_level, title, author, percent, segment_text,
+                   prior_names=None, mode="extract") -> tuple[str, str]
+      # returns (system_instruction, user_prompt); mode: "extract" (Task 7 phase A) | "enrich" (phase C)
   ```
 
-Source of the template texts: copy verbatim from `../koreader-xray-plugin-main/xray.koplugin/prompts/en.lua` (keys `system_instruction`, `comprehensive_xray`) and `prompts/de.lua` (same keys) into Python triple-quoted strings — do not paraphrase. Also copy the SEGMENT COMPLETENESS MODE addendum prose from `xray_aihelper.lua:1490-1498` (appended when fetching a prefetch segment) as `SEGMENT_ADDENDUM_EN` / `_DE`.
+Source of the template texts: copy verbatim from `../koreader-xray-plugin-main/xray.koplugin/prompts/en.lua` (keys `system_instruction`, `comprehensive_xray`) and `prompts/de.lua` (same keys) into Python triple-quoted strings — do not paraphrase. Also copy, verbatim, from `xray_aihelper.lua`: the SEGMENT COMPLETENESS MODE addendum (`:1490-1498`), the **CHARACTER COMPLETENESS RULES / NAME DISAMBIGUATION RULES block (`:1480-1489`)** — this is the prompt-side rule underwriting the "no first-name fuzzy matching" merge design, do not omit it — and `context_footer` (`:1502`, may be empty for en). Constant names: `SEGMENT_ADDENDUM_EN/_DE`, `NAME_RULES_EN/_DE`.
 
-Substitution: the `%s`/`%d` positional args of `comprehensive_xray` are `(title, author, percent × ~20)` — count the `%`-specifiers in the template at import time and build the arg tuple accordingly (`(title, author) + (percent,) * (n - 2)`). Then `str.replace` the brace tags using `DETAIL_CAPS[detail_level]` and the count formulas from Global Constraints: `{MAX_CHAR_DESC}`, `{NUM_CHARS}`, `{MAX_LOC_DESC}`, `{NUM_LOCS}`, `{MAX_TIMELINE_EVENT}`, `{TIMELINE_DETAIL_GUIDANCE}`, `{TIMELINE_EXAMPLE}`, `{MAX_HIST_BIO}`, `{NUM_HIST}`, `{MAX_TERM_DEF}`, `{NUM_TERMS}`. Timeline guidance buckets (port from `createPrompt`): `tl<=50` brief / `<=80` concise single-sentence / `<=150` detailed / else rich; always append `"Write between {int(tl*0.75)} and {tl} characters"`. `prior_names` (names already known from earlier segments) are appended as a short "already known, do not re-describe unless new information appears" list — this mirrors the device's update-mode context. Finally append `segment_text`.
+Add a **pretraining-spoiler guard** to the system instruction (both languages): "Use ONLY information present in the provided text. Do not add facts from your own knowledge of this book, its sequels, or its author." (Desktop uses larger models + detailed mode → more prone to surfacing known-book spoilers.)
+
+Substitution: the `%s`/`%d` positional args of `comprehensive_xray` are `(title, author, percent × ~20)`. Count only REAL specifiers, treating `%%` (literal percent, e.g. `prompts/en.lua:51` "%d%%") as a non-consuming escape — build the arg tuple from the real-specifier count (`(title, author) + (percent,) * (n - 2)`). Then `str.replace` the brace tags using `DETAIL_CAPS[detail_level]` and the count formulas from Global Constraints: `{MAX_CHAR_DESC}`, `{NUM_CHARS}`, `{MAX_LOC_DESC}`, `{NUM_LOCS}`, `{MAX_TIMELINE_EVENT}`, `{TIMELINE_DETAIL_GUIDANCE}`, `{TIMELINE_EXAMPLE}`, `{MAX_HIST_BIO}`, `{NUM_HIST}`, `{MAX_TERM_DEF}`, `{NUM_TERMS}`. Timeline guidance buckets (port from `createPrompt`): `tl<=50` brief / `<=80` concise single-sentence / `<=150` detailed / else rich; always append `"Write between {int(tl*0.75)} and {tl} characters"`. In `mode="enrich"`, `prior_names` carries prior entity name+description pairs and the prompt asks the model to re-synthesize one cohesive up-to-date description per recurring entity using ONLY the accumulated + current text (device MERGE MODE parity, `xray_aihelper.lua:1301-1353`); in `mode="extract"` `prior_names` is unused (phase-A chunks are independent). Finally append `segment_text`.
 
 - [ ] **Step 1: Write failing tests**
 
 ```python
 def test_no_unresolved_tags():        # build_prompt(...) contains no "{MAX_" or "%s"/"%d" leftovers
-def test_detail_level_changes_caps(): # "400" appears in detailed, "200" in normal (char cap)
+def test_literal_percent_escape():    # a template "%d%%" yields "<n>%" — %% not consumed as an arg slot
+def test_detail_level_changes_caps(): # "500" appears in detailed, "200" in normal (char cap)
 def test_de_prompt_is_german():       # de template used for language="de"
 def test_segment_addendum_present():  # SEGMENT COMPLETENESS marker in user prompt
-def test_prior_names_listed():
+def test_name_rules_present():        # NAME DISAMBIGUATION block present in user prompt
+def test_pretraining_guard_present(): # "ONLY information present in the provided text" in system instruction
+def test_enrich_mode_uses_prior():    # mode="enrich" injects prior name+desc; mode="extract" does not
 ```
 
 - [ ] **Step 2: Run** → FAIL
@@ -312,25 +327,30 @@ def test_prior_names_listed():
 - Produces:
   ```python
   class QuotaError(Exception): ...
+  @dataclass
+  class GenResult: data: dict; truncated: bool   # truncated = finishReason was MAX_TOKENS
   class GeminiClient:
-      def __init__(self, api_key, model="gemini-3.5-flash", transport=None, timeout=180): ...
-      def generate(self, system_instruction, user_prompt) -> dict   # parsed + key-normalized JSON
+      def __init__(self, api_key, model="gemini-3.5-flash", transport=None,
+                   timeout=180, use_thinking=False, max_429_retries=4): ...
+      def generate(self, system_instruction, user_prompt, max_output_tokens=16384) -> GenResult
   def parse_ai_json(text) -> dict     # fence-strip, brace-extract, fix_truncated_json, json.loads
   def fix_truncated_json(s) -> str
   def normalize_keys(obj)             # lowercase, spaces->underscores, recursive
   ```
 - `transport` is a callable `(url, headers, body_bytes) -> (status_code, response_bytes)`; default uses `urllib.request`. Tests inject fakes — no network in tests, ever.
 
-Request body exactly as `xray_aihelper.lua:288-298`: `contents=[{role:"user",parts:[{text}]}]`, `system_instruction={parts:[{text}]}`, the four `safetySettings` with `BLOCK_NONE`, `generationConfig` per Global Constraints (thinkingConfig only when model name contains `gemini-3`). Response: concatenate `candidates[0].content.parts[*].text` skipping parts with `thought: true`. Retry: on 503 retry once after `time.sleep(2)` (max 2 attempts); 429 → raise `QuotaError`; other non-200 → `RuntimeError` with status + body excerpt. `fix_truncated_json`: scan char-wise tracking string/escape state and a bracket stack; strip a trailing comma; append the closers for whatever remains on the stack.
+Request body exactly as `xray_aihelper.lua:288-298`: `contents=[{role:"user",parts:[{text}]}]`, `system_instruction={parts:[{text}]}`, the four `safetySettings` with `BLOCK_NONE`, `generationConfig` per Global Constraints. `thinkingConfig` is added ONLY when `use_thinking` AND model name contains `gemini-3` (default off). Response: concatenate `candidates[0].content.parts[*].text` skipping parts with `thought: true`; read `candidates[0].finishReason` and set `GenResult.truncated = (finishReason == "MAX_TOKENS")`. Retry: on 503 retry once after `time.sleep(2)`; on 429 **exponential backoff with jitter** (`base 2s`, up to `max_429_retries`) then raise `QuotaError`; other non-200 → `RuntimeError` with status + body excerpt. (A cross-call rate limiter lives in the orchestrator, Task 7 — the client only does per-call backoff.) `fix_truncated_json`: scan char-wise tracking string/escape state and a bracket stack; strip a trailing comma; append the closers for whatever remains on the stack. Monkeypatch `time.sleep` in backoff tests so they run instantly.
 
 - [ ] **Step 1: Write failing tests**
 
 ```python
 def test_request_body_shape():        # capture body via fake transport; assert contents/system_instruction/safetySettings/generationConfig
-def test_thinking_only_for_gemini3(): # model="gemini-2.0-flash" -> no thinkingConfig
+def test_thinking_gated_off_by_default():   # use_thinking=False -> no thinkingConfig even for gemini-3.5-flash
+def test_thinking_only_for_gemini3():  # use_thinking=True, model="gemini-2.0-flash" -> still no thinkingConfig
 def test_skips_thought_parts():
+def test_truncated_flag_on_max_tokens():    # finishReason MAX_TOKENS -> GenResult.truncated is True
 def test_retries_503_once_then_succeeds():
-def test_429_raises_quota_error():
+def test_429_backs_off_then_raises_quota(): # N 429s -> exponential backoff (sleep monkeypatched), raises QuotaError after max
 def test_parse_strips_markdown_fences():
 def test_fix_truncated_json():        # '{"a": [1, 2' -> '{"a": [1, 2]}'
 def test_normalize_keys():            # {"Full Name": 1} -> {"full_name": 1}
@@ -354,11 +374,14 @@ def test_normalize_keys():            # {"Full Name": 1} -> {"full_name": 1}
 - Produces:
   ```python
   def clean_response(raw: dict) -> dict     # port of validateAndCleanData essentials:
-      # characters: keep name (fallback keys: role/full_name/formal_name), role (truncate 40),
-      #   description, gender, occupation, aliases(list of str); drop nameless entries
-      # locations: name, description, importance, aliases; historical_figures: name, biography,
-      #   role(trunc 40), importance_in_book, context_in_book; terms: name, aliases, expanded,
-      #   category, definition; timeline: chapter, event; book_type: "fiction"|"non_fiction"
+      # characters: name = first non-empty of (name, full_formal_name, full_name, formal_name,
+      #   Name) else placeholder "Unnamed character" (Lua KEEPS nameless with a placeholder,
+      #   xray_aihelper.lua:2015 — do NOT drop); role (truncate 40), description, gender,
+      #   occupation, aliases(list of str)
+      # locations: name (same fallback+placeholder), description, importance, aliases
+      # historical_figures: name, biography, role(trunc 40), importance_in_book, context_in_book
+      # terms: name, aliases, expanded, category, definition
+      # timeline: chapter, event; book_type: "fiction"|"non_fiction"
   class BookState:                          # accumulating merge target
       characters, locations, terms, historical_figures, timeline: lists
       book_type: str; _seq: int
@@ -385,10 +408,11 @@ def is_more_complete_name(new, old):
 `merge_segment` per entity kind (dedup logic = `deduplicateByName`, `xray_data.lua:223-289`):
 1. Build `seen = {name.lower(): entity}` and `alias_map = {alias.lower(): entity}` over existing entities.
 2. Incoming entity collides if `name.lower()` matches an existing name **or** a registered alias. **No first-name fuzzy matching** (deliberate — dynasty books reuse first names).
-3. On collision: if `is_more_complete_name(new, old)` → promote (old name moves into aliases, name replaced); merge incoming aliases case-insensitively (skip alias == own name); keep the longer description; fill empty fields (role/gender/occupation/importance) from the incoming entity.
+3. On collision: if `is_more_complete_name(new, old)` → promote (old name moves into aliases, name replaced); **accumulate** (union) incoming aliases case-insensitively (skip alias == own name); description = newest non-empty (Lua takes newest, `xray_fetch.lua:589-590` — description QUALITY is owned by the Task 7 phase-C enrichment pass, so the mechanical merge only avoids data loss here); fill still-empty scalar fields (role/gender/occupation/importance) from the incoming entity.
 4. New entity: append; for characters/locations stamp `first_pct = checkpoint_pct`, `self._seq += 1`, `first_seq = self._seq` (idempotent — never restamp).
 5. Timeline: append events with `pct = checkpoint_pct`; drop events whose `chapter` is non-narrative (`is_non_narrative`, mirrors `xray_fetch.lua:534`).
-6. Terms/historical figures: same dedup, no first-stamping.
+6. Terms/historical figures: same dedup, no first-stamping. **Terms accumulate (union) aliases on an exact-name hit** — a deliberate divergence from Lua's wholesale overwrite (`xray_fetch.lua:736-737`), which would drop aliases a later segment omits.
+7. Within one checkpoint, chunks are merged in fixed chunk-index order (deterministic collision resolution — never thread-completion order).
 
 `sort_entity_list` role weights for historical figures (port `sortDataByFrequency` weights only, no text-frequency — desktop has no cheap frequency source and the importer re-sorts anyway): `protagonist=100, main/lead/hero/detective=90, deuteragonist=80, major/antagonist/villain/primary=70, secondary/supporting=30, minor/background=5, else 15` (substring match on lowercased role).
 
@@ -397,12 +421,13 @@ def is_more_complete_name(new, old):
 - [ ] **Step 1: Write failing tests**
 
 ```python
-def test_clean_drops_nameless_and_truncates_role():
+def test_clean_keeps_nameless_with_placeholder_and_truncates_role():  # nameless -> "Unnamed character", kept not dropped
 def test_new_entities_stamped_first_pct_and_seq():
 def test_stamp_idempotent_across_segments():      # same char in seg 1 and 2 -> keeps first_pct of seg 1
 def test_alias_collision_merges():                # "Fitz" alias of "FitzChivalry" -> no duplicate
 def test_name_promotion():                        # "Kvothe" then "Kvothe Kingkiller" -> promoted, old name in aliases
 def test_no_first_name_fuzzy_match():             # "Robert Baratheon" and "Robert Arryn" stay separate
+def test_terms_accumulate_aliases():              # term alias from seg 1 survives a seg-2 hit that omits it
 def test_snapshot_is_deep_copy():                 # mutate state after snapshot -> snapshot unchanged
 def test_sort_characters_chronological_terms_alpha():
 def test_non_narrative_timeline_events_dropped():
@@ -426,33 +451,52 @@ def test_non_narrative_timeline_events_dropped():
 - Produces:
   ```python
   FULL_TEXT_BUDGET = 120000
+  CHUNK_OVERLAP    = 800     # chars of preceding (already-read) context prepended to sub-chunks
+  ENRICH_TOP_N     = 20      # phase C: enrich at most the N longest-running characters per checkpoint
+  class RateLimiter:         # token bucket, default ~10 req/min; shared across the executor
+      def __init__(self, per_minute=10): ...
+      def acquire(self): ...  # blocks until a slot frees
   def generate_xray(book: BookText, client, language, detail_level,
-                    calibre_uuid=None, progress_cb=None, workdir=None) -> dict  # the xray.json doc
+                    calibre_uuid=None, progress_cb=None, workdir=None,
+                    max_workers=3, enrich=None) -> dict   # the xray.json doc; enrich default = (detail_level=="detailed")
   ```
 
-Flow:
-1. `cps = plan_checkpoints(book)`; segments: segment *i* covers `full_text[cps[i-1].offset : cps[i].offset]` (segment 1 starts at 0).
-2. Sub-chunk any segment longer than `FULL_TEXT_BUDGET` into equal parts ≤ budget (split at paragraph boundaries near the cut).
-3. Fetch all chunks concurrently with `concurrent.futures.ThreadPoolExecutor(max_workers=3)`; each chunk → `build_prompt(...)` (percent = its checkpoint's percent; `prior_names` empty — chunks are independent, dedup happens at merge) → `client.generate` → `clean_response`.
-4. Merge **strictly in checkpoint order** into one `BookState`; after merging all chunks of checkpoint *i*, emit `snapshot()` → `checkpoints[i].snapshot`. (Fetch is parallel, merge is sequential — that preserves `first_pct` chronology.)
-5. Resume: if `workdir` given, each chunk's cleaned response is dumped to `workdir/chunk_<cp>_<n>.json` after fetch and loaded instead of fetched on re-run. On `QuotaError`/network failure mid-run: build the document from completed checkpoints only, set `complete=False`, `last_percent = last finished checkpoint`.
-6. Assemble doc: fingerprint (`calibre_uuid`, `book.title`, `book.authors`, `book.text_hash`), `generator_version` read from `VERSION` file, timeline top-level, `validate()` it; raise on problems.
-7. `progress_cb(done_chunks, total_chunks)` if given (calibre job UI hooks in here).
+**Three phases** (Hybrid — parallel extraction for completeness/speed, ordered merge for D4, sequential enrichment for device-parity descriptions):
 
-- [ ] **Step 1: Write failing tests** — fake client returning canned per-segment responses keyed by which chunk text it receives:
+*Phase A — parallel extraction:*
+1. `cps = plan_checkpoints(book)`; segment *i* = `full_text[cps[i-1].offset : cps[i].offset]` (segment 0 from 0). Offsets are exclusive-end (Task 3) → gapless, non-overlapping, union == whole book.
+2. Sub-chunk any segment > `FULL_TEXT_BUDGET` into equal parts ≤ budget at paragraph boundaries; prepend `CHUNK_OVERLAP` chars of the immediately-preceding **in-segment** text to each chunk after the first (context for entities spanning a cut). The overlap is prior/already-read text only — it never crosses the checkpoint boundary, so D4 holds.
+3. `ThreadPoolExecutor(max_workers)` fetches all chunks concurrently, each `rate_limiter.acquire()` first. Per chunk: `build_prompt(mode="extract", percent=<its cp percent>, prior_names=None)` → `client.generate(...)` (default 16384 output tokens; overflow is handled by the split-on-truncation below, not by raising the ceiling). Feed `clean_response(result.data)` into the collected results. **On `result.truncated`:** split the chunk in half at a paragraph boundary and re-fetch each half (bounded recursion depth ≤ 3), union the halves' cleaned dicts — never accept a truncated segment as complete. `clean_response` each. If `workdir`, dump each chunk's cleaned dict to `workdir/chunk_<cp>_<n>.json` and load-instead-of-fetch when present (resume). On first `QuotaError`, cancel not-yet-started futures explicitly (`future.cancel()`, 3.8-safe — do NOT rely on `shutdown(cancel_futures=)`, that's 3.9+).
+
+*Phase B — ordered merge barrier (D4):*
+4. After all chunks are collected, merge into one `BookState` **strictly in (checkpoint index, then chunk index) order** — a sequential pass, NOT concurrent. After merging all chunks of checkpoint *i*, emit `snapshot()` → `checkpoints[i].snapshot`. Because merge order is fixed by index (never fetch-completion order), a later checkpoint's result can never enter an earlier snapshot — this is the barrier that fixes the concurrency D4 hole.
+
+*Phase C — sequential enrichment (device MERGE-MODE parity):*
+5. If `enrich`: walk checkpoints in order; for each checkpoint *i* ≥ 2, take up to `ENRICH_TOP_N` characters that recur (already present in snapshot *i-1*), one `build_prompt(mode="enrich", prior_names=[(name, current description), …], segment_text=<checkpoint i's newly-covered text>)` call → merge the returned re-synthesized descriptions into `BookState` and re-`snapshot()` checkpoint *i*. Uses only text ≤ checkpoint *i* → D4-safe. Skipped entirely for `normal` unless `enrich=True` is passed. (ponytail: enrich only long-runners, not every walk-on — `ENRICH_TOP_N` bounds cost.)
+
+*Assemble & finish:*
+6. On `QuotaError`/network failure: build the doc from completed checkpoints only, `complete=False`, `last_percent = <last finished checkpoint's percent>`. Fingerprint = `{calibre_uuid, book.title, book.authors, book.text_hash}` (hash advisory, stored not gated); `generator_version` from `VERSION`; `timeline` top-level (pct-stamped); `validate()`; raise on problems.
+7. `progress_cb(done, total)` after each fetched chunk and each enrich call (calibre job UI).
+
+- [ ] **Step 1: Write failing tests** — a fake client returning canned cleaned dicts keyed by chunk text; for the ordering test it must expose futures that resolve out of order (e.g. a controllable executor or per-chunk latency) to prove the barrier:
 
 ```python
-def test_end_to_end_two_checkpoints():   # 2 chapters -> doc validates, snapshot 2 superset of snapshot 1
-def test_d4_no_future_entities():        # entity only in seg 2 -> absent from snapshot 1, first_pct == cp2.percent
-def test_oversized_segment_subchunked(): # segment > budget -> client called >1x for that checkpoint
-def test_quota_failure_partial_doc():    # client raises QuotaError on cp 2 -> complete=False, last_percent=cp1
-def test_resume_skips_fetched_chunks(tmp_path):  # run 1 fails at cp2, run 2 with same workdir refetches only cp2
+def test_end_to_end_two_checkpoints():        # 2 chapters -> doc validates, snapshot 2 ⊇ snapshot 1
+def test_d4_no_future_entities():             # entity only in seg 2 -> absent from snapshot 1, first_pct == cp2.percent
+def test_d4_holds_under_out_of_order_fetch(): # later cp's chunk resolves FIRST -> snapshot 1 still excludes cp2 entities (barrier)
+def test_oversized_segment_subchunked():      # segment > budget -> client called >1x for that checkpoint
+def test_truncated_chunk_split_and_refetched():# GenResult.truncated then two complete halves -> merged, no entity lost
+def test_quota_failure_partial_doc():         # QuotaError on cp 2 -> complete=False, last_percent==cp1.percent
+def test_quota_cancels_pending_futures():     # first QuotaError -> queued chunks cancelled, not fetched
+def test_resume_skips_fetched_chunks(tmp_path):# run 1 fails at cp2, run 2 same workdir refetches only cp2
+def test_enrich_updates_recurring_descriptions(): # enrich=True -> a 2-checkpoint character's desc is re-synthesized
+def test_enrich_stays_d4_safe():              # enriched desc at cp i references no cp>i text; snapshot i unchanged in later-only facts
 ```
 
 - [ ] **Step 2: Run** → FAIL
 - [ ] **Step 3: Implement** as specified
 - [ ] **Step 4: Run** → PASS
-- [ ] **Step 5: Commit** `feat: generation orchestrator (parallel fetch, ordered merge, resume)`
+- [ ] **Step 5: Commit** `feat: generation orchestrator (parallel extract, ordered-merge barrier, enrichment pass, resume)`
 
 ---
 
@@ -467,32 +511,51 @@ def test_resume_skips_fetched_chunks(tmp_path):  # run 1 fails at cp2, run 2 wit
 - Produces:
   ```python
   # embed.py
-  def embed_xray(epub_path, doc: dict, out_path) -> None   # writes epub copy with xray/xray.json
+  DATA_PATH = "xray/xray.json"            # fixed zip path; device reads it directly (no OPF parse device-side)
+  def embed_xray(epub_path, doc: dict, out_path) -> None   # rewrites epub with DATA_PATH + OPF manifest entry
   def read_embedded(epub_path) -> dict | None
+  def _opf_path(zin) -> str               # via META-INF/container.xml
+  def _add_manifest_item(opf_bytes, href) -> bytes   # idempotent; href relative to OPF dir
   ```
 - CLI: `python3 -m xray_core BOOK.epub --api-key KEY [--model M] [--language de] [--detail normal|detailed] [--json-out xray.json] [--embed] [--workdir DIR]` — the calibre-free path for development and power users; also the seam the calibre job calls.
 
-`embed_xray` (order-preserving zip rewrite; `mimetype` stays first and STORED):
+`embed_xray` — must (a) register `DATA_PATH` in the OPF manifest so it survives calibre's Convert Book, (b) read entries by `ZipInfo` (not filename — duplicate-named entries otherwise corrupt), (c) preserve each entry's original `compress_type`:
 
 ```python
 def embed_xray(epub_path, doc, out_path):
     payload = json.dumps(doc, ensure_ascii=False).encode("utf-8")
-    with zipfile.ZipFile(epub_path) as zin, zipfile.ZipFile(out_path, "w") as zout:
-        for item in zin.infolist():
-            if item.filename == "xray/xray.json":
-                continue
-            comp = zipfile.ZIP_STORED if item.filename == "mimetype" else zipfile.ZIP_DEFLATED
-            zout.writestr(item, zin.read(item.filename), comp)
-        zout.writestr("xray/xray.json", payload, zipfile.ZIP_DEFLATED)
+    with zipfile.ZipFile(epub_path) as zin:
+        opf = _opf_path(zin)                                  # e.g. "OEBPS/content.opf"
+        href = os.path.relpath(DATA_PATH, os.path.dirname(opf)).replace(os.sep, "/")
+        with zipfile.ZipFile(out_path, "w") as zout:
+            for item in zin.infolist():
+                if item.filename == DATA_PATH:
+                    continue                                   # drop any prior copy (re-embed)
+                data = zin.read(item)                          # ZipInfo, not filename
+                if item.filename == opf:
+                    data = _add_manifest_item(data, href)      # idempotent: <item id="xray-data"
+                    comp = zipfile.ZIP_DEFLATED                #   href=".." media-type="application/json"/>
+                elif item.filename == "mimetype":
+                    comp = zipfile.ZIP_STORED
+                else:
+                    comp = item.compress_type                  # preserve source choice
+                zout.writestr(item, data, comp)
+            zout.writestr(DATA_PATH, payload, zipfile.ZIP_DEFLATED)
 ```
+
+`_add_manifest_item`: parse the OPF (`ElementTree`), and if no manifest item with that href exists, append `<item id="xray-data" href="{href}" media-type="application/json"/>` to `<manifest>` (not referenced by spine — an auxiliary resource; media-type is non-core so strict epubcheck may warn, harmless for personal use). Return serialized bytes, preserving the OPF's namespaces.
 
 - [ ] **Step 1: Write failing tests**
 
 ```python
 def test_embed_roundtrip(tmp_path):        # embed -> read_embedded == doc
 def test_mimetype_first_and_stored(tmp_path):
+def test_manifest_entry_added(tmp_path):   # OPF manifest gains an item pointing at DATA_PATH (right relative href)
+def test_manifest_entry_idempotent(tmp_path): # embed twice -> exactly one manifest item, one DATA_PATH entry
+def test_preserves_compress_type(tmp_path):# a STORED source image stays STORED in the output
 def test_reembed_replaces_old(tmp_path):   # embed twice -> exactly one xray/xray.json, newest content
-def test_cli_json_out(tmp_path, monkeypatch):  # fake transport via env-injected... -> use --transport-fixture flag reading canned responses from a dir (test-only flag)
+def test_duplicate_named_entry_not_corrupted(tmp_path): # source with two same-named entries copies both bytes correctly
+def test_cli_json_out(tmp_path, monkeypatch):  # fake transport via --transport-fixture flag reading canned responses from a dir (test-only)
 ```
 
 - [ ] **Step 2: Run** → FAIL
@@ -538,9 +601,9 @@ class XRayGeneratorPlugin(InterfaceActionBase):
         config_widget.save_settings()
 ```
 
-`config.py`: `JSONConfig("plugins/xray_generator")` with defaults `{"api_key": "", "model": "gemini-3.5-flash", "language": "de", "detail_level": "normal"}`; `ConfigWidget(QWidget)` with QLineEdit (api_key, password echo mode), QComboBox language (en/de), QComboBox detail, QLineEdit model.
+`config.py`: `JSONConfig("plugins/xray_generator")` with defaults `{"api_key": "", "model": "gemini-3.5-flash", "language": "de", "detail_level": "normal", "use_thinking": False, "max_workers": 3}`; `ConfigWidget(QWidget)` with QLineEdit (api_key, password echo mode), QComboBox language (en/de), QComboBox detail, QLineEdit model, QCheckBox use_thinking (off by default). `ui.py` passes `use_thinking` into `GeminiClient` and `max_workers` into `generate_xray`.
 
-`ui.py`: `InterfaceAction` named `"X-Ray Generator"`; `genesis()` sets menu action → `generate_selected()`: for each selected book id with an EPUB format: `db.format_abspath(book_id, "EPUB")` → dispatch a `ThreadedJob` running `read_epub` → `generate_xray(..., calibre_uuid=db.field_for("uuid", book_id), progress_cb=job.set_progress, workdir=<plugin tmp>)` → `embed_xray` to a temp file → on the GUI thread `db.add_format(book_id, "EPUB", tmp_path, replace=True)`. Errors → `error_dialog`; partial (`complete=False`) → warning dialog "prepared up to X% — run again to resume". Books without EPUB format are skipped with a summary dialog.
+`ui.py`: `InterfaceAction` named `"X-Ray Generator"`; `genesis()` sets menu action → `generate_selected()`: for each selected book id with an EPUB format: `db.format_abspath(book_id, "EPUB")` → dispatch a `ThreadedJob` running `read_epub` → `generate_xray(..., calibre_uuid=db.field_for("uuid", book_id), progress_cb=job.set_progress, workdir=<plugin tmp>)` → `embed_xray` to a temp file. **Before replacing the library file, validate the temp EPUB** — `zipfile.ZipFile(tmp).testzip() is None` AND `read_embedded(tmp)` round-trips the doc AND `read_epub(tmp)` still parses; only then, on the GUI thread, `db.add_format(book_id, "EPUB", tmp_path, replace=True)`. If validation fails, abort that book and leave the library file untouched (an `embed_xray` bug must never become permanent data loss). Errors → `error_dialog`; partial (`complete=False`) → warning dialog "prepared up to X% — run again to resume". Books without EPUB format are skipped with a summary dialog.
 
 Packaging: the plugin zip must contain `calibre_plugin/*` at the zip **root** plus the whole `xray_core/` package and `VERSION` (read by `generate_xray`). `tools/build_plugin.py` builds `dist/xray-generator-<VERSION>.zip` accordingly (rewriting `calibre_plugin/...` paths to the root).
 
@@ -559,16 +622,29 @@ Packaging: the plugin zip must contain `calibre_plugin/*` at the zip **root** pl
 **Interfaces:** consumes the full pipeline via the same fixture-transport used in Task 8.
 
 - [ ] **Step 1: Write the test:** build a 6-chapter fixture EPUB (reuse `epub_fixture.py`) with known characters appearing in specific chapters; canned Gemini responses per chunk; run `generate_xray`; assert:
-  - result equals `tests/golden/xray_golden.json` (first run writes it; committed thereafter),
-  - D4 sweep: for every checkpoint N, every entity of snapshot N exists in snapshot N+1 (cumulative), and no entity has `first_pct > percent` of its snapshot,
-  - `validate(doc) == []`, snippet anchors each occur exactly once in `full_text`.
+  - result equals `tests/golden/xray_golden.json` — **generate the golden by hand-writing/reviewing it and committing it first; the test only ever ASSERTS equality (it must not self-write a golden on first run — a test that writes its own oracle asserts nothing).** Regenerate deliberately when the pipeline changes.
+  - **D4 sweep (entities):** for every checkpoint N, every entity of snapshot N exists in snapshot N+1 (cumulative), and no entity has `first_pct > percent` of its snapshot,
+  - **D4 sweep (timeline):** every top-level `timeline` event with `pct == P` is exposed only when reading ≥ P — assert no event has `pct` greater than the last checkpoint's percent, and that filtering the timeline to `pct <= cp.percent` for each checkpoint yields a cumulative (monotonically growing) set,
+  - `validate(doc) == []`, and each checkpoint's `snippet_anchor` occurs **exactly once** in `full_text` (uniqueness — a non-unique snippet is a device-side anchor ambiguity; if any collide, `make_snippet_anchor` must widen the window until unique).
 - [ ] **Step 2: Run** `python3 -m pytest -v` (full suite) → all PASS
 - [ ] **Step 3: Commit** `test: e2e golden run + D4 invariant sweep`
 - [ ] **Step 4:** Bump nothing — version stays 0.1.0 until the KOReader importer exists and the pair is verified end-to-end on a real book.
 
 ---
 
+## Parallel track: device-side importer spike (KOReader repo)
+
+Runs alongside this plan (user decision: both in parallel). Its own plan lives in the KOReader
+repo and is written against Task 10's real `xray.json` fixtures. API feasibility is **verified**
+against the real-device-proven code + docs (grill doc-check, 2026-07-09):
+
+- **Anchor mapping is feasible without char-%↔page-% conversion:** on import, `ui.document:findText(snippet, max_hits)` → `results[1].page` directly (paginated mode: the match carries the 1-based page; `xray_mentions.lua:423`), then `percent = floor(page / getPageCount() * 100)`. The snippet's uniqueness (Task 3) means the first hit is the right hit. CRE/scroll mode: `findAllText` returns xpointer pairs usable directly. Percent is the tertiary fallback only.
+- **No UI freeze:** chunk the ≤12 scans with the existing `scanMentionsAsync` coroutine-yield pattern (`xray_chapteranalyzer.lua:1183-1291`) driven by `UIManager:scheduleIn` (the one scheduling primitive that IS in the public docs).
+- **Reading the embedded JSON:** no native single-entry zip read exists in KOReader docs or code; the device shells to `unzip` (as `xray_updater.lua:_unzip` already does). **Open device-verification item:** confirm BusyBox `unzip -p book.epub xray/xray.json` works on the oldest target firmware (same risk class as the 26.7.6 `unzip -t` bug); if not, extract to a temp file with the known-good `-o` and read it back.
+- **Identity gate device-side:** title/author from the book's own OPF (case-insensitive); `text_hash` advisory only.
+- Import once on `onReaderReady` when no cache exists; write a one-time marker on refusal so a schema/identity mismatch does not re-nag every open.
+
 ## Deferred (explicitly out of scope for this plan)
 
-- KOReader-side importer → separate plan in the KOReader repo, written once real `xray.json` fixtures exist (Task 10 output).
 - Providers beyond Gemini; author-info / series-recap / find-duplicates prompt paths; embed-on-send hook (superseded by embed-at-generation); localization of the plugin GUI beyond de/en strings.
+- `plugin-newer-than-embedded-schema` migration machinery — for one integer field, accept `schema_version <= SUPPORTED`, treat missing newer fields as absent; only `> SUPPORTED` triggers the update-gate message (no machinery needed).
