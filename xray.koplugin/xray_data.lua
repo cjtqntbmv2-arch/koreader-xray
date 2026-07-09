@@ -127,6 +127,50 @@ function M:sortDataByFrequency(list, text, key)
     return list
 end
 
+-- Chronological sort by first appearance. Key = first_page (fallback
+-- history[1].page, then math.huge = unstamped goes last). Tiebreak = first_seq,
+-- a monotonic per-book stamp set at first insertion; REQUIRED because table.sort
+-- is not stable and every entity of one checkpoint shares first_page.
+function M:sortByFirstAppearance(list)
+    if not list or #list == 0 then return list end
+    local function firstPage(it)
+        return it.first_page
+            or (it.history and it.history[1] and it.history[1].page)
+            or math.huge
+    end
+    table.sort(list, function(a, b)
+        local pa, pb = firstPage(a), firstPage(b)
+        if pa ~= pb then return pa < pb end
+        return (a.first_seq or math.huge) < (b.first_seq or math.huge)
+    end)
+    for i, item in ipairs(list) do item.sort_order = i end
+    return list
+end
+
+-- Alphabetical sort by name (glossary). Stamps sort_order like the others so
+-- cache loads (main.lua sort_order path) preserve the order.
+function M:sortByName(list, key)
+    if not list or #list == 0 then return list end
+    local k = key or "name"
+    table.sort(list, function(a, b)
+        return (a[k] or ""):lower() < (b[k] or ""):lower()
+    end)
+    for i, item in ipairs(list) do item.sort_order = i end
+    return list
+end
+
+-- Single dispatch point for entity ordering, by entity kind
+-- ("character"|"location"|"term"|"historical_figure").
+function M:sortEntityList(list, kind, text)
+    if kind == "character" or kind == "location" then
+        return self:sortByFirstAppearance(list)
+    elseif kind == "term" then
+        return self:sortByName(list, "name")
+    else
+        return self:sortDataByFrequency(list, text, "name")
+    end
+end
+
 function M:isMoreCompleteName(new_name, old_name)
     if not new_name or not old_name then return false end
     if #new_name <= #old_name then return false end

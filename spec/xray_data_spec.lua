@@ -221,4 +221,67 @@ describe("xray_data", function()
             assert.are.equal("Frequent", list[1].name)
         end)
     end)
+
+    describe("sortByFirstAppearance", function()
+        it("orders by first_page ascending", function()
+            local list = {
+                { name = "Late",  first_page = 300, first_seq = 3 },
+                { name = "Early", first_page = 10,  first_seq = 1 },
+                { name = "Mid",   first_page = 150, first_seq = 2 },
+            }
+            xray_data:sortByFirstAppearance(list)
+            assert.are.equal("Early", list[1].name)
+            assert.are.equal("Mid",   list[2].name)
+            assert.are.equal("Late",  list[3].name)
+        end)
+
+        it("breaks ties deterministically by first_seq", function()
+            local list = {
+                { name = "B", first_page = 50, first_seq = 2 },
+                { name = "A", first_page = 50, first_seq = 1 },
+            }
+            xray_data:sortByFirstAppearance(list)
+            assert.are.equal("A", list[1].name)
+            assert.are.equal("B", list[2].name)
+        end)
+
+        it("falls back to history[1].page then to the end", function()
+            local list = {
+                { name = "NoStamp" },
+                { name = "HistOnly", history = { { page = 5 } } },
+            }
+            xray_data:sortByFirstAppearance(list)
+            assert.are.equal("HistOnly", list[1].name)
+            assert.are.equal("NoStamp",  list[2].name)
+        end)
+
+        it("stamps sort_order for cache loads", function()
+            local list = { { name = "X", first_page = 1, first_seq = 1 } }
+            xray_data:sortByFirstAppearance(list)
+            assert.are.equal(1, list[1].sort_order)
+        end)
+    end)
+
+    describe("sortByName", function()
+        it("orders case-insensitively by name", function()
+            local list = { { name = "banana" }, { name = "Apple" }, { name = "cherry" } }
+            xray_data:sortByName(list)
+            assert.are.equal("Apple",  list[1].name)
+            assert.are.equal("banana", list[2].name)
+            assert.are.equal("cherry", list[3].name)
+        end)
+    end)
+
+    describe("sortEntityList", function()
+        it("routes characters/locations to first-appearance", function()
+            local list = { { name = "Z", first_page = 9 }, { name = "A", first_page = 2 } }
+            xray_data:sortEntityList(list, "character")
+            assert.are.equal("A", list[1].name)
+        end)
+        it("routes terms to alphabetical", function()
+            local list = { { name = "Zeta", first_page = 1 }, { name = "Alpha", first_page = 9 } }
+            xray_data:sortEntityList(list, "term")
+            assert.are.equal("Alpha", list[1].name)
+        end)
+    end)
 end)
