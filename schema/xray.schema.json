@@ -51,8 +51,7 @@
           "percent": { "type": "integer", "minimum": 1, "maximum": 100 },
           "snippet_anchor": {
             "type": "string",
-            "minLength": 1,
-            "description": "80-120 chars, sentence-cut, whitespace-normalized (by convention; only non-empty is enforced)"
+            "description": "80-120 chars, sentence-cut, whitespace-normalized (by convention). May be an empty string for a textless zone (e.g. image-only front matter); the device falls back to chapter/percent anchors. Only the string type is enforced."
           },
           "chapter_anchor": {
             "description": "may be null (densified/10%-fallback checkpoints); not enforced by schema.py",

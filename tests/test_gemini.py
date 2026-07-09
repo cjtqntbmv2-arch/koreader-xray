@@ -1,4 +1,5 @@
 import json
+import urllib.error
 
 import pytest
 
@@ -176,6 +177,36 @@ def test_429_backs_off_then_raises_quota(monkeypatch):
     # monkeypatch above, so this pins the base-2 exponential backoff exactly.
     # A regression that collapses the exponent to a constant must fail here.
     assert sleeps == [2, 4, 8]
+
+
+def test_network_error_retries_once_then_raises_clean_runtime_error(monkeypatch):
+    """A URLError (DNS failure, connection refused, socket timeout) from the
+    default transport must not propagate as a raw traceback into the calibre
+    job dialog: _default_transport retries once, then raises a clean
+    RuntimeError with no API key in the message.
+
+    The injectable `transport=` seam bypasses _default_transport entirely, so
+    it can't exercise this retry/mapping -- instead this uses the real
+    default transport (no transport= override) and monkeypatches the
+    underlying urllib.request.urlopen call, same style as the time.sleep
+    monkeypatch already used for the 503-retry test above."""
+    sleeps = []
+    monkeypatch.setattr("xray_core.gemini.time.sleep", lambda s: sleeps.append(s))
+    calls = {"n": 0}
+
+    def fake_urlopen(req, timeout=None):
+        calls["n"] += 1
+        raise urllib.error.URLError("mock connection refused")
+
+    monkeypatch.setattr("xray_core.gemini.urllib.request.urlopen", fake_urlopen)
+
+    client = GeminiClient("super-secret-api-key")
+    with pytest.raises(RuntimeError) as exc_info:
+        client.generate("sys", "user")
+
+    assert calls["n"] == 2  # 1 initial attempt + 1 retry, then a clean raise
+    assert sleeps == [2]
+    assert "super-secret-api-key" not in str(exc_info.value)
 
 
 def test_other_error_raises_runtime_error():

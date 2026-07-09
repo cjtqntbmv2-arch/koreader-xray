@@ -106,7 +106,22 @@ def plan_checkpoints(book: BookText) -> list[Checkpoint]:
             snippet_anchor=make_snippet_anchor(book.full_text, p),
             chapter_anchor={"toc_title": a.title, "spine_index": a.spine_index} if a else None,
         ))
-    return cps
+
+    # Coalesce checkpoints that land on the same integer percent (e.g. two
+    # chapter boundaries <1% of the book apart): percent is a non-decreasing
+    # function of offset over a strictly-increasing `ends`, so duplicates are
+    # always a consecutive run. Keep the LAST (largest-offset) checkpoint of
+    # each run -- coverage stays gapless and the forced-100 final checkpoint
+    # is never dropped. schema.validate() requires strictly-ascending
+    # percent; without this, generate_xray raises ValueError only after the
+    # whole API budget for the run is already spent.
+    coalesced: list[Checkpoint] = []
+    for cp in cps:
+        if coalesced and coalesced[-1].percent == cp.percent:
+            coalesced[-1] = cp
+        else:
+            coalesced.append(cp)
+    return coalesced
 
 
 _SENTENCE_END_CHARS = ".!?…"

@@ -16,6 +16,7 @@ default transport, `json`/`re`/`time`/`random`/`dataclasses` for the rest.
 import json
 import random
 import re
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -145,11 +146,21 @@ class GeminiClient:
 
     def _default_transport(self, url, headers, body_bytes):
         req = urllib.request.Request(url, data=body_bytes, headers=headers, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                return resp.status, resp.read()
-        except urllib.error.HTTPError as e:
-            return e.code, e.read()
+        retried = False
+        while True:  # every branch returns or raises -- no fallthrough
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    return resp.status, resp.read()
+            except urllib.error.HTTPError as e:
+                return e.code, e.read()
+            except (urllib.error.URLError, socket.timeout, TimeoutError) as e:
+                if not retried:
+                    retried = True
+                    time.sleep(2)
+                    continue
+                # str(e) is connection-level info only (DNS/refused/timeout)
+                # -- never headers or the API key -- safe to surface as-is.
+                raise RuntimeError(f"Gemini network error: {e}") from None
 
     def _build_body(self, system_instruction, user_prompt, max_output_tokens):
         gen_config = {

@@ -171,6 +171,42 @@ def test_last_checkpoint_is_100():
     assert cps[-1].offset == len(full_text)
 
 
+def test_no_duplicate_percents_short_interior_chapter():
+    """Chapter B is a short interior chapter (50 chars) sandwiched between
+    two long ones, well under 1% of the 10_000-char total. Pre-fix, the
+    end-of-A offset (5000, exactly 50%) and end-of-B offset (5050) floor-
+    divide to the SAME percent (50): `plan_checkpoints` yielded
+    [..., 50, 50, ...], which schema.validate() rejects (percent must
+    strictly ascend) -- crashing generate_xray only after the whole API
+    budget for the run was already spent. Verified pre-fix to collide via a
+    throwaway repro against git HEAD's checkpoints.py before this fix landed."""
+    len_a, len_b = 5000, 50
+    text_a = "Chapter A. " + "a" * (len_a - len("Chapter A. "))
+    text_b = "Chapter B. " + "b" * (len_b - len("Chapter B. "))
+    total_target = 10000
+    len_c = total_target - len_a - len_b
+    text_c = "Chapter C. " + "c" * (len_c - len("Chapter C. "))
+    full_text = text_a + text_b + text_c
+    assert len(full_text) == total_target
+
+    toc = [
+        TocEntry(title="Chapter A", spine_index=0, offset=0),
+        TocEntry(title="Chapter B", spine_index=1, offset=len_a),
+        TocEntry(title="Chapter C", spine_index=2, offset=len_a + len_b),
+    ]
+    book = _book(full_text, toc)
+
+    cps = plan_checkpoints(book)
+    percents = [cp.percent for cp in cps]
+
+    assert all(a < b for a, b in zip(percents, percents[1:])), (
+        f"percents must strictly ascend, got {percents}"
+    )
+    assert len(percents) == len(set(percents))
+    assert cps[-1].percent == 100
+    assert cps[-1].offset == total_target
+
+
 def test_snippet_anchor_sentence_cut():
     filler = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 5
     ending = "The hero finally arrived home after a very long journey through the mountains."

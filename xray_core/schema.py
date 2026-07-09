@@ -109,9 +109,13 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
                 )
             prev_percent = percent
 
-        snippet_anchor = cp.get("snippet_anchor")
-        if not isinstance(snippet_anchor, str) or not snippet_anchor.strip():
-            problems.append(f"{label}.snippet_anchor must be a non-empty string")
+        if "snippet_anchor" not in cp:
+            problems.append(f"{label} missing required field: snippet_anchor")
+        elif not isinstance(cp["snippet_anchor"], str):
+            problems.append(f"{label}.snippet_anchor must be a string")
+        # Empty string is valid: make_snippet_anchor() legitimately returns ""
+        # for a textless zone (e.g. image-only front matter); the device
+        # falls back to chapter/percent anchors, still spoiler-safe.
 
         snapshot = cp.get("snapshot")
         if not isinstance(snapshot, dict):
