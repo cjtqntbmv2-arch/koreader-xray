@@ -68,6 +68,20 @@ Module map (by responsibility, not exhaustive):
 - `localization_xray.lua` — runtime `.po` loader; strings are used as `self.loc:t("key")`.
 - `prompts/<lang>.lua` — AI prompt templates per language; `languages/<lang>.po` — UI translations.
 
+## X-Ray data model: complete, offline-first, spoiler-staged
+
+The character / location / glossary lists are meant to be a **complete, one-time-per-book, fully offline reference**, built by the checkpoint-prefetch — not by the single "fetch now". Treat this as the guiding intent when touching entity extraction:
+
+- **Prefetch is the completeness path** (established in the 26.7.3 design, decision E3). Two triggers, same work: auto-on-WiFi (`maybeStartAutoPrefetch`) and manual "prepare for offline" (`startOfflinePrefetch`). The single "fetch now" stays intentionally top-N — do **not** bolt a multipass/topup loop onto it.
+- **Spoiler-staged snapshots:** ~10–12 checkpoints (`xray_prefetch.lua`), each a %-capped snapshot in the book's `.sdr`. A snapshot never holds data past its checkpoint %; reading at X% shows the ≤X% snapshot. The cost is paid once per book; afterwards reads are local/offline and tapping to look something up never triggers an API call.
+- **Completeness needs full text, not samples — for capable providers.** For Gemini and other large-context providers, segment fetches send the **full chapter text** of the covered region (context is ~1M tokens; input is not the bottleneck — JSON **output** is). Cover dense spans in output-bounded sub-chunks that merge into the one checkpoint snapshot. Small/unknown-output models keep the START/MID/END sampling + caps. Never regress those sampling shims.
+- **Late single-entity adds** (word lookup) merge and `propagateEntityForward` into later snapshots, spoiler-safe (26.7.8) — a missing name must never require wiping the cache.
+- **Order character/location lists by first appearance (chronological), not by recency** — the recent reading window must not dominate list order. The glossary/terms list is ordered **alphabetically** (you look a term up by name).
+- **Intent: distant content deserves fuller reminders than recently-read content** (you forget the old). Today this is partly emergent — the per-checkpoint merge re-enriches long-running entities' descriptions. An explicit distance-scaled length rule is a deferred refinement (see the spec's §10); don't assume it exists.
+- **Completeness applies to all three lists** (characters, locations, terms) — not just characters. Any per-segment "extract every X" instruction must name all three.
+
+Implementation detail for the current push lives in `docs/superpowers/specs/2026-07-09-xray-full-text-entity-coverage-design.md`.
+
 ## Localization workflow (mandatory)
 
 - `en.po` is the master. After adding/removing/changing any `loc:t("key")` usage in Lua, run `python3 tools/sync_translations.py` to propagate keys to all `.po` files.
