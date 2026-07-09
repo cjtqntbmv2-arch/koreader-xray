@@ -544,7 +544,7 @@ def embed_xray(epub_path, doc, out_path):
             zout.writestr(DATA_PATH, payload, zipfile.ZIP_DEFLATED)
 ```
 
-`_add_manifest_item`: parse the OPF (`ElementTree`), and if no manifest item with that href exists, append `<item id="xray-data" href="{href}" media-type="application/json"/>` to `<manifest>` (not referenced by spine — an auxiliary resource; media-type is non-core so strict epubcheck may warn, harmless for personal use). Return serialized bytes, preserving the OPF's namespaces.
+`_add_manifest_item`: use `ElementTree` ONLY for a read-only check of whether a manifest item with that href already exists; if not, **BYTE-SPLICE** the new `<item id="xray-data" href="{href}" media-type="application/json"/>` string directly before the closing `</manifest>` tag in the original `opf_bytes`. Do NOT round-trip the whole tree through `ET.tostring` — `register_namespace("", OPF_NS)` + reserialize silently strips the `opf:` prefix from same-namespace ATTRIBUTES (`opf:role`, `opf:file-as`, `opf:scheme` — ubiquitous on calibre-authored EPUB2), moving them out of the OPF namespace and corrupting metadata on every embed. Byte-splicing leaves every other byte untouched. (Auxiliary resource, not in spine; media-type non-core so strict epubcheck may warn — harmless for personal use.) A test MUST cover an OPF carrying `opf:role`/`opf:scheme` and assert those attributes survive the embed unchanged.
 
 - [ ] **Step 1: Write failing tests**
 
