@@ -445,6 +445,7 @@ function M:propagateEntityForward(item, item_type)
     self.book_data[key] = self.book_data[key] or {}
     if not entityListContains(self.book_data[key], item.name) then
         table.insert(self.book_data[key], item)
+        self:sortEntityList(self.book_data[key], item_type)
         self.cache_manager:asyncSaveCache(book_path, self.book_data)
     end
 
@@ -458,6 +459,7 @@ function M:propagateEntityForward(item, item_type)
                 snap[key] = snap[key] or {}
                 if not entityListContains(snap[key], item.name) then
                     table.insert(snap[key], item)
+                    self:sortEntityList(snap[key], item_type)
                     self.cache_manager:saveSnapshot(book_path, i, snap)
                 end
             end

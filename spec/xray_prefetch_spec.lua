@@ -624,6 +624,43 @@ describe("xray_prefetch", function()
             assert.is_false(plugin.prefetch_active)
         end)
     end)
+
+    describe("propagateEntityForward ordering", function()
+        it("inserts a character at its first-appearance position, not at the end", function()
+            local saved = {}
+            local plugin = require("xray_prefetch")
+            -- minimal host object
+            local host = setmetatable({
+                active_snapshot_index = 1,
+                ui = { document = { file = "/book.epub" } },
+                book_data = {
+                    characters = {
+                        { name = "Early", first_page = 10, first_seq = 1 },
+                        { name = "Late",  first_page = 90, first_seq = 3 },
+                    },
+                    prefetch = { checkpoints = { { page = 20 }, { page = 100 } } },
+                },
+                cache_manager = {
+                    asyncSaveCache = function() end,
+                    loadSnapshot = function() return nil end,
+                    saveSnapshot = function() end,
+                },
+                _snapshotExistsCached = function() return false end,
+            }, { __index = plugin })
+            -- borrow the real sorter
+            host.sortEntityList = require("xray_data").sortEntityList
+            host.sortByFirstAppearance = require("xray_data").sortByFirstAppearance
+            host.sortByName = require("xray_data").sortByName
+            host.sortDataByFrequency = require("xray_data").sortDataByFrequency
+
+            host:propagateEntityForward(
+                { name = "Middle", first_page = 50, first_seq = 2 }, "character")
+
+            local names = {}
+            for _, c in ipairs(host.book_data.characters) do names[#names+1] = c.name end
+            assert.same({ "Early", "Middle", "Late" }, names)
+        end)
+    end)
 end)
 
 -- Restore the network manager fake to spec_helper's default (offline with runWhenOnline).

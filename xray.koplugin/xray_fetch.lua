@@ -233,12 +233,14 @@ function M:fetchSingleWord(text, pos0, pos1)
                             hist_entry[desc_key] = item[desc_key]
                             item.history = { hist_entry }
                         end
+                        self._entity_seq_counter = self._entity_seq_counter or { n = 0 }
+                        self:stampFirstAppearance(item, current_page, self._entity_seq_counter)
                         table.insert(target_list, item)
                     end
-                    
+
                     -- Sort and save via the D4 displayed-dataset rule: a
                     -- snapshot view must never overwrite the main cache.
-                    self:sortDataByFrequency(target_list, book_text, "name")
+                    self:sortEntityList(target_list, item_type, book_text)
                     self:persistDisplayedEntities()
                     -- Keep a name added inside a covered region visible for the
                     -- rest of the book: push it into the main cache and every
