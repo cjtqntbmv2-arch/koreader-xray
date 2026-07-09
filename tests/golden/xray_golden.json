@@ -1,0 +1,616 @@
+{
+  "schema_version": 1,
+  "generator": "calibre-xray",
+  "generator_version": "0.1.0",
+  "detail_level": "normal",
+  "language": "en",
+  "book_fingerprint": {
+    "calibre_uuid": "e2e00000-1111-2222-3333-444455556666",
+    "title": "Test Book",
+    "authors": [
+      "Jane Author"
+    ],
+    "text_hash": "sha256:7cfbaa12cfb54e6a95e81561cee3d0abbbba292992a6b03ec8c495bfc5b5b2f3"
+  },
+  "complete": true,
+  "last_percent": 100,
+  "book_type": "fiction",
+  "timeline": [
+    {
+      "chapter": "The Harbor at Dawn",
+      "event": "Alice Merrow arrives at Thornwick Harbor.",
+      "pct": 14
+    },
+    {
+      "chapter": "The Stranger's Ledger",
+      "event": "Bram Voss meets Alice at the inn.",
+      "pct": 25
+    },
+    {
+      "chapter": "Old Debts",
+      "event": "The origin of the Ledgerbind is revealed.",
+      "pct": 39
+    },
+    {
+      "chapter": "The Hidden Cove",
+      "event": "Corvin Hale's chart errors are exposed.",
+      "pct": 51
+    },
+    {
+      "chapter": "Storm Warning",
+      "event": "Dahlia Rees warns of a storm over Shadow Pass.",
+      "pct": 63
+    },
+    {
+      "chapter": "The Last Reckoning",
+      "event": "Emeric Thale claims the Ledgerbind.",
+      "pct": 100
+    }
+  ],
+  "checkpoints": [
+    {
+      "percent": 14,
+      "snippet_anchor": "prepared her for the real salt air. A dockhand pointed her toward the chart-maker's guild without being asked twice.",
+      "chapter_anchor": {
+        "toc_title": "The Harbor at Dawn",
+        "spine_index": 0
+      },
+      "snapshot": {
+        "characters": [
+          {
+            "name": "Alice Merrow",
+            "role": "protagonist",
+            "description": "A young cartographer newly arrived at Thornwick Harbor.",
+            "gender": "female",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 1
+          }
+        ],
+        "locations": [
+          {
+            "name": "Thornwick Harbor",
+            "description": "A busy trade harbor where the story begins.",
+            "importance": "primary setting",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 2
+          }
+        ],
+        "terms": [],
+        "historical_figures": []
+      }
+    },
+    {
+      "percent": 25,
+      "snippet_anchor": "or so he told anyone who asked at the bar. Alice recognized his old sea-scarred hands from a dozen dockside stories.",
+      "chapter_anchor": {
+        "toc_title": "The Stranger's Ledger",
+        "spine_index": 1
+      },
+      "snapshot": {
+        "characters": [
+          {
+            "name": "Alice Merrow",
+            "role": "protagonist",
+            "description": "A young cartographer newly arrived at Thornwick Harbor.",
+            "gender": "female",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 1
+          },
+          {
+            "name": "Bram Voss",
+            "role": "supporting",
+            "description": "A retired smuggler with sea-scarred hands.",
+            "gender": "male",
+            "occupation": "former smuggler",
+            "aliases": [],
+            "first_pct": 25,
+            "first_seq": 3
+          }
+        ],
+        "locations": [
+          {
+            "name": "Thornwick Harbor",
+            "description": "A busy trade harbor where the story begins.",
+            "importance": "primary setting",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 2
+          }
+        ],
+        "terms": [],
+        "historical_figures": []
+      }
+    },
+    {
+      "percent": 39,
+      "snippet_anchor": "three centuries before, binding her own treasury to it. Bram still owed his share, and everyone in the guild knew it.",
+      "chapter_anchor": {
+        "toc_title": "Old Debts",
+        "spine_index": 2
+      },
+      "snapshot": {
+        "characters": [
+          {
+            "name": "Alice Merrow",
+            "role": "protagonist",
+            "description": "A young cartographer newly arrived at Thornwick Harbor.",
+            "gender": "female",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 1
+          },
+          {
+            "name": "Bram Voss",
+            "role": "supporting",
+            "description": "A retired smuggler with sea-scarred hands.",
+            "gender": "male",
+            "occupation": "former smuggler",
+            "aliases": [],
+            "first_pct": 25,
+            "first_seq": 3
+          }
+        ],
+        "locations": [
+          {
+            "name": "Thornwick Harbor",
+            "description": "A busy trade harbor where the story begins.",
+            "importance": "primary setting",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 2
+          }
+        ],
+        "terms": [
+          {
+            "name": "the Ledgerbind",
+            "aliases": [],
+            "expanded": "The Ledgerbind Contract",
+            "category": "legal/magical",
+            "definition": "An unbreakable debt contract older than the harbor."
+          }
+        ],
+        "historical_figures": [
+          {
+            "name": "Queen Yssa the Elder",
+            "biography": "Signed the first Ledgerbind three centuries ago.",
+            "role": "historical monarch",
+            "importance_in_book": "origin of the Ledgerbind",
+            "context_in_book": "referenced as the contract's originator."
+          }
+        ]
+      }
+    },
+    {
+      "percent": 51,
+      "snippet_anchor": "and gotten the depth soundings wrong both times. Alice said nothing, but she already knew where his numbers failed.",
+      "chapter_anchor": {
+        "toc_title": "The Hidden Cove",
+        "spine_index": 3
+      },
+      "snapshot": {
+        "characters": [
+          {
+            "name": "Alice Merrow",
+            "role": "protagonist",
+            "description": "A young cartographer newly arrived at Thornwick Harbor.",
+            "gender": "female",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 1
+          },
+          {
+            "name": "Bram Voss",
+            "role": "supporting",
+            "description": "A retired smuggler with sea-scarred hands.",
+            "gender": "male",
+            "occupation": "former smuggler",
+            "aliases": [],
+            "first_pct": 25,
+            "first_seq": 3
+          },
+          {
+            "name": "Corvin Hale",
+            "role": "rival",
+            "description": "A rival cartographer with a flawed hidden-cove chart.",
+            "gender": "male",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 4
+          }
+        ],
+        "locations": [
+          {
+            "name": "Thornwick Harbor",
+            "description": "A busy trade harbor where the story begins.",
+            "importance": "primary setting",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 2
+          }
+        ],
+        "terms": [
+          {
+            "name": "the Ledgerbind",
+            "aliases": [],
+            "expanded": "The Ledgerbind Contract",
+            "category": "legal/magical",
+            "definition": "An unbreakable debt contract older than the harbor."
+          }
+        ],
+        "historical_figures": [
+          {
+            "name": "Queen Yssa the Elder",
+            "biography": "Signed the first Ledgerbind three centuries ago.",
+            "role": "historical monarch",
+            "importance_in_book": "origin of the Ledgerbind",
+            "context_in_book": "referenced as the contract's originator."
+          }
+        ]
+      }
+    },
+    {
+      "percent": 63,
+      "snippet_anchor": "Pass in a storm and come back whole in eleven years. She rang the warning bell twice, long practice steadying her hand.",
+      "chapter_anchor": {
+        "toc_title": "Storm Warning",
+        "spine_index": 4
+      },
+      "snapshot": {
+        "characters": [
+          {
+            "name": "Alice Merrow",
+            "role": "protagonist",
+            "description": "A young cartographer newly arrived at Thornwick Harbor.",
+            "gender": "female",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 1
+          },
+          {
+            "name": "Bram Voss",
+            "role": "supporting",
+            "description": "A retired smuggler with sea-scarred hands.",
+            "gender": "male",
+            "occupation": "former smuggler",
+            "aliases": [],
+            "first_pct": 25,
+            "first_seq": 3
+          },
+          {
+            "name": "Corvin Hale",
+            "role": "rival",
+            "description": "A rival cartographer with a flawed hidden-cove chart.",
+            "gender": "male",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 4
+          },
+          {
+            "name": "Dahlia Rees",
+            "role": "supporting",
+            "description": "The lighthouse keeper who watches over Shadow Pass.",
+            "gender": "female",
+            "occupation": "lighthouse keeper",
+            "aliases": [],
+            "first_pct": 63,
+            "first_seq": 5
+          }
+        ],
+        "locations": [
+          {
+            "name": "Thornwick Harbor",
+            "description": "A busy trade harbor where the story begins.",
+            "importance": "primary setting",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 2
+          },
+          {
+            "name": "Shadow Pass",
+            "description": "A treacherous strait where storms sink ships.",
+            "importance": "recurring hazard",
+            "aliases": [],
+            "first_pct": 63,
+            "first_seq": 6
+          }
+        ],
+        "terms": [
+          {
+            "name": "the Ledgerbind",
+            "aliases": [],
+            "expanded": "The Ledgerbind Contract",
+            "category": "legal/magical",
+            "definition": "An unbreakable debt contract older than the harbor."
+          }
+        ],
+        "historical_figures": [
+          {
+            "name": "Queen Yssa the Elder",
+            "biography": "Signed the first Ledgerbind three centuries ago.",
+            "role": "historical monarch",
+            "importance_in_book": "origin of the Ledgerbind",
+            "context_in_book": "referenced as the contract's originator."
+          }
+        ]
+      }
+    },
+    {
+      "percent": 75,
+      "snippet_anchor": "the guild hall at first light. Corvin's errors were quietly struck from the record, and no one thanked him for it.",
+      "chapter_anchor": null,
+      "snapshot": {
+        "characters": [
+          {
+            "name": "Alice Merrow",
+            "role": "protagonist",
+            "description": "A young cartographer newly arrived at Thornwick Harbor.",
+            "gender": "female",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 1
+          },
+          {
+            "name": "Bram Voss",
+            "role": "supporting",
+            "description": "A retired smuggler with sea-scarred hands.",
+            "gender": "male",
+            "occupation": "former smuggler",
+            "aliases": [],
+            "first_pct": 25,
+            "first_seq": 3
+          },
+          {
+            "name": "Corvin Hale",
+            "role": "rival",
+            "description": "A rival cartographer with a flawed hidden-cove chart.",
+            "gender": "male",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 4
+          },
+          {
+            "name": "Dahlia Rees",
+            "role": "supporting",
+            "description": "The lighthouse keeper who watches over Shadow Pass.",
+            "gender": "female",
+            "occupation": "lighthouse keeper",
+            "aliases": [],
+            "first_pct": 63,
+            "first_seq": 5
+          }
+        ],
+        "locations": [
+          {
+            "name": "Thornwick Harbor",
+            "description": "A busy trade harbor where the story begins.",
+            "importance": "primary setting",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 2
+          },
+          {
+            "name": "Shadow Pass",
+            "description": "A treacherous strait where storms sink ships.",
+            "importance": "recurring hazard",
+            "aliases": [],
+            "first_pct": 63,
+            "first_seq": 6
+          }
+        ],
+        "terms": [
+          {
+            "name": "the Ledgerbind",
+            "aliases": [],
+            "expanded": "The Ledgerbind Contract",
+            "category": "legal/magical",
+            "definition": "An unbreakable debt contract older than the harbor."
+          }
+        ],
+        "historical_figures": [
+          {
+            "name": "Queen Yssa the Elder",
+            "biography": "Signed the first Ledgerbind three centuries ago.",
+            "role": "historical monarch",
+            "importance_in_book": "origin of the Ledgerbind",
+            "context_in_book": "referenced as the contract's originator."
+          }
+        ]
+      }
+    },
+    {
+      "percent": 87,
+      "snippet_anchor": "ordinary morning noise and business. Alice began sketching the hidden cove properly while the argument wore itself out.",
+      "chapter_anchor": null,
+      "snapshot": {
+        "characters": [
+          {
+            "name": "Alice Merrow",
+            "role": "protagonist",
+            "description": "A young cartographer newly arrived at Thornwick Harbor.",
+            "gender": "female",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 1
+          },
+          {
+            "name": "Bram Voss",
+            "role": "supporting",
+            "description": "A retired smuggler with sea-scarred hands.",
+            "gender": "male",
+            "occupation": "former smuggler",
+            "aliases": [],
+            "first_pct": 25,
+            "first_seq": 3
+          },
+          {
+            "name": "Corvin Hale",
+            "role": "rival",
+            "description": "A rival cartographer with a flawed hidden-cove chart.",
+            "gender": "male",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 4
+          },
+          {
+            "name": "Dahlia Rees",
+            "role": "supporting",
+            "description": "The lighthouse keeper who watches over Shadow Pass.",
+            "gender": "female",
+            "occupation": "lighthouse keeper",
+            "aliases": [],
+            "first_pct": 63,
+            "first_seq": 5
+          }
+        ],
+        "locations": [
+          {
+            "name": "Thornwick Harbor",
+            "description": "A busy trade harbor where the story begins.",
+            "importance": "primary setting",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 2
+          },
+          {
+            "name": "Shadow Pass",
+            "description": "A treacherous strait where storms sink ships.",
+            "importance": "recurring hazard",
+            "aliases": [],
+            "first_pct": 63,
+            "first_seq": 6
+          }
+        ],
+        "terms": [
+          {
+            "name": "the Ledgerbind",
+            "aliases": [],
+            "expanded": "The Ledgerbind Contract",
+            "category": "legal/magical",
+            "definition": "An unbreakable debt contract older than the harbor."
+          }
+        ],
+        "historical_figures": [
+          {
+            "name": "Queen Yssa the Elder",
+            "biography": "Signed the first Ledgerbind three centuries ago.",
+            "role": "historical monarch",
+            "importance_in_book": "origin of the Ledgerbind",
+            "context_in_book": "referenced as the contract's originator."
+          }
+        ]
+      }
+    },
+    {
+      "percent": 100,
+      "snippet_anchor": "candle at once. ENDMARK Only then did Emeric Thale step out of the shadows to claim the Ledgerbind was his to hold now.",
+      "chapter_anchor": {
+        "toc_title": "The Last Reckoning",
+        "spine_index": 5
+      },
+      "snapshot": {
+        "characters": [
+          {
+            "name": "Alice Merrow",
+            "role": "protagonist",
+            "description": "A young cartographer newly arrived at Thornwick Harbor.",
+            "gender": "female",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 1
+          },
+          {
+            "name": "Bram Voss",
+            "role": "supporting",
+            "description": "A retired smuggler with sea-scarred hands.",
+            "gender": "male",
+            "occupation": "former smuggler",
+            "aliases": [],
+            "first_pct": 25,
+            "first_seq": 3
+          },
+          {
+            "name": "Corvin Hale",
+            "role": "rival",
+            "description": "A rival cartographer with a flawed hidden-cove chart.",
+            "gender": "male",
+            "occupation": "cartographer",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 4
+          },
+          {
+            "name": "Dahlia Rees",
+            "role": "supporting",
+            "description": "The lighthouse keeper who watches over Shadow Pass.",
+            "gender": "female",
+            "occupation": "lighthouse keeper",
+            "aliases": [],
+            "first_pct": 63,
+            "first_seq": 5
+          },
+          {
+            "name": "Emeric Thale",
+            "role": "antagonist",
+            "description": "A stranger who claims the Ledgerbind at the story's end.",
+            "gender": "male",
+            "occupation": "unknown",
+            "aliases": [],
+            "first_pct": 100,
+            "first_seq": 7
+          }
+        ],
+        "locations": [
+          {
+            "name": "Thornwick Harbor",
+            "description": "A busy trade harbor where the story begins.",
+            "importance": "primary setting",
+            "aliases": [],
+            "first_pct": 14,
+            "first_seq": 2
+          },
+          {
+            "name": "Shadow Pass",
+            "description": "A treacherous strait where storms sink ships.",
+            "importance": "recurring hazard",
+            "aliases": [],
+            "first_pct": 63,
+            "first_seq": 6
+          }
+        ],
+        "terms": [
+          {
+            "name": "the Ledgerbind",
+            "aliases": [],
+            "expanded": "The Ledgerbind Contract",
+            "category": "legal/magical",
+            "definition": "An unbreakable debt contract older than the harbor."
+          }
+        ],
+        "historical_figures": [
+          {
+            "name": "Queen Yssa the Elder",
+            "biography": "Signed the first Ledgerbind three centuries ago.",
+            "role": "historical monarch",
+            "importance_in_book": "origin of the Ledgerbind",
+            "context_in_book": "referenced as the contract's originator."
+          }
+        ]
+      }
+    }
+  ]
+}
