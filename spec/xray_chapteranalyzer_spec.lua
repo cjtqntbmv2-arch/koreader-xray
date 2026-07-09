@@ -209,4 +209,32 @@ describe("xray_chapteranalyzer", function()
             assert.are.equal("Chapter 1", titles[1])
         end)
     end)
+
+    describe("getDetailedChapterSamples full_text mode", function()
+        local ca = require("xray_chapteranalyzer")
+        local function fakeUI()
+            return { document = {
+                getToc = function() return {
+                    { title = "Chapter 1", page = 1, xpointer = "xp1" },
+                    { title = "Chapter 2", page = 50, xpointer = "xp2" },
+                } end,
+                getTextFromXPointer = function(_, xp)
+                    return ("WORD "):rep(400) .. xp  -- ~2000 chars, well over slice size
+                end,
+                getPageCount = function() return 100 end,
+            } }
+        end
+
+        it("emits full chapter text (no [MID] slicing) when full_text is set", function()
+            local out = ca:getDetailedChapterSamples(fakeUI(), 200, 150000, true, nil, nil, nil, true)
+            assert.is_true(out ~= nil)
+            assert.is_nil(out:find("%[MID%]"))
+            assert.is_true(out:find("xp1") ~= nil)  -- end of full chapter 1 present
+        end)
+
+        it("still slices START/MID/END when full_text is false", function()
+            local out = ca:getDetailedChapterSamples(fakeUI(), 200, 150000, true, nil, nil, nil, false)
+            assert.is_true(out:find("%[MID%]") ~= nil)
+        end)
+    end)
 end)

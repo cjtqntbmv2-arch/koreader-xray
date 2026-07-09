@@ -638,7 +638,7 @@ function ChapterAnalyzer:getAnnotationsForAnalysis(ui)
 end
 
 -- Get detailed samples (Start/Mid/End) from each chapter
-function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit, is_full_book, start_page, known_chapters, end_page)
+function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit, is_full_book, start_page, known_chapters, end_page, full_text)
     if not ui or not ui.document then return nil, nil end
 
     local toc = ui.document:getToc()
@@ -730,15 +730,17 @@ function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit
         num_chapters = 20 -- Default budget for even sampling
     end
     
-    -- DYNAMIC BUDGET: Scale down for large books to leave room for AI output
-    if #active_chapters > 60 then
-        -- Very large omnibus: aggressive compression
-        total_limit = math.min(total_limit, 60000)
-        AIHelper:log("ChapterAnalyzer: Large book detected (" .. num_chapters .. " chapters). Compressed total_limit to " .. total_limit)
-    elseif num_chapters > 30 then
-        -- Large book: moderate compression
-        total_limit = math.min(total_limit, 100000)
-        AIHelper:log("ChapterAnalyzer: Medium-large book detected (" .. num_chapters .. " chapters). Compressed total_limit to " .. total_limit)
+    if not full_text then
+        -- DYNAMIC BUDGET: Scale down for large books to leave room for AI output
+        if #active_chapters > 60 then
+            -- Very large omnibus: aggressive compression
+            total_limit = math.min(total_limit, 60000)
+            AIHelper:log("ChapterAnalyzer: Large book detected (" .. num_chapters .. " chapters). Compressed total_limit to " .. total_limit)
+        elseif num_chapters > 30 then
+            -- Large book: moderate compression
+            total_limit = math.min(total_limit, 100000)
+            AIHelper:log("ChapterAnalyzer: Medium-large book detected (" .. num_chapters .. " chapters). Compressed total_limit to " .. total_limit)
+        end
     end
 
     -- Calculate budget per chapter
@@ -780,16 +782,24 @@ function ChapterAnalyzer:getDetailedChapterSamples(ui, max_chapters, total_limit
             end)
             
             if success and chapter_text and #chapter_text > 100 then
-                local start_txt = chapter_text:sub(1, sample_len)
-                local mid_start = math.max(1, math.floor(#chapter_text / 2) - math.floor(sample_len / 2))
-                local mid_txt = chapter_text:sub(mid_start, mid_start + sample_len)
-                local end_txt = chapter_text:sub(-sample_len)
-                
-                table.insert(samples, string.format(
-                    "CHAPTER [%s]:\n[START]: %s\n[MID]: %s\n[END]: %s",
-                    chapter.title or tostring(i),
-                    start_txt, mid_txt, end_txt
-                ))
+                if full_text then
+                    table.insert(samples, string.format(
+                        "CHAPTER [%s]:\n%s",
+                        chapter.title or tostring(i),
+                        chapter_text
+                    ))
+                else
+                    local start_txt = chapter_text:sub(1, sample_len)
+                    local mid_start = math.max(1, math.floor(#chapter_text / 2) - math.floor(sample_len / 2))
+                    local mid_txt = chapter_text:sub(mid_start, mid_start + sample_len)
+                    local end_txt = chapter_text:sub(-sample_len)
+
+                    table.insert(samples, string.format(
+                        "CHAPTER [%s]:\n[START]: %s\n[MID]: %s\n[END]: %s",
+                        chapter.title or tostring(i),
+                        start_txt, mid_txt, end_txt
+                    ))
+                end
             end
         end
     else

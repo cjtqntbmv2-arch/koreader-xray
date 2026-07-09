@@ -126,6 +126,7 @@ describe("xray_fetch", function()
             }
             p.ai_helper = {
                 settings = {},
+                isLargeContextProvider = function() return false end,
                 buildComprehensiveRequest = function(self, title, author, context)
                     captured = context
                     return nil, "test_abort", "test abort"

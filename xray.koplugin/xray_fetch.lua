@@ -373,7 +373,8 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
             if is_cancelled or self.destroyed then self.bg_fetch_active = false; return end
             if not self.ui or not self.ui.document then self.bg_fetch_active = false; return end
 
-            local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 200, 150000, reading_percent == 100, first_missing_page, known_chapters, prefetch_page)
+            local full_text = self.ai_helper and self.ai_helper:isLargeContextProvider() or false
+            local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 200, 150000, reading_percent == 100, first_missing_page, known_chapters, prefetch_page, full_text)
             local annots = self.chapter_analyzer:getAnnotationsForAnalysis(self.ui)
 
             if (not book_text or #book_text < 10) and not samples then
