@@ -204,4 +204,131 @@ function M:_resolveCheckpointPages(doc_json, yield_fn)
     return out
 end
 
+-- Char-percent -> device page.
+local function pctToPage(pct, page_count)
+    local p = math.floor(page_count * (tonumber(pct) or 0) / 100)
+    if p < 1 then p = 1 end
+    if p > page_count then p = page_count end
+    return p
+end
+
+-- The embedded JSON is a trust boundary: it rides inside a user-supplied EPUB.
+-- The native fetch path coerces every field through ensureString
+-- (xray_aihelper.lua:2014-2052) before the UI ever sees it; do the same here.
+-- xray_ui.lua calls :sub() on term.definition and concatenates character.role,
+-- so a JSON number in either place would crash the reader, not degrade.
+local STRING_FIELDS = {
+    characters        = { "name", "role", "description", "gender", "occupation" },
+    locations         = { "name", "description", "importance" },
+    terms             = { "name", "definition", "expanded", "category" },
+    historical_figures = { "name", "biography", "role", "importance_in_book", "context_in_book" },
+}
+
+local function coerceList(list, kind)
+    local fields = STRING_FIELDS[kind]
+    for _, e in ipairs(list or {}) do
+        if type(e) == "table" then
+            for _, f in ipairs(fields) do
+                if e[f] ~= nil and type(e[f]) ~= "string" then e[f] = tostring(e[f]) end
+            end
+            if type(e.aliases) ~= "table" then e.aliases = {} end
+        end
+    end
+    return list or {}
+end
+
+-- Characters and locations sort by first appearance (xray_data.lua:164-172),
+-- which needs first_page. Terms sort by name and historical figures by role
+-- weight, so neither gets stamped. first_seq comes from calibre and is only the
+-- tiebreaker.
+--
+-- sort_order is stamped on EVERY list: main.lua:756-767 re-sorts characters and
+-- historical_figures by `sort_order or 9999` on each cache load, and a table of
+-- ties feeds Lua's unstable sort an all-false comparator, which is free to
+-- permute. The lists arrive from calibre already in the intended order.
+local function prepareList(list, kind, page_count)
+    list = coerceList(list, kind)
+    for i, e in ipairs(list) do
+        if (kind == "characters" or kind == "locations") and e.first_pct and not e.first_page then
+            e.first_page = pctToPage(e.first_pct, page_count)
+        end
+        e.sort_order = i
+    end
+    return list
+end
+
+-- Build exactly what a completed on-device prefetch leaves behind: the main
+-- cache (entities of the LAST checkpoint + the one true timeline + the prefetch
+-- manifest) and one snapshot table per checkpoint.
+function M:_buildImportedCache(doc_json, mapped)
+    local page_count = self.ui.document:getPageCount()
+    local fp = doc_json.book_fingerprint or {}
+
+    local snapshots = {}
+    for n, m in ipairs(mapped) do
+        local src = doc_json.checkpoints[m.index].snapshot or {}
+        snapshots[n] = {
+            checkpoint_index = n,
+            page = m.page,
+            percent = m.percent,
+            characters = prepareList(src.characters, "characters", page_count),
+            locations = prepareList(src.locations, "locations", page_count),
+            terms = prepareList(src.terms, "terms", page_count),
+            historical_figures = prepareList(src.historical_figures, "historical_figures", page_count),
+        }
+    end
+
+    local last = snapshots[#snapshots]
+
+    -- D2: exactly one timeline, in the main cache, page-anchored.
+    -- visibleTimeline() hides this-book events without a page, so always set it.
+    local timeline = {}
+    for _, ev in ipairs(doc_json.timeline or {}) do
+        table.insert(timeline, {
+            page = pctToPage(ev.pct, page_count),
+            chapter = tostring(ev.chapter or ""),
+            event = tostring(ev.event or ""),
+        })
+    end
+
+    local manifest_cps = {}
+    for _, m in ipairs(mapped) do
+        table.insert(manifest_cps, { page = m.page, percent = m.percent })
+    end
+
+    -- A partial calibre run (quota, crash) leaves the tail of the book
+    -- uncovered. Append the device's own checkpoints beyond the imported
+    -- boundary so the normal prefetch can finish the job: _nextPendingCheckpoint
+    -- picks the first manifest entry above last_fetch_page with no snapshot file.
+    local completed = true
+    if doc_json.complete ~= true then
+        local device_cps = (self.computeCheckpoints and self:computeCheckpoints()) or {}
+        for _, cp in ipairs(device_cps) do
+            if cp.page > last.page then
+                table.insert(manifest_cps, { page = cp.page, percent = cp.percent })
+                completed = false
+            end
+        end
+    end
+
+    local book_data = {
+        book_title = tostring(fp.title or ""),
+        author = table.concat(fp.authors or {}, ", "),
+        book_type = doc_json.book_type,
+        characters = last.characters,
+        locations = last.locations,
+        terms = last.terms,
+        historical_figures = last.historical_figures,
+        timeline = timeline,
+        last_fetch_page = last.page,
+        prefetch = {
+            checkpoints = manifest_cps,
+            created_at = os.time(),
+            completed = completed or nil,
+        },
+    }
+
+    return book_data, snapshots
+end
+
 return M

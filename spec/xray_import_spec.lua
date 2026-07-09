@@ -342,4 +342,202 @@ describe("xray_import", function()
             assert.are.equal(3, n)
         end)
     end)
+
+    describe("_buildImportedCache", function()
+        local toc = {
+            { title = "The Harbor at Dawn", page = 1 },
+            { title = "Salt and Ledgers",   page = 30 },
+            { title = "The Long Tide",      page = 80 },
+        }
+        local SNIP2 = "the harbourmaster set down his pen and looked up."
+
+        local function build(page_count, doc_override)
+            local self_ = with_document(mock_plugin(), page_count or 100, toc, { [SNIP2] = hits(47) })
+            self_.computeCheckpoints = function() return {} end
+            local doc = doc_override or mock_doc()
+            local mapped = self_:_resolveCheckpointPages(doc)
+            local book_data, snaps = self_:_buildImportedCache(doc, mapped)
+            return book_data, snaps, self_
+        end
+
+        it("produces one snapshot per mapped checkpoint, indexed from 1", function()
+            local _, snaps = build()
+            assert.are.equal(3, #snaps)
+            assert.are.equal(1, snaps[1].checkpoint_index)
+            assert.are.equal(3, snaps[3].checkpoint_index)
+        end)
+
+        it("carries page and percent onto each snapshot", function()
+            local _, snaps = build()
+            assert.are.equal(29, snaps[1].page)
+            assert.are.equal(29, snaps[1].percent)
+            assert.are.equal(100, snaps[3].page)
+            assert.are.equal(100, snaps[3].percent)
+        end)
+
+        it("never puts a timeline into a snapshot", function()
+            local _, snaps = build()
+            for _, s in ipairs(snaps) do assert.is_nil(s.timeline) end
+        end)
+
+        it("never stamps snapshot_version or cache_version itself", function()
+            local book_data, snaps = build()
+            assert.is_nil(book_data.cache_version)
+            assert.is_nil(snaps[1].snapshot_version)
+        end)
+
+        it("preserves device field names verbatim", function()
+            local _, snaps = build()
+            local last = snaps[3]
+            assert.are.equal("Alice Merrow", last.characters[1].name)
+            assert.are.equal("protagonist", last.characters[1].role)
+            assert.is_string(last.characters[1].description)
+            assert.is_string(last.terms[1].definition)             -- not `description`
+            assert.is_string(last.historical_figures[1].biography) -- not `description`
+            assert.are.equal("climax", last.locations[2].importance)
+        end)
+
+        it("stamps first_page from first_pct against page_count, not the checkpoint page", function()
+            -- snaps[1].page is 29, page_count is 100: an implementation that
+            -- passed the checkpoint page as the total would produce 4, not 14.
+            local _, snaps = build(100)
+            assert.are.equal(14, snaps[1].characters[1].first_page)
+            assert.are.equal(47, snaps[3].characters[2].first_page)
+            assert.are.equal(92, snaps[3].locations[2].first_page)
+            assert.are.equal(1, snaps[3].characters[1].first_seq)
+        end)
+
+        it("leaves terms without first_page (they sort alphabetically)", function()
+            local _, snaps = build()
+            assert.is_nil(snaps[3].terms[1].first_page)
+        end)
+
+        it("writes no history arrays", function()
+            local _, snaps = build()
+            for _, c in ipairs(snaps[3].characters) do assert.is_nil(c.history) end
+        end)
+
+        it("stamps sort_order so main.lua's restore pass has a stable key", function()
+            -- Without it every entity ties at 9999 and Lua's unstable sort may
+            -- permute the chronological order on the next open of the book.
+            local book_data, snaps = build()
+            assert.are.equal(1, snaps[3].characters[1].sort_order)
+            assert.are.equal(2, snaps[3].characters[2].sort_order)
+            assert.are.equal(1, book_data.historical_figures[1].sort_order)
+        end)
+
+        it("coerces non-string entity fields at the trust boundary", function()
+            -- The JSON arrives inside a user-supplied EPUB. xray_ui.lua calls
+            -- :sub() on term.definition; a number there would crash the reader.
+            local doc = mock_doc()
+            doc.checkpoints[3].snapshot.terms[1].definition = 42
+            doc.checkpoints[3].snapshot.characters[1].role = 7
+            local self_ = with_document(mock_plugin(), 100, toc, { [SNIP2] = hits(47) })
+            self_.computeCheckpoints = function() return {} end
+            local _, snaps = self_:_buildImportedCache(doc, self_:_resolveCheckpointPages(doc))
+            assert.are.equal("42", snaps[3].terms[1].definition)
+            assert.are.equal("7", snaps[3].characters[1].role)
+        end)
+
+        -- The real D4 property, in producer space (see Global Constraints).
+        it("never puts an entity into a snapshot whose first_pct exceeds that checkpoint", function()
+            local doc = mock_doc()
+            local _, snaps = build(100, doc)
+            for n, snap in ipairs(snaps) do
+                local cp_pct = doc.checkpoints[n].percent
+                for _, list in ipairs({ snap.characters, snap.locations }) do
+                    for _, e in ipairs(list) do
+                        assert.is_true(e.first_pct <= cp_pct)
+                    end
+                end
+            end
+        end)
+
+        it("grows monotonically: every snapshot contains its predecessor's entities", function()
+            local _, snaps = build()
+            for n = 2, #snaps do
+                local seen = {}
+                for _, c in ipairs(snaps[n].characters) do seen[c.name] = true end
+                for _, c in ipairs(snaps[n - 1].characters) do
+                    assert.is_true(seen[c.name] == true)
+                end
+            end
+        end)
+
+        it("gives every timeline event a page and keeps them in the main cache", function()
+            local book_data, snaps = build(100)
+            assert.are.equal(3, #book_data.timeline)
+            assert.are.equal(14, book_data.timeline[1].page)
+            assert.are.equal(92, book_data.timeline[3].page)
+            assert.is_string(book_data.timeline[1].event)
+            assert.is_string(book_data.timeline[1].chapter)
+            assert.is_nil(snaps[1].timeline)
+        end)
+
+        it("mirrors the last snapshot into the main cache", function()
+            local book_data, snaps = build()
+            assert.are.equal(#snaps[3].characters, #book_data.characters)
+            assert.are.equal("Test Book", book_data.book_title)
+            assert.are.equal("Jane Author", book_data.author)
+            assert.are.equal("fiction", book_data.book_type)
+        end)
+
+        it("joins multiple authors with a comma", function()
+            local doc = mock_doc()
+            doc.book_fingerprint.authors = { "Jane Author", "John Writer" }
+            local book_data = build(100, doc)
+            assert.are.equal("Jane Author, John Writer", book_data.author)
+        end)
+
+        it("sets last_fetch_page to the last mapped checkpoint page", function()
+            assert.are.equal(100, (build(100)).last_fetch_page)
+        end)
+
+        it("builds a manifest that mirrors the mapped checkpoints", function()
+            local book_data = build(100)
+            assert.are.equal(3, #book_data.prefetch.checkpoints)
+            assert.are.equal(29, book_data.prefetch.checkpoints[1].page)
+            assert.are.equal(100, book_data.prefetch.checkpoints[3].page)
+            assert.is_number(book_data.prefetch.created_at)
+        end)
+
+        it("marks a complete document as a completed prefetch", function()
+            assert.is_true((build(100)).prefetch.completed)
+        end)
+
+        it("appends the device's own checkpoints beyond an incomplete import", function()
+            local doc = mock_doc()
+            doc.complete = false
+            doc.last_percent = 47
+            table.remove(doc.checkpoints, 3)   -- generated only up to 47%
+            table.remove(doc.timeline, 3)      -- table.remove, not `= nil`: no holes
+
+            local self_ = with_document(mock_plugin(), 100, toc, { [SNIP2] = hits(47) })
+            self_.computeCheckpoints = function()
+                return { { page = 29, percent = 29 }, { page = 70, percent = 70 }, { page = 100, percent = 100 } }
+            end
+            local mapped = self_:_resolveCheckpointPages(doc)
+            local book_data, snaps = self_:_buildImportedCache(doc, mapped)
+
+            assert.are.equal(2, #snaps)                            -- only the imported ones
+            assert.are.equal(4, #book_data.prefetch.checkpoints)   -- 2 imported + 2 appended (70, 100)
+            assert.are.equal(70, book_data.prefetch.checkpoints[3].page)
+            assert.are.equal(100, book_data.prefetch.checkpoints[4].page)
+            assert.is_nil(book_data.prefetch.completed)            -- device must finish the job
+            assert.are.equal(47, book_data.last_fetch_page)
+        end)
+
+        it("marks an incomplete document complete when nothing is left to fetch", function()
+            -- An incomplete doc's last checkpoint is clamped to page_count - 1
+            -- (99), so the device fake must report nothing above that.
+            local doc = mock_doc()
+            doc.complete = false
+            local self_ = with_document(mock_plugin(), 100, toc, {})
+            self_.computeCheckpoints = function() return { { page = 99, percent = 99 } } end
+            local mapped = self_:_resolveCheckpointPages(doc)
+            local book_data = self_:_buildImportedCache(doc, mapped)
+            assert.are.equal(99, book_data.last_fetch_page)
+            assert.is_true(book_data.prefetch.completed)
+        end)
+    end)
 end)
