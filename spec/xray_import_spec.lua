@@ -623,4 +623,108 @@ describe("xray_import", function()
             assert.is_true(book_data.prefetch.completed)
         end)
     end)
+
+    describe("importEmbeddedXray", function()
+        local toc = {
+            { title = "The Harbor at Dawn", page = 1 },
+            { title = "Salt and Ledgers",   page = 30 },
+            { title = "The Long Tide",      page = 80 },
+        }
+        local SNIP2 = "the harbourmaster set down his pen and looked up."
+
+        local function fake_cache_manager()
+            return {
+                saved = nil, snaps = {}, deleted = false,
+                saveCache = function(cm, _, data) cm.saved = data; return true end,
+                saveSnapshot = function(cm, _, i, data) cm.snaps[i] = data; return true end,
+                loadSnapshot = function(cm, _, i) return cm.snaps[i] end,
+                snapshotExists = function(cm, _, i) return cm.snaps[i] ~= nil end,
+                deleteSnapshots = function(cm) cm.snaps = {}; cm.deleted = true; return true end,
+            }
+        end
+
+        local function prepared(page_count)
+            local self_ = with_document(mock_plugin(), page_count or 100, toc, { [SNIP2] = hits(47) })
+            self_.cache_manager = fake_cache_manager()
+            self_.computeCheckpoints = function() return {} end
+            self_.invalidated = false
+            self_.invalidateSnapshotExistsCache = function(s) s.invalidated = true end
+            self_.viewed_page = nil
+            self_.updateSnapshotViewForPage = function(s, p) s.viewed_page = p end
+            _G.ui_tracker.shown = {}
+            return self_
+        end
+
+        it("writes the main cache and one file per snapshot", function()
+            local self_ = prepared()
+            self_:importEmbeddedXray(mock_doc())
+            assert.is_not_nil(self_.cache_manager.saved)
+            assert.are.equal(3, #self_.cache_manager.snaps)
+            assert.are.equal(29, self_.cache_manager.snaps[1].page)
+        end)
+
+        it("adopts the imported cache as book_data and the timeline as self.timeline", function()
+            local self_ = prepared()
+            self_:importEmbeddedXray(mock_doc())
+            assert.are.equal("Test Book", self_.book_data.book_title)
+            assert.are.equal(3, #self_.book_data.prefetch.checkpoints)
+            -- applySnapshot never swaps the timeline (D2), so the importer must
+            -- mirror it onto self the way autoLoadCache does (main.lua:718).
+            assert.are.equal(3, #self_.timeline)
+        end)
+
+        it("busts the snapshot-existence memo and refreshes the view", function()
+            local self_ = prepared()
+            self_:importEmbeddedXray(mock_doc())
+            assert.is_true(self_.invalidated)
+            assert.are.equal(1, self_.viewed_page)
+        end)
+
+        it("clears prefetch_active so the auto-prefetch is not blocked forever", function()
+            local self_ = prepared()
+            self_:importEmbeddedXray(mock_doc())
+            assert.falsy(self_.prefetch_active)
+        end)
+
+        it("aborts without adopting book_data when a snapshot write fails", function()
+            -- saveSnapshot returns false; it does not throw. Adopting the
+            -- whole-book main cache with a missing gating snapshot would show a
+            -- richer snapshot (or the full book) to a reader at page 5.
+            local self_ = prepared()
+            self_.cache_manager.saveSnapshot = function(cm, _, i, data)
+                if i == 2 then return false end
+                cm.snaps[i] = data; return true
+            end
+            self_:importEmbeddedXray(mock_doc())
+            assert.is_nil(self_.cache_manager.saved)
+            assert.is_nil(self_.book_data)
+            assert.is_true(self_.cache_manager.deleted)
+            assert.falsy(self_.prefetch_active)
+        end)
+
+        it("aborts without adopting book_data when the main cache write fails", function()
+            local self_ = prepared()
+            self_.cache_manager.saveCache = function() return false end
+            self_:importEmbeddedXray(mock_doc())
+            assert.is_nil(self_.book_data)
+            assert.is_true(self_.cache_manager.deleted)
+            assert.falsy(self_.prefetch_active)
+        end)
+
+        it("clears prefetch_active even when a write throws", function()
+            local self_ = prepared()
+            self_.cache_manager.saveCache = function() error("disk full") end
+            self_:importEmbeddedXray(mock_doc())
+            assert.is_nil(self_.book_data)
+            assert.falsy(self_.prefetch_active)
+        end)
+
+        it("bails out on a book too short to stage without writing anything", function()
+            local self_ = prepared(2)
+            self_:importEmbeddedXray(mock_doc())
+            assert.is_nil(self_.cache_manager.saved)
+            assert.is_nil(self_.book_data)
+            assert.falsy(self_.prefetch_active)
+        end)
+    end)
 end)

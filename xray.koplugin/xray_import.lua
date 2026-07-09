@@ -20,6 +20,9 @@ those to page numbers here. See _resolveCheckpointPages.
 
 local M = {}
 
+local UIManager = require("ui/uimanager")
+local InfoMessage = require("ui/widget/infomessage")
+
 M.SUPPORTED_SCHEMA = 1
 
 -- Lower-case, collapse whitespace runs, trim. Used to compare the calibre title
@@ -349,6 +352,96 @@ function M:_buildImportedCache(doc_json, mapped)
     }
 
     return book_data, snapshots
+end
+
+-- Import a validated document. The anchor resolution and the snapshot writes run
+-- on a coroutine that yields after every checkpoint, so a multi-checkpoint
+-- findAllText sweep never freezes the reader for the whole run -- the same
+-- cooperative pattern as scanMentionsAsync (xray_chapteranalyzer.lua:1191).
+--
+-- ponytail: each individual findAllText scan and each saveSnapshot still block
+-- for their duration (a yield between them cannot interrupt them). Measure on a
+-- Clara BW before reaching for asyncSaveCache's chunked serializer or a
+-- Trapper subprocess.
+--
+-- prefetch_active is held for the whole run: it is the flag maybeStartAutoPrefetch
+-- (xray_prefetch.lua:192) and updateSnapshotViewForPage already honour, so the
+-- network prefetch cannot start on top of us and the view cannot churn mid-import.
+function M:importEmbeddedXray(doc_json)
+    local book_path = self.ui.document.file
+    self.prefetch_active = true
+
+    local function finish(ok, err)
+        self.prefetch_active = false
+        if not ok then
+            self:log("XRayPlugin: import failed: " .. tostring(err))
+            -- Orphan snapshot files without a manifest are worse than none:
+            -- a later partial write could mix them with fresh data.
+            pcall(function() self.cache_manager:deleteSnapshots(book_path) end)
+            UIManager:show(InfoMessage:new{
+                text = self.loc:t("import_failed") or "Could not import the embedded X-Ray data.",
+                timeout = 4,
+            })
+            return
+        end
+        self:invalidateSnapshotExistsCache()
+        local page = (self.ui and self.ui.getCurrentPage) and self.ui:getCurrentPage() or nil
+        if page then self:updateSnapshotViewForPage(page) end
+
+        local msg
+        if self.book_data.prefetch.completed then
+            msg = self.loc:t("import_done") or "X-Ray data imported from calibre."
+        else
+            local pct = math.floor(self.book_data.last_fetch_page / self.ui.document:getPageCount() * 100)
+            msg = string.format(
+                self.loc:t("import_done_partial") or "X-Ray data imported (prepared to %d%%).", pct)
+        end
+        UIManager:show(InfoMessage:new{ text = msg, timeout = 4 })
+    end
+
+    local co = coroutine.create(function()
+        local mapped = self:_resolveCheckpointPages(doc_json, coroutine.yield)
+        if not mapped then error("no usable checkpoints for this book", 0) end
+
+        local book_data, snapshots = self:_buildImportedCache(doc_json, mapped)
+
+        -- saveSnapshot/saveCache RETURN false on I/O failure, they do not throw.
+        -- Adopt the main cache only once every gating snapshot is durable.
+        for i, snap in ipairs(snapshots) do
+            if not self.cache_manager:saveSnapshot(book_path, i, snap) then
+                error("snapshot " .. tostring(i) .. " could not be written", 0)
+            end
+            coroutine.yield()
+        end
+        if not self.cache_manager:saveCache(book_path, book_data) then
+            error("main cache could not be written", 0)
+        end
+
+        self.book_data = book_data
+        self.timeline = book_data.timeline
+    end)
+
+    local function step()
+        if self.destroyed then
+            self.prefetch_active = false
+            return
+        end
+        local ok, err = coroutine.resume(co)
+        if not ok then
+            finish(false, err)
+        elseif coroutine.status(co) == "dead" then
+            finish(true)
+        else
+            UIManager:scheduleIn(0.01, step)
+        end
+    end
+
+    self:log("XRayPlugin: importing embedded X-Ray data for " .. tostring(book_path))
+    UIManager:show(InfoMessage:new{
+        text = self.loc:t("import_running") or "Preparing X-Ray data from calibre…",
+        timeout = 3,
+    })
+    step()
 end
 
 return M
