@@ -57,11 +57,12 @@ Positionen auch bei kapitellosen Büchern (10%-Raster auf Zeichenlänge).
 Positions-**Mapping** pro Checkpoint, dreistufige Ankerkette:
 
 1. **Text-Snippet-Anker (primär, immer vorhanden)**: letzte ~80–120 Zeichen des an die
-   KI gesendeten Texts, whitespace-normalisiert, Soft-Hyphens entfernt, an Satz-/
-   Absatzgrenze geschnitten. Importer lokalisiert per Volltextsuche (crengine
-   `findText` → XPointer → Seite, `pcall`-geschützt). Mehrfachtreffer: nächster am
-   erwarteten Prozentwert. Grenze = exakt die Textstelle, bis zu der die KI las —
-   unabhängig von Pagination/Konvertierung/Kapiteln.
+   KI gesendeten Texts, ASCII-whitespace-normalisiert (NBSP bleibt erhalten), Soft-Hyphens
+   entfernt, an Satzgrenze geschnitten und bei Bedarf **verlängert, bis eindeutig** im Buch.
+   Importer lokalisiert per Volltextsuche (`findText` → `results[1].page`, verifiziert 2026-07-09).
+   Kein Mehrfachtreffer-Ranking nötig: die Eindeutigkeit macht den ersten Treffer zum richtigen —
+   und verhindert, dass ein früheres Duplikat einen späteren Snapshot zu früh aktiviert (Spoiler).
+   Grenze = exakt die Textstelle, bis zu der die KI las — unabhängig von Pagination/Konvertierung.
 2. **TOC-Anker (sekundär)**: Kapiteltitel + Spine-Index (für Kapitelend-Checkpoints),
    Plausibilisierung und Fallback.
 3. **Prozent (tertiär)**: Zeichen-Prozent, beim Mapping **abgerundet** (im Zweifel zu

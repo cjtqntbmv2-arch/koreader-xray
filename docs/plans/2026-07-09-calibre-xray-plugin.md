@@ -20,7 +20,8 @@
 - Detail caps (real Lua tiers, `xray_ui.lua:2604`; clamp ranges `xray_aihelper.lua`): `normal` = Lua default (`char 200, loc 100, timeline 80, hist_bio 100, term 100`); `detailed` = Lua very-detailed = clamp maxima (`char 500, loc 300, timeline 200, hist_bio 400, term 300`). Count caps use the Lua formulas: `num_chars = min(60, max(10, 50*200//char_len))`, `num_locs = min(20, max(3, 8*100//loc_len))`, `num_hist = min(15, max(3, 8*100//hist_len))`, `num_terms = min(20, max(5, 15*100//term_len))`.
 - Spoiler invariant (D4): a snapshot never contains data past its checkpoint; snapshots are cumulative (snapshot N ⊇ snapshot N−1); boundaries round down. **Merge is a deterministic sequential pass in checkpoint-then-chunk index order (a barrier after parallel fetch), never concurrent — a later checkpoint's result can never enter an earlier snapshot regardless of fetch completion order.**
 - Entity chronology: desktop stamps `first_pct` (checkpoint percent of first appearance) + `first_seq` (monotonic counter) instead of the device's `first_page`; the KOReader importer maps `first_pct` → page. Characters/locations sort by (`first_pct`, `first_seq`); terms alphabetical; historical figures by role-weight frequency.
-- **Book-identity gate (device-side, informational here):** import is gated on `schema_version` + structural sanity + case-insensitive title/author (both sides read the same OPF). `text_hash` is STORED but ADVISORY only — never a refusal reason (Python `\s`/Lua `%s` NBSP divergence makes exact-match DOA). `calibre_uuid` is informational (unverifiable on-device).
+- **Book-identity gate (device-side, informational here):** import is gated on `schema_version` + structural sanity + case-insensitive title/author (both sides read the same OPF). `text_hash` is STORED but ADVISORY only — never a refusal reason. `calibre_uuid` is informational (unverifiable on-device).
+- **`normalize_text` whitespace class MUST be ASCII-only** (`[ \t\n\r\f\v]+`, matching Lua's `%s` under the C locale) — NOT Python's Unicode `\s`. This keeps `text_hash` reproducible cross-repo AND, more importantly, preserves NBSP (U+00A0) and other non-ASCII spaces in the snippet anchors so they match the device's literal book text under `findText` (collapsing NBSP→space would make snippets miss). Strip soft hyphens (U+00AD). This function is a cross-repo contract.
 - **Delivery:** the embedded `xray/xray.json` MUST be registered in the OPF manifest (auxiliary resource, not in spine) so it survives calibre's Convert Book. See Task 8.
 - All JSON output UTF-8, `ensure_ascii=False`.
 - Commit after every green task; conventional-commit messages; never commit API keys or personal test EPUBs.
@@ -124,9 +125,9 @@ def test_checkpoints_must_ascend(minimal_doc):
       text_hash: str            # "sha256:<hex>" of normalized full_text
   class DrmError(Exception): ...
   def read_epub(path) -> BookText   # raises DrmError if META-INF/encryption.xml encrypts spine content
-  def normalize_text(s) -> str  # collapse whitespace runs to single space, strip soft hyphens ­
+  def normalize_text(s) -> str  # collapse ASCII-whitespace runs ([ \t\n\r\f\v]+, matches Lua %s) to a single space; strip soft hyphens (U+00AD); leave NBSP and other non-ASCII spaces intact
   ```
-- `text_hash = "sha256:" + hashlib.sha256(normalize_text(full_text).encode("utf-8")).hexdigest()` — the KOReader importer must be able to reproduce this, so `normalize_text` is part of the contract.
+- `text_hash = "sha256:" + hashlib.sha256(normalize_text(full_text).encode("utf-8")).hexdigest()` — the KOReader importer must be able to reproduce this, so `normalize_text` is part of the contract. Use an ASCII-only whitespace class (see Global Constraints) — a bare Unicode `\s+` collapses NBSP and breaks both cross-repo reproduction and snippet matching.
 
 Implementation route: `zipfile` → `META-INF/container.xml` → OPF (`ElementTree`) → metadata (title/creator/language), spine idrefs → manifest hrefs → per-item HTML → text via `html.parser.HTMLParser` subclass (drop `<script>/<style>`, block elements emit `\n`). TOC: EPUB3 `nav` document (`epub:type="toc"`) or EPUB2 `toc.ncx`; map each TOC href to its spine item; `offset` = the spine item's start offset (fragment-level precision not needed — checkpoints use chapter *ends*).
 
