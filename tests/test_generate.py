@@ -428,3 +428,45 @@ def test_enrich_does_not_duplicate_timeline_events():
 
     assert validate(doc) == []
     assert len(doc["timeline"]) == len(doc["checkpoints"])
+
+
+def test_enrich_does_not_leak_future_entities():
+    """D4 regression test: `_enrich_checkpoint` must patch descriptions onto
+    the already-frozen per-checkpoint snapshot, never re-snapshot the live
+    (fully-accumulated-by-Phase-B) BookState. LateCharacter is introduced
+    ONLY by the very last checkpoint's own Phase A extraction -- unlike the
+    other enrich tests above, which use an always-present character and so
+    can't detect this leak, this one must be absent from every earlier
+    checkpoint regardless of whether that checkpoint went through enrich."""
+    book = _filler_book()
+
+    class LeakProbeClient:
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
+            self.calls.append(user_prompt)
+            if "MERGE MODE INSTRUCTIONS" in user_prompt:
+                return _ok({"characters": [
+                    {"name": "Alice", "description": "Re-synthesized bio."}
+                ]})
+            if "Reading Progress: 100%" in user_prompt:
+                return _ok({"characters": [
+                    {"name": "Alice", "description": "Original bio."},
+                    {"name": "LateCharacter", "description": "Appears only at the very end."},
+                ]})
+            return _ok({"characters": [{"name": "Alice", "description": "Original bio."}]})
+
+    client = LeakProbeClient()
+    doc = generate_xray(book, client, "en", "detailed", enrich=True, max_workers=4)
+
+    assert doc["complete"] is True
+    earlier_checkpoints = doc["checkpoints"][:-1]
+    assert all(
+        "LateCharacter" not in {c["name"] for c in cp["snapshot"]["characters"]}
+        for cp in earlier_checkpoints
+    )
+    last_names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
+    assert "LateCharacter" in last_names  # sanity: fixture actually introduces it
+
+    assert validate(doc) == []

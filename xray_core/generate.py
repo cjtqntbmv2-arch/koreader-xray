@@ -170,8 +170,11 @@ def _fetch_and_persist(client, rate_limiter, workdir, cp_idx, chunk_idx, languag
     )
     if workdir:
         os.makedirs(workdir, exist_ok=True)
-        with open(_chunk_path(workdir, cp_idx, chunk_idx), "w", encoding="utf-8") as f:
+        final_path = _chunk_path(workdir, cp_idx, chunk_idx)
+        tmp_path = final_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(cleaned, f)
+        os.replace(tmp_path, final_path)  # atomic -- a mid-write crash never leaves a corrupt final file
     return cleaned
 
 
@@ -190,15 +193,20 @@ def _completed_prefix_len(chunks_per_cp, results):
 
 
 def _enrich_checkpoint(client, rate_limiter, language, detail_level, title, author,
-                        state, checkpoints_out, cp, i, segment_text):
+                        checkpoints_out, cp, i, segment_text):
     """Phase C step for checkpoint i>=2: re-synthesize descriptions for up to
-    ENRICH_TOP_N recurring (longest-running) characters, using only text
-    already covered by checkpoint i (D4-safe), then re-snapshot checkpoint i.
+    ENRICH_TOP_N recurring (longest-running) characters already known as of
+    checkpoint i, using only text already covered by checkpoint i (D4-safe).
+
+    Patches ONLY the `description` field, in place, on checkpoint i's own
+    already-frozen snapshot (built by Phase B). Never adds/removes entities
+    and never re-derives the snapshot from live `BookState` -- by the time
+    Phase C runs, that state is the FULLY-accumulated end-of-book state, so
+    re-snapshotting it (the pre-fix bug) would leak every later checkpoint's
+    entities backward into checkpoint i (a D4 spoiler leak).
     """
-    prev_characters = sort_entity_list(
-        checkpoints_out[i - 1]["snapshot"]["characters"], "character"
-    )
-    candidates = prev_characters[:ENRICH_TOP_N]
+    frozen_characters = checkpoints_out[i]["snapshot"]["characters"]
+    candidates = sort_entity_list(frozen_characters, "character")[:ENRICH_TOP_N]
     if not candidates:
         return
 
@@ -210,19 +218,21 @@ def _enrich_checkpoint(client, rate_limiter, language, detail_level, title, auth
     )
     result = client.generate(system, user)
     cleaned = clean_response(result.data)
-    # The enrich prompt is still the full comprehensive template (mode="enrich"
-    # only adds the MERGE MODE addendum -- see prompts.py), so a real model's
-    # response can still include a timeline. Phase A's own extraction pass
-    # already recorded this checkpoint's timeline once; re-merging it here
-    # would duplicate every event for this checkpoint.
-    cleaned["timeline"] = []
-    state.merge_segment(cleaned, cp.percent)
-    checkpoints_out[i]["snapshot"] = state.snapshot()
+
+    by_lower_name = {c["name"].lower(): c for c in frozen_characters if c.get("name")}
+    for updated in cleaned.get("characters") or []:
+        target = by_lower_name.get((updated.get("name") or "").lower())
+        description = updated.get("description") or ""
+        if target is not None and description:
+            target["description"] = description
 
 
 def _generator_version():
     version_file = Path(__file__).resolve().parent.parent / "VERSION"
-    return version_file.read_text(encoding="utf-8").strip()
+    try:
+        return version_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return "0.1.0"  # VERSION not packaged (e.g. plugin zip) -- fall back rather than crash
 
 
 def generate_xray(book: BookText, client, language, detail_level,
@@ -329,7 +339,7 @@ def generate_xray(book: BookText, client, language, detail_level,
         for i in range(2, len(checkpoints_out)):
             _enrich_checkpoint(
                 client, rate_limiter, language, detail_level, book.title, author_str,
-                state, checkpoints_out, cps[i], i, segments[i],
+                checkpoints_out, cps[i], i, segments[i],
             )
             done += 1
             if progress_cb:

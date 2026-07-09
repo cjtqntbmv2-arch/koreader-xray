@@ -126,7 +126,7 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
                 for j, entry in enumerate(entries):
                     problems.extend(
                         _validate_chronology_entry(
-                            entry, f"{label}.snapshot.{list_name}[{j}]"
+                            entry, f"{label}.snapshot.{list_name}[{j}]", percent
                         )
                     )
 
@@ -139,7 +139,7 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
     return problems
 
 
-def _validate_chronology_entry(entry, label: str) -> list[str]:
+def _validate_chronology_entry(entry, label: str, checkpoint_percent) -> list[str]:
     if not isinstance(entry, dict):
         return [f"{label} must be an object"]
 
@@ -153,4 +153,17 @@ def _validate_chronology_entry(entry, label: str) -> list[str]:
     for field in ("first_pct", "first_seq"):
         if field in entry and not _is_strict_int(entry[field]):
             problems.append(f"{label}.{field} must be an int")
+
+    # D4 structural guardrail: an entity must never be stamped as first
+    # appearing AFTER the checkpoint it's snapshotted in -- that's exactly
+    # the shape of a future-entity spoiler leak (see xray_core/generate.py
+    # _enrich_checkpoint history). Turns any future regression of that kind
+    # into a hard validation error instead of a silent leak.
+    if _is_strict_int(entry.get("first_pct")) and _is_strict_int(checkpoint_percent):
+        if entry["first_pct"] > checkpoint_percent:
+            name = entry.get("name", "<unnamed>")
+            problems.append(
+                f"{label} ({name!r}) first_pct ({entry['first_pct']}) must be "
+                f"<= checkpoint percent ({checkpoint_percent})"
+            )
     return problems
