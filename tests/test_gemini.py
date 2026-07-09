@@ -160,6 +160,7 @@ def test_retries_503_once_then_succeeds(monkeypatch):
 def test_429_backs_off_then_raises_quota(monkeypatch):
     sleeps = []
     monkeypatch.setattr("xray_core.gemini.time.sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr("xray_core.gemini.random.uniform", lambda a, b: 0)
     calls = {"n": 0}
 
     def fake_transport(url, headers, body_bytes):
@@ -171,7 +172,10 @@ def test_429_backs_off_then_raises_quota(monkeypatch):
         client.generate("sys", "user")
 
     assert calls["n"] == 4  # 1 initial attempt + 3 retries
-    assert len(sleeps) == 3
+    # Exact shape, not just count: jitter zeroed via the random.uniform
+    # monkeypatch above, so this pins the base-2 exponential backoff exactly.
+    # A regression that collapses the exponent to a constant must fail here.
+    assert sleeps == [2, 4, 8]
 
 
 def test_other_error_raises_runtime_error():
@@ -192,5 +196,36 @@ def test_fix_truncated_json():
     assert fix_truncated_json('{"a": [1, 2') == '{"a": [1, 2]}'
 
 
+def test_fix_truncated_json_ignores_brackets_inside_string():
+    """Brace/bracket characters that are part of a string's own content must
+    not be mistaken for structural JSON brackets -- only the char-wise
+    string/escape tracking prevents that. A regression that miscounts
+    brackets inside strings would corrupt the string value and/or the
+    bracket stack."""
+    fixed = fix_truncated_json('{"a": "text with } and ] inside')
+    assert json.loads(fixed) == {"a": "text with } and ] inside"}
+
+
+def test_fix_truncated_json_preserves_trailing_comma_inside_string():
+    """A comma that is part of the string's own content, not a JSON
+    separator, must survive even though it sits at the very end of the
+    truncated fragment. This only works because fix_truncated_json closes
+    the dangling string BEFORE stripping a trailing comma -- reversing that
+    order would strip the comma as if it were structural."""
+    fixed = fix_truncated_json('{"a": "value,')
+    assert json.loads(fixed) == {"a": "value,"}
+
+
 def test_normalize_keys():
     assert normalize_keys({"Full Name": 1}) == {"full_name": 1}
+
+
+def test_normalize_keys_recurses_into_lists():
+    """normalize_keys must recurse into list items, not just dict values --
+    Lua's pairs(t) doesn't distinguish JSON objects from arrays, so
+    normalizeKeys recurses into both (xray_aihelper.lua:1920-1928). A
+    regression that drops the list branch would leave dicts nested inside
+    lists un-normalized."""
+    assert normalize_keys({"Items": [{"Full Name": 1}]}) == {
+        "items": [{"full_name": 1}]
+    }
