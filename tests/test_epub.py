@@ -84,8 +84,22 @@ def test_strips_tags_and_soft_hyphens(tmp_path):
 
     assert "<p>" not in book.full_text
     assert "<b>" not in book.full_text
+    assert "bold" in book.full_text
+    assert "italic" in book.full_text
     assert "­" not in normalize_text(book.full_text)
     assert "example" in normalize_text(book.full_text)
+
+
+def test_normalize_text_preserves_nbsp(tmp_path):
+    """Locks in the ASCII-only _WHITESPACE_RE fix: NBSP must survive
+    normalize_text (it's also applied to snippet anchors, where collapsing
+    NBSP to a plain space would break literal-text matching on device)."""
+    nbsp_book = read_epub(build_epub(tmp_path / "nbsp", [("One", "<p>A&#160;B</p>")]))
+    space_book = read_epub(build_epub(tmp_path / "space", [("One", "<p>A B</p>")]))
+
+    assert " " in nbsp_book.full_text
+    assert " " in normalize_text(nbsp_book.full_text)
+    assert nbsp_book.text_hash != space_book.text_hash
 
 
 def test_drm_raises(tmp_path):
@@ -95,3 +109,17 @@ def test_drm_raises(tmp_path):
 
     with pytest.raises(DrmError):
         read_epub(path)
+
+
+def test_drm_font_obfuscation_ok(tmp_path):
+    """Font-only obfuscation (CipherReference to a non-spine resource) is
+    not DRM on the readable content and must not raise."""
+    path = build_epub(
+        tmp_path,
+        [("One", "<p>Not secret text.</p>")],
+        encryption_uri="OEBPS/fonts/x.otf",
+    )
+
+    book = read_epub(path)
+
+    assert "Not secret text." in book.full_text

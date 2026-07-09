@@ -32,7 +32,7 @@ _BLOCK_TAGS = {
     "tr", "blockquote", "section", "article", "table", "ul", "ol", "hr",
 }
 
-_WHITESPACE_RE = re.compile(r"\s+")
+_WHITESPACE_RE = re.compile(r"[ \t\n\r\f\v]+")
 _SOFT_HYPHEN = "­"
 
 
@@ -61,11 +61,18 @@ class DrmError(Exception):
 def normalize_text(s: str) -> str:
     """Canonical text form for `text_hash` and downstream snippet matching.
 
-    Collapses every whitespace run to a single space and strips soft
-    hyphens (U+00AD). "Whitespace" = Python re's `\\s` (ASCII plus Unicode
-    spaces, including NBSP) -- deliberately not identical to the KOReader
-    importer's Lua `%s` (ASCII-only). That divergence is why
-    book_fingerprint.text_hash is advisory only, never a refusal gate.
+    Collapses every ASCII whitespace run (space/tab/newline/CR/FF/VT) to a
+    single space and strips soft hyphens (U+00AD). ASCII-only on purpose:
+    this is exactly Lua's `%s` under the C locale, so `text_hash` is now
+    reproducible on the KOReader/Lua side. It deliberately PRESERVES NBSP
+    (U+00A0) and other non-ASCII spaces, because this function is also
+    applied to snippet anchors -- collapsing NBSP to a plain space there
+    would make the device's `findText` miss the snippet in the book's
+    literal text.
+
+    book_fingerprint.text_hash remains the advisory identity signal (the
+    actual gate is title/author), but it is now genuinely reproducible,
+    not merely approximate.
     """
     return _WHITESPACE_RE.sub(" ", s.replace(_SOFT_HYPHEN, "")).strip()
 

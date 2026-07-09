@@ -54,17 +54,33 @@ _NCX_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </ncx>
 """
 
+_ENCRYPTION_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container"
+            xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+  <enc:EncryptedData>
+    <enc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes256-cbc"/>
+    <enc:CipherData>
+      <enc:CipherReference URI="{uri}"/>
+    </enc:CipherData>
+  </enc:EncryptedData>
+</encryption>
+"""
+
 _TITLE = "Test Book"
 _AUTHORS = ("Jane Author",)
 _LANGUAGE = "en"
 
 
-def build_epub(tmp_path, chapters, toc=True, epub3=True):
+def build_epub(tmp_path, chapters, toc=True, epub3=True, encryption_uri=None):
     """Write a minimal valid EPUB under `tmp_path` and return its Path.
 
     chapters: list of (title, html_body) tuples -> one xhtml spine item each.
     toc: whether to include a nav (epub3) / ncx (epub2) TOC document.
     epub3: EPUB3 `nav` document vs EPUB2 `toc.ncx`.
+    encryption_uri: if set, writes META-INF/encryption.xml with a single
+        CipherReference to this URI -- a spine path (e.g. "OEBPS/chapter0.xhtml")
+        to simulate DRM-encrypted content, or a non-spine path (e.g.
+        "OEBPS/fonts/x.otf") to simulate font-only obfuscation.
     """
     Path(tmp_path).mkdir(parents=True, exist_ok=True)
     path = Path(tmp_path) / "book.epub"
@@ -128,5 +144,7 @@ def build_epub(tmp_path, chapters, toc=True, epub3=True):
                 for i, (chap_title, _) in enumerate(chapters)
             )
             zf.writestr("OEBPS/toc.ncx", _NCX_XML.format(title=_TITLE, items=items))
+        if encryption_uri is not None:
+            zf.writestr("META-INF/encryption.xml", _ENCRYPTION_XML.format(uri=encryption_uri))
 
     return path
