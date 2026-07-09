@@ -178,6 +178,24 @@ describe("AIHelper", function()
         end)
     end)
 
+    describe("isLargeContextProvider", function()
+        it("is true for gemini primary", function()
+            local ai = require("xray_aihelper")
+            ai.settings = { primary_ai = { provider = "gemini", model = "gemini-3.5-flash" } }
+            assert.is_true(ai:isLargeContextProvider())
+        end)
+        it("is false for a non-gemini primary", function()
+            local ai = require("xray_aihelper")
+            ai.settings = { primary_ai = { provider = "chatgpt", model = "gpt-5.4-mini" } }
+            assert.is_false(ai:isLargeContextProvider())
+        end)
+        it("defaults to gemini when no primary_ai is configured", function()
+            local ai = require("xray_aihelper")
+            ai.settings = {}
+            assert.is_true(ai:isLargeContextProvider())
+        end)
+    end)
+
     describe("Anthropic request headers", function()
         it("should send only x-api-key for native claude or anthropic.com", function()
             AIHelper.settings.primary_ai = { provider = "claude", model = "claude-3-7-sonnet-latest" }

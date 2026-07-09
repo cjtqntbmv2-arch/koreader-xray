@@ -90,6 +90,14 @@ function AIHelper:isAnthropic(provider, endpoint)
     return false
 end
 
+-- True when the active primary provider has a large enough context window to
+-- receive full chapter text (K1). Extension point: add other large-context
+-- providers or a context-size check here. Conservative: unknown -> false.
+function AIHelper:isLargeContextProvider()
+    local ai = (self.settings and self.settings.primary_ai) or DEFAULT_AI.primary
+    return ai ~= nil and ai.provider == "gemini"
+end
+
 -- Strip invalid UTF-8 sequences and disallowed control bytes from a string.
 -- Byte-based string.sub() throughout the plugin can slice multi-byte UTF-8
 -- characters mid-sequence, leaving an invalid prefix/suffix that makes the
