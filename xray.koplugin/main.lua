@@ -46,6 +46,7 @@ safeRequireMixin("xray_ui")
 safeRequireMixin("xray_fetch")
 safeRequireMixin("xray_mentions")
 safeRequireMixin("xray_prefetch")
+safeRequireMixin("xray_import")
 
 
 function XRayPlugin:init()
