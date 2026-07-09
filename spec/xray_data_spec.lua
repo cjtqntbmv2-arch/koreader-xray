@@ -285,6 +285,18 @@ describe("xray_data", function()
         end)
     end)
 
+    describe("glossary ordering", function()
+        it("sortEntityList term ignores first_page and role", function()
+            local list = {
+                { name = "Wildfire", role = "primary", first_page = 1 },
+                { name = "Aegon's Conquest", first_page = 900 },
+            }
+            xray_data:sortEntityList(list, "term")
+            assert.are.equal("Aegon's Conquest", list[1].name)
+            assert.are.equal("Wildfire", list[2].name)
+        end)
+    end)
+
     describe("stampFirstAppearance", function()
         it("sets first_page and a monotonic first_seq only once", function()
             local counter = { n = 0 }

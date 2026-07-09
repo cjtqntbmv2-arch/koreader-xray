@@ -522,7 +522,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
     final_book_data.historical_figures = self:sortDataByFrequency(final_book_data.historical_figures, book_text, "name")
     final_book_data.locations = self:sortDataByFrequency(final_book_data.locations, book_text, "name")
     final_book_data.terms = self:deduplicateByName(final_book_data.terms or {}, "name")
-    final_book_data.terms = self:sortDataByFrequency(final_book_data.terms, book_text, "name")
+    final_book_data.terms = self:sortEntityList(final_book_data.terms, "term")
 
     -- Filter non-narrative timeline entries the AI may have hallucinated
     if final_book_data.timeline then
@@ -738,9 +738,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
             if not found then table.insert(self.terms, new_term) end
         end
         self.terms = self:deduplicateByName(self.terms, "name")
-        if book_text and #book_text > 0 then
-            self:sortDataByFrequency(self.terms, book_text, "name")
-        end
+        self:sortEntityList(self.terms, "term")
         -- Merge book_type
         if final_book_data.book_type then
             self.book_type = final_book_data.book_type
@@ -1282,10 +1280,8 @@ function M:fetchMoreTerms()
             end
             
             self.terms = self:deduplicateByName(self.terms, "name")
-            if book_text and #book_text > 0 then
-                self:sortDataByFrequency(self.terms, book_text, "name")
-            end
-            
+            self:sortEntityList(self.terms, "term")
+
             if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
             if not self.book_data then
                 self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
