@@ -770,6 +770,10 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         self:sortTimelineByTOC(self.timeline)
     else
         self.characters = final_book_data.characters
+        self._entity_seq_counter = self._entity_seq_counter or { n = 0 }
+        for _, item in ipairs(self.characters or {}) do
+            self:stampFirstAppearance(item, current_page, self._entity_seq_counter)
+        end
         for _, char in ipairs(self.characters or {}) do
             if char.description and char.description ~= "" then
                 char.history = char.history or {
@@ -794,6 +798,10 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
             end
         end
         self.locations = final_book_data.locations
+        self._entity_seq_counter = self._entity_seq_counter or { n = 0 }
+        for _, item in ipairs(self.locations or {}) do
+            self:stampFirstAppearance(item, current_page, self._entity_seq_counter)
+        end
         for _, loc in ipairs(self.locations or {}) do
             if loc.description and loc.description ~= "" then
                 loc.history = loc.history or {

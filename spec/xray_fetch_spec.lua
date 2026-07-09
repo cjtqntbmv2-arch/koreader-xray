@@ -94,6 +94,31 @@ describe("xray_fetch", function()
             -- Cache save should NOT have happened
             assert.is_false(save_called)
         end)
+
+        it("stamps first-appearance metadata on the non-update (checkpoint-1) path", function()
+            local stamp_calls = 0
+            plugin.stampFirstAppearance = function(self, item, page, counter)
+                stamp_calls = stamp_calls + 1
+                return item
+            end
+
+            local new_data = {
+                characters = {
+                    { name = "Alice", description = "A character" },
+                    { name = "Bob", description = "" } -- no description: must still be stamped
+                },
+                locations = {
+                    { name = "Wonderland", description = "A place" }
+                },
+                historical_figures = {},
+                timeline = {}
+            }
+
+            plugin:finalizeXRayData(new_data, "Test Title", "Test Author", "Some text", false, true, 10)
+
+            -- 2 characters + 1 location must each be stamped exactly once
+            assert.are.equal(3, stamp_calls)
+        end)
     end)
 
     describe("runPostFetchDuplicateCheck", function()

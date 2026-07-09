@@ -92,7 +92,7 @@ end
 
 -- True when the active primary provider has a large enough context window to
 -- receive full chapter text (K1). Extension point: add other large-context
--- providers or a context-size check here. Conservative: unknown -> false.
+-- providers or a context-size check here. Conservative: a KNOWN non-gemini provider returns false; an unset primary falls back to the gemini default (large-context) and returns true.
 function AIHelper:isLargeContextProvider()
     local ai = (self.settings and self.settings.primary_ai) or DEFAULT_AI.primary
     return ai ~= nil and ai.provider == "gemini"
