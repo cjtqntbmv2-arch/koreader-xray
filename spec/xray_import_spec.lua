@@ -726,5 +726,38 @@ describe("xray_import", function()
             assert.is_nil(self_.book_data)
             assert.falsy(self_.prefetch_active)
         end)
+
+        it("deletes orphan snapshots when destroyed mid-import, without saving or adopting", function()
+            -- The reader closes the book right after the first snapshot lands
+            -- on disk but before saveCache ever runs. Left alone, a later
+            -- native prefetch's _nextPendingCheckpoint (xray_prefetch.lua:
+            -- 202-212) would see that orphan file and, since it only checks
+            -- snapshotExists(path, i) and never the file's actual page, treat
+            -- the checkpoint as already done under a freshly computed (and
+            -- possibly later-anchored) manifest -- a spoiler leak.
+            local self_ = prepared()
+            local real_saveSnapshot = self_.cache_manager.saveSnapshot
+            self_.cache_manager.saveSnapshot = function(cm, path, i, data)
+                local ok = real_saveSnapshot(cm, path, i, data)
+                if i == 1 then self_.destroyed = true end
+                return ok
+            end
+            self_:importEmbeddedXray(mock_doc())
+            assert.is_true(self_.cache_manager.deleted)
+            assert.is_nil(self_.cache_manager.saved)
+            assert.is_nil(self_.book_data)
+            assert.falsy(self_.prefetch_active)
+        end)
+
+        it("mirrors book_type onto self after a successful import, but not after an aborted one", function()
+            local self_ = prepared()
+            self_:importEmbeddedXray(mock_doc())
+            assert.are.equal("fiction", self_.book_type)
+
+            local aborted = prepared()
+            aborted.cache_manager.saveCache = function() return false end
+            aborted:importEmbeddedXray(mock_doc())
+            assert.is_nil(aborted.book_type)
+        end)
     end)
 end)

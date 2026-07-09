@@ -384,6 +384,14 @@ function M:importEmbeddedXray(doc_json)
             })
             return
         end
+        -- Mirror book_type onto self the same way autoLoadCache does on every
+        -- normal cache hit (main.lua:703-755) and xray_fetch.lua's rebuild
+        -- paths already do (xray_fetch.lua:748,818) -- without it self.book_type
+        -- stays stale until the book is closed and reopened. The four entity
+        -- lists are deliberately NOT mirrored here: they are owned by
+        -- applySnapshot, applied below via updateSnapshotViewForPage.
+        self.book_type = self.book_data.book_type or nil
+
         self:invalidateSnapshotExistsCache()
         local page = (self.ui and self.ui.getCurrentPage) and self.ui:getCurrentPage() or nil
         if page then self:updateSnapshotViewForPage(page) end
@@ -424,6 +432,15 @@ function M:importEmbeddedXray(doc_json)
     local function step()
         if self.destroyed then
             self.prefetch_active = false
+            -- Snapshot files from earlier iterations may already be on disk
+            -- with no manifest (saveCache never ran). _nextPendingCheckpoint
+            -- (xray_prefetch.lua:202-212) only checks cache_manager:
+            -- snapshotExists(path, i) -- never whether that file's page
+            -- matches a later, freshly computed manifest's page for the same
+            -- index -- so a stale orphan left here would be silently adopted
+            -- as "done" under a possibly later, spoilier boundary. Same
+            -- guarded delete as the failure branch above.
+            pcall(function() self.cache_manager:deleteSnapshots(book_path) end)
             return
         end
         local ok, err = coroutine.resume(co)
