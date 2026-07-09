@@ -7,7 +7,7 @@ import shutil
 import tempfile
 import zipfile
 
-from calibre.gui2 import error_dialog, info_dialog, warning_dialog
+from calibre.gui2 import Dispatcher, error_dialog, info_dialog, warning_dialog
 from calibre.gui2.actions import InterfaceAction
 from calibre.gui2.threaded_jobs import ThreadedJob
 from calibre.utils.config import cache_dir
@@ -19,14 +19,17 @@ from xray_core.gemini import GeminiClient
 from xray_core.generate import generate_xray
 
 
-def _generate_and_embed(log, abort, notifications, epub_path, calibre_uuid, workdir,
-                         api_key, model, language, detail_level, use_thinking, max_workers):
-    """Runs on a background thread (calibre's ThreadedJob convention: the
-    first three positional args are always log/abort/notifications). No
-    cooperative-cancellation check on `abort` -- generate_xray has no abort
-    hook (yet); a killed job just keeps running to completion in the
-    background and its result is discarded by _job_done never being wired up
-    for it. ponytail: add an abort-aware hook in xray_core if this matters."""
+def _generate_and_embed(epub_path, calibre_uuid, workdir, api_key, model, language,
+                         detail_level, use_thinking, max_workers, *, log, abort, notifications):
+    """Runs on a background thread. ThreadedJob.start_work() calls
+    self.func(*self.args, **self.kwargs) where kwargs has been mutated by
+    ThreadedJob.__init__ to inject notifications/abort/log -- so those three
+    must be keyword-only (after the business params) or they collide with
+    the injected kwargs. No cooperative-cancellation check on `abort` --
+    generate_xray has no abort hook (yet); a killed job just keeps running
+    to completion in the background and its result is discarded by
+    _job_done never being wired up for it. ponytail: add an abort-aware hook
+    in xray_core if this matters."""
     def progress_cb(done, total):
         notifications.put((done / total if total else 0.0, f"{done}/{total} segments"))
 
@@ -70,6 +73,10 @@ class XRayGeneratorAction(InterfaceAction):
     def genesis(self):
         self._running_jobs = {}  # ThreadedJob -> (book_id, title, workdir)
         self._active_book_ids = set()
+        # _job_done drives Qt dialogs and the library view model, but
+        # ThreadedJob invokes its callback on the worker thread -- Dispatcher
+        # marshals the call back onto the GUI thread.
+        self._job_done_cb = Dispatcher(self._job_done)
         self.qaction.triggered.connect(self.generate_selected)
 
     def generate_selected(self):
@@ -92,12 +99,20 @@ class XRayGeneratorAction(InterfaceAction):
             if book_id in self._active_book_ids:
                 skipped.append(_("{0} (already running)").format(title))
                 continue
-            epub_path = db.format_abspath(book_id, "EPUB")
-            if not epub_path:
+            if "EPUB" not in (db.field_for("formats", book_id) or ()):
                 skipped.append(title)
                 continue
             uuid = db.field_for("uuid", book_id) or f"book-{book_id}"
-            to_run.append((book_id, title, epub_path, uuid))
+            # format_abspath()'s own docstring warns that handing its raw
+            # library path to another thread "breaks the threadsafe
+            # promise" (a concurrent library op could move/replace the file
+            # before the worker gets to read it). copy_format_to gives us a
+            # private, stable copy instead, made here on the GUI thread.
+            workdir = os.path.join(cache_dir(), "xray_generator", uuid)
+            os.makedirs(workdir, exist_ok=True)
+            epub_path = os.path.join(workdir, "source.epub")
+            db.copy_format_to(book_id, "EPUB", epub_path)
+            to_run.append((book_id, title, epub_path, uuid, workdir))
 
         if skipped:
             info_dialog(
@@ -106,11 +121,10 @@ class XRayGeneratorAction(InterfaceAction):
                   "running):").format(len(skipped), len(book_ids)),
                 det_msg="\n".join(skipped), show=True)
 
-        for book_id, title, epub_path, uuid in to_run:
-            self._start_job(book_id, title, epub_path, uuid)
+        for book_id, title, epub_path, uuid, workdir in to_run:
+            self._start_job(book_id, title, epub_path, uuid, workdir)
 
-    def _start_job(self, book_id, title, epub_path, calibre_uuid):
-        workdir = os.path.join(cache_dir(), "xray_generator", calibre_uuid)
+    def _start_job(self, book_id, title, epub_path, calibre_uuid, workdir):
         job = ThreadedJob(
             "xray_generator",
             _("Generate X-Ray: {0}").format(title),
@@ -119,7 +133,7 @@ class XRayGeneratorAction(InterfaceAction):
              prefs["language"], prefs["detail_level"], prefs["use_thinking"],
              prefs["max_workers"]),
             {},
-            self._job_done,
+            self._job_done_cb,
             killable=False,  # ponytail: no abort hook to honor a kill request yet
         )
         self._running_jobs[job] = (book_id, title, workdir)
