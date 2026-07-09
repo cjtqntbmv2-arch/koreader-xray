@@ -168,6 +168,7 @@ def make_snippet_anchor(text: str, end_offset: int) -> str:
     snippet = _tail_word_safe(chunk, length)
     normalized_full = normalize_text(text)
     cap = min(_GROWTH_CAP, len(chunk))
+    # an empty candidate here (_tail_word_safe found no space in the window) is still safe: str.count("") > 1 keeps this loop growing instead of a false "unique" match
     while normalized_full.count(snippet) > 1 and length < cap:
         length = min(length + _GROWTH_STEP, cap)
         snippet = _tail_word_safe(chunk, length)

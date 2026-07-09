@@ -125,13 +125,19 @@ def test_two_chapter_book_densified():
 
 
 def test_hard_cap_12():
-    n = 40
-    chapter_len = 25
+    # Uneven fixture: one huge chapter + 30 tiny ones. thin_to(ends, 10) keeps
+    # a point right after the huge chapter, so the gap back to offset 0 is far
+    # above MAX_INTERVAL_PCT and densify inserts several midpoints, pushing
+    # the pre-clamp count to 16. Only an uneven book like this makes the
+    # final thin_to(densified, HARD_CAP) clamp do real work (16 -> 12); the
+    # old evenly-sized fixture thinned straight to <=10 and never re-grew
+    # past HARD_CAP, so that clamp ran as a no-op and couldn't catch a break.
+    n = 31
     titles = [f"Chapter {i}" for i in range(1, n + 1)]
     chapter_texts = []
-    for t in titles:
-        pad = "x" * max(0, chapter_len - len(t) - 2)
-        chapter_texts.append(f"{t}. {pad}")
+    for idx, t in enumerate(titles, start=1):
+        body_len = 3000 if idx == 1 else 0  # chapter 1 huge, rest tiny
+        chapter_texts.append(f"{t}. " + ("x" * body_len))
     offsets, running = [], 0
     for c in chapter_texts:
         offsets.append(running)
@@ -142,7 +148,7 @@ def test_hard_cap_12():
 
     cps = plan_checkpoints(book)
 
-    assert len(cps) <= HARD_CAP
+    assert len(cps) == HARD_CAP
     assert cps[-1].offset == len(full_text)
     assert cps[-1].percent == 100
 
@@ -221,3 +227,26 @@ def test_snippet_anchor_empty_when_no_text():
     end_offset = 10  # still inside the leading whitespace run
 
     assert make_snippet_anchor(text, end_offset) == ""
+
+
+def test_snippet_anchor_short_text_returned_as_is():
+    text = "Short book, tiny text, nothing much happens here at all."
+    assert len(text) < 80
+
+    snippet = make_snippet_anchor(text, len(text))
+
+    assert snippet != ""
+    assert snippet == normalize_text(text)
+
+
+def test_snippet_anchor_no_sentence_punctuation():
+    text = (
+        "the wind moved slowly across the empty field and nothing else stirred "
+        "that whole long afternoon while the old house waited quietly for someone"
+    )
+    assert not any(c in ".!?…" for c in text)
+
+    snippet = make_snippet_anchor(text, len(text))
+
+    assert snippet != ""
+    assert snippet in normalize_text(text)
