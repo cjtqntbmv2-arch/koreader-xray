@@ -763,15 +763,38 @@ describe("xray_import", function()
 
     describe("_zipHasEntry", function()
         -- Synthetic archives, same idiom as xray_updater_spec.lua's zip tests:
-        -- we exercise the EOCD parse and the central-directory name search
+        -- we exercise the EOCD parse and the central-directory record walk
         -- without depending on a `zip` binary being installed.
+        local function u16(n)
+            return string.char(n % 256, math.floor(n / 256) % 256)
+        end
         local function u32(n)
             return string.char(n % 256, math.floor(n / 256) % 256,
                 math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256)
         end
-        local function write_zip(path, cd_body)
-            local head = "PK\3\4" .. string.rep("x", 30)
-            local eocd = "PK\5\6" .. string.rep("\0", 8) .. u32(#cd_body) .. u32(#head) .. "\0\0"
+
+        -- One byte-accurate central-directory record (ZIP spec 4.3.12): a
+        -- fixed 46-byte header -- only the signature and the three length
+        -- fields are non-zero -- followed by the filename. Extra/comment
+        -- length are always 0 here; nothing in this spec needs them non-zero.
+        local function cd_record(name)
+            local n = #name
+            return "PK\1\2"
+                .. string.rep("\0", 24)  -- version..uncompressed size (offsets 4-27)
+                .. u16(n)                -- filename length            (offset 28)
+                .. u16(0)                -- extra length               (offset 30)
+                .. u16(0)                -- comment length             (offset 32)
+                .. string.rep("\0", 12)  -- disk#..local header offset (offsets 34-45)
+                .. name
+        end
+
+        -- head = everything before the central directory (may itself embed a
+        -- decoy "PK\5\6"). comment = the archive comment following the EOCD.
+        local function write_zip(path, head, cd_body, comment)
+            head = head or ("PK\3\4" .. string.rep("x", 30))
+            comment = comment or ""
+            local eocd = "PK\5\6" .. string.rep("\0", 8)
+                .. u32(#cd_body) .. u32(#head) .. u16(#comment) .. comment
             local f = io.open(path, "wb")
             f:write(head .. cd_body .. eocd)
             f:close()
@@ -779,14 +802,14 @@ describe("xray_import", function()
 
         it("finds a member listed in the central directory", function()
             local p = "/tmp/xray_import_spec_yes.zip"
-            write_zip(p, "PK\1\2" .. string.rep("\0", 10) .. "xray/xray.json")
+            write_zip(p, nil, cd_record("xray/xray.json"))
             assert.is_true(importer._zipHasEntry(p, "xray/xray.json"))
             pcall(os.remove, p)
         end)
 
         it("does not find a member that is absent", function()
             local p = "/tmp/xray_import_spec_no.zip"
-            write_zip(p, "PK\1\2" .. string.rep("\0", 10) .. "OEBPS/content.opf")
+            write_zip(p, nil, cd_record("OEBPS/content.opf"))
             assert.is_false(importer._zipHasEntry(p, "xray/xray.json"))
             pcall(os.remove, p)
         end)
@@ -796,6 +819,63 @@ describe("xray_import", function()
             local p = "/tmp/xray_import_spec_trunc.zip"
             local f = io.open(p, "wb"); f:write("PK\3\4"); f:close()
             assert.is_false(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
+
+        it("still finds the member when a trailing archive comment contains EOCD-like bytes", function()
+            -- Finding 1: the comment's "PK\5\6" is a decoy AFTER the real EOCD.
+            -- Only the real record's comment-length field accounts exactly
+            -- for the bytes that follow it to end-of-file.
+            local p = "/tmp/xray_import_spec_comment.zip"
+            write_zip(p, nil, cd_record("xray/xray.json"), "junk PK\5\6 junk")
+            assert.is_true(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
+
+        it("does not match a member name that merely contains the probed name as a substring", function()
+            -- Finding 2: "not-xray/xray.json.bak" contains "xray/xray.json" as
+            -- a raw substring; only an exact per-record filename match may pass.
+            local p = "/tmp/xray_import_spec_substring.zip"
+            write_zip(p, nil, cd_record("not-xray/xray.json.bak"))
+            assert.is_false(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
+
+        it("finds the second member, proving the record walk advances past the first", function()
+            local p = "/tmp/xray_import_spec_two.zip"
+            write_zip(p, nil, cd_record("OEBPS/content.opf") .. cd_record("xray/xray.json"))
+            assert.is_true(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
+
+        it("returns false without throwing when a central-directory record has a bad signature", function()
+            local p = "/tmp/xray_import_spec_badsig.zip"
+            local bad_record = "XXXX" .. cd_record("xray/xray.json"):sub(5)
+            write_zip(p, nil, bad_record)
+            assert.is_false(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
+
+        it("returns false without throwing when a declared filename length runs past the end", function()
+            local p = "/tmp/xray_import_spec_badlen.zip"
+            -- The header still declares the full filename length, but the
+            -- record bytes are cut off after only 5 characters of it.
+            local truncated = cd_record("xray/xray.json"):sub(1, 46 + 5)
+            write_zip(p, nil, truncated)
+            assert.is_false(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
+
+        it("rejects an earlier decoy EOCD-like sequence, keeping only the one whose comment length checks out", function()
+            -- Finding 4 pin: this decoy sits BEFORE the real EOCD (unlike the
+            -- trailing-comment fixture above, where the real EOCD happens to
+            -- be the first occurrence). A locator that picks by position
+            -- (first OR last) instead of validating fails on one fixture or
+            -- the other; only real validation passes both.
+            local p = "/tmp/xray_import_spec_decoy.zip"
+            local head = "PK\3\4" .. string.rep("x", 10) .. "PK\5\6" .. string.rep("y", 20)
+            write_zip(p, head, cd_record("xray/xray.json"))
+            assert.is_true(importer._zipHasEntry(p, "xray/xray.json"))
             pcall(os.remove, p)
         end)
     end)

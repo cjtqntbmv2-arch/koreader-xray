@@ -370,15 +370,35 @@ local function shellQuote(s)
     return "'" .. (tostring(s):gsub("'", "'\\''")) .. "'"
 end
 
+local function u16le(s, i)
+    local a, b = s:byte(i, i + 1)
+    if not b then return nil end
+    return a + b * 256
+end
+
 local function u32le(s, i)
     local a, b, c, d = s:byte(i, i + 3)
     if not d then return nil end
     return a + b * 256 + c * 65536 + d * 16777216
 end
 
--- Is `name` listed in the zip's central directory? Pure Lua: parse the
--- End-Of-Central-Directory record, read the central directory, search it for the
--- literal name (filenames are stored uncompressed there).
+-- Is `name` listed in the zip's central directory? Pure Lua: locate the
+-- End-Of-Central-Directory record, then walk the central directory it points
+-- to record by record, comparing filenames for EXACT equality.
+--
+-- The EOCD is found by validating candidates, not by position in the file: a
+-- trailing archive comment can itself contain the bytes "PK\5\6", so "the
+-- last occurrence" is not a safe locator. The real EOCD is the one whose own
+-- comment-length field (2 bytes at offset+20) exactly accounts for the bytes
+-- between it and end-of-file -- the standard, unambiguous check. Scan
+-- candidates from the end of the tail backwards and take the first that
+-- validates: a comment-embedded fake sits AFTER the real EOCD, so this also
+-- naturally steps past any such decoy before reaching the real record.
+--
+-- The central directory is walked record-by-record (ZIP spec 4.3.12) rather
+-- than substring-searched: a member named "not-xray/xray.json.bak" contains
+-- "xray/xray.json" as a raw substring, and a crafted cd_off/cd_size that
+-- merely passes the bounds check could point anywhere in the file.
 --
 -- ponytail: no zip64 support -- the offset check below simply fails and we
 -- report "absent". EPUBs are never zip64; revisit only if that changes.
@@ -391,12 +411,28 @@ function M._zipHasEntry(zip_path, name)
     local tail_len = math.min(size, 65557)  -- 22-byte EOCD + up to 65535 comment
     fh:seek("end", -tail_len)
     local tail = fh:read(tail_len) or ""
+    local tail_start = size - tail_len  -- absolute 0-indexed offset of tail's byte 1
 
-    local eocd, pos = nil, 1
+    local candidates = {}
+    local pos = 1
     while true do
         local hit = tail:find("PK\5\6", pos, true)
         if not hit then break end
-        eocd, pos = hit, hit + 1   -- keep the LAST signature
+        table.insert(candidates, hit)
+        pos = hit + 1
+    end
+
+    local eocd = nil
+    for i = #candidates, 1, -1 do
+        local hit = candidates[i]
+        local comment_len = u16le(tail, hit + 20)
+        if comment_len then
+            local abs = tail_start + (hit - 1)
+            if size - (abs + 22) == comment_len then
+                eocd = hit
+                break
+            end
+        end
     end
     if not eocd then fh:close(); return false end
 
@@ -409,7 +445,23 @@ function M._zipHasEntry(zip_path, name)
     fh:seek("set", cd_off)
     local cd = fh:read(cd_size) or ""
     fh:close()
-    return cd:find(name, 1, true) ~= nil
+
+    local i = 1
+    while i <= #cd do
+        local sig_a, sig_b, sig_c, sig_d = cd:byte(i, i + 3)
+        if sig_a ~= 0x50 or sig_b ~= 0x4B or sig_c ~= 0x01 or sig_d ~= 0x02 then
+            return false
+        end
+        local n = u16le(cd, i + 28)
+        local m = u16le(cd, i + 30)
+        local k = u16le(cd, i + 32)
+        if not n or not m or not k then return false end
+        local name_start = i + 46
+        if name_start + n - 1 > #cd then return false end
+        if cd:sub(name_start, name_start + n - 1) == name then return true end
+        i = i + 46 + n + m + k
+    end
+    return false
 end
 
 -- Read `xray/xray.json` out of the EPUB.
