@@ -715,7 +715,7 @@ describe("xray_prefetch", function()
             plugin.continueWithFetch = function() fetched = true end
             plugin:_prefetchNext()
             assert.is_false(fetched)
-            assert.is_false(finished)
+            assert.are.equal(false, finished)
         end)
 
         it("startOfflinePrefetch(false) with switch off shows the disabled hint and returns early", function()
@@ -752,7 +752,7 @@ describe("xray_prefetch", function()
 
             assert.are.equal("ai_fetching_disabled_hint", shown_text)
             assert.is_true(plugin.prefetch_silent)
-            assert.is_false(finished_with)
+            assert.are.equal(false, finished_with)
         end)
     end)
 end)
