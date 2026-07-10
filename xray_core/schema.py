@@ -8,6 +8,8 @@ shared between the CLI, the calibre plugin, and plain pytest.
 for humans/tooling and is kept in sync with this module by hand.
 """
 
+from typing import TypeGuard
+
 SCHEMA_VERSION = 1
 
 # Top-level required keys and their expected Python type.
@@ -39,8 +41,12 @@ _CHRONOLOGY_FIELDS = ("name", "first_pct", "first_seq")
 _SNAPSHOT_LISTS = ("characters", "locations", "terms", "historical_figures")
 
 
-def _is_strict_int(value) -> bool:
-    """True for a real int, false for bool (bool is a subclass of int)."""
+def _is_strict_int(value) -> TypeGuard[int]:
+    """True for a real int, false for bool (bool is a subclass of int).
+
+    Typed as a TypeGuard so `_is_strict_int(x) and x < 0` narrows `x` for the
+    type checker -- callers rely on that short-circuit to compare bounds.
+    """
     return isinstance(value, int) and not isinstance(value, bool)
 
 
@@ -136,7 +142,7 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
                 if not isinstance(anchor.get("toc_title"), str):
                     problems.append(f"{label}.chapter_anchor.toc_title must be a string")
                 spine_index = anchor.get("spine_index")
-                if not _is_strict_int(spine_index) or spine_index < 0:
+                if not (_is_strict_int(spine_index) and spine_index >= 0):
                     problems.append(
                         f"{label}.chapter_anchor.spine_index must be a non-negative int"
                     )
@@ -240,6 +246,6 @@ def _validate_timeline(timeline: list) -> list[str]:
             if not isinstance(ev.get(field), str):
                 problems.append(f"{label}.{field} must be a string")
         pct = ev.get("pct")
-        if not _is_strict_int(pct) or not (0 <= pct <= 100):
+        if not (_is_strict_int(pct) and 0 <= pct <= 100):
             problems.append(f"{label}.pct must be an int between 0 and 100")
     return problems
