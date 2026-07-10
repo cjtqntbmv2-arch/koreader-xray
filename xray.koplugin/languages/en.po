@@ -341,6 +341,21 @@ msgstr "Find Mentions"
 msgid "full_book_option"
 msgstr "Show everything (full book)"
 
+msgid "import_done"
+msgstr "X-Ray data imported from calibre."
+
+msgid "import_done_partial"
+msgstr "X-Ray data imported (prepared to %d%%)."
+
+msgid "import_failed"
+msgstr "Could not import the embedded X-Ray data."
+
+msgid "import_rejected"
+msgstr "The embedded X-Ray data does not match this book."
+
+msgid "import_running"
+msgstr "Preparing X-Ray data from calibre…"
+
 msgid "label_aliases"
 msgstr "ALIASES"
 

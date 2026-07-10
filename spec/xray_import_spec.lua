@@ -760,4 +760,95 @@ describe("xray_import", function()
             assert.is_nil(aborted.book_type)
         end)
     end)
+
+    describe("_zipHasEntry", function()
+        -- Synthetic archives, same idiom as xray_updater_spec.lua's zip tests:
+        -- we exercise the EOCD parse and the central-directory name search
+        -- without depending on a `zip` binary being installed.
+        local function u32(n)
+            return string.char(n % 256, math.floor(n / 256) % 256,
+                math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256)
+        end
+        local function write_zip(path, cd_body)
+            local head = "PK\3\4" .. string.rep("x", 30)
+            local eocd = "PK\5\6" .. string.rep("\0", 8) .. u32(#cd_body) .. u32(#head) .. "\0\0"
+            local f = io.open(path, "wb")
+            f:write(head .. cd_body .. eocd)
+            f:close()
+        end
+
+        it("finds a member listed in the central directory", function()
+            local p = "/tmp/xray_import_spec_yes.zip"
+            write_zip(p, "PK\1\2" .. string.rep("\0", 10) .. "xray/xray.json")
+            assert.is_true(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
+
+        it("does not find a member that is absent", function()
+            local p = "/tmp/xray_import_spec_no.zip"
+            write_zip(p, "PK\1\2" .. string.rep("\0", 10) .. "OEBPS/content.opf")
+            assert.is_false(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
+
+        it("returns false for a missing or truncated file", function()
+            assert.is_false(importer._zipHasEntry("/tmp/xray_import_spec_absent.zip", "xray/xray.json"))
+            local p = "/tmp/xray_import_spec_trunc.zip"
+            local f = io.open(p, "wb"); f:write("PK\3\4"); f:close()
+            assert.is_false(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
+    end)
+
+    describe("maybeImportEmbeddedXray", function()
+        it("does nothing for a non-epub document", function()
+            local self_ = mock_plugin()
+            self_.ui = { document = { file = "/tmp/book.pdf" } }
+            self_._readEmbeddedXray = function() error("must not be called") end
+            self_:maybeImportEmbeddedXray()  -- must not throw
+        end)
+
+        it("does nothing while a prefetch is running", function()
+            local self_ = mock_plugin()
+            self_.ui = { document = { file = "/tmp/book.epub" } }
+            self_.prefetch_active = true
+            self_._readEmbeddedXray = function() error("must not be called") end
+            self_:maybeImportEmbeddedXray()
+        end)
+
+        it("does nothing when the epub carries no xray.json", function()
+            local self_ = mock_plugin()
+            self_.ui = { document = { file = "/tmp/book.epub" } }
+            self_._readEmbeddedXray = function() return nil end
+            self_.importEmbeddedXray = function() error("must not be called") end
+            self_:maybeImportEmbeddedXray()
+        end)
+
+        it("does not import when the gate rejects, and tells the user why", function()
+            local self_ = mock_plugin()
+            self_.ui = { document = {
+                file = "/tmp/book.epub",
+                getProps = function() return { title = "A Different Book" } end,
+            } }
+            self_._readEmbeddedXray = function() return mock_doc() end
+            self_.importEmbeddedXray = function() error("must not be called") end
+            _G.ui_tracker.shown = {}
+            self_:maybeImportEmbeddedXray()
+            -- A silent no-op leaves the user with no lever and no information.
+            assert.is_true(#_G.ui_tracker.shown > 0)
+        end)
+
+        it("imports when the gate passes", function()
+            local self_ = mock_plugin()
+            self_.ui = { document = {
+                file = "/tmp/book.epub",
+                getProps = function() return { title = "Test Book" } end,
+            } }
+            self_._readEmbeddedXray = function() return mock_doc() end
+            local called = false
+            self_.importEmbeddedXray = function() called = true end
+            self_:maybeImportEmbeddedXray()
+            assert.is_true(called)
+        end)
+    end)
 end)

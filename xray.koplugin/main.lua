@@ -387,6 +387,19 @@ function XRayPlugin:onReaderReady()
         if self.maybeStartAutoPrefetch then self:maybeStartAutoPrefetch() end
     end)
 
+    -- Import calibre-prepared X-Ray data, once, only when this book has no cache.
+    -- Deferred like every other onReaderReady job: anchor resolution needs settled
+    -- pagination. Fires before the auto-prefetch above gets its turn and holds
+    -- prefetch_active for its duration, so the two cannot overlap.
+    UIManager:scheduleIn(3, function()
+        if self.destroyed then return end
+        if self._import_checked then return end
+        self._import_checked = true
+        if not self.book_data and self.maybeImportEmbeddedXray then
+            self:maybeImportEmbeddedXray()
+        end
+    end)
+
     -- Enforce X-Ray as the first item in the Tools menu for all KOReader versions
     UIManager:scheduleIn(1, function()
         if self.destroyed then return end

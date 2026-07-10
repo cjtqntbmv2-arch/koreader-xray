@@ -341,6 +341,21 @@ msgstr "Erwähnungen finden"
 msgid "full_book_option"
 msgstr "Alles anzeigen (Vollbuch)"
 
+msgid "import_done"
+msgstr "X-Ray-Daten aus calibre importiert."
+
+msgid "import_done_partial"
+msgstr "X-Ray-Daten importiert (vorbereitet bis %d%%)."
+
+msgid "import_failed"
+msgstr "Die eingebetteten X-Ray-Daten konnten nicht importiert werden."
+
+msgid "import_rejected"
+msgstr "Die eingebetteten X-Ray-Daten gehören nicht zu diesem Buch."
+
+msgid "import_running"
+msgstr "X-Ray-Daten aus calibre werden vorbereitet…"
+
 msgid "label_aliases"
 msgstr "ALIASE"
 

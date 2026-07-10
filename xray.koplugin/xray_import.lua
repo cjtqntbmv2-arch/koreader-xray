@@ -22,6 +22,7 @@ local M = {}
 
 local UIManager = require("ui/uimanager")
 local InfoMessage = require("ui/widget/infomessage")
+local DocSettings = require("docsettings")
 
 M.SUPPORTED_SCHEMA = 1
 
@@ -352,6 +353,138 @@ function M:_buildImportedCache(doc_json, mapped)
     }
 
     return book_data, snapshots
+end
+
+-- The zip member calibre writes.
+local DATA_PATH = "xray/xray.json"
+
+-- Quote a path for os.execute, which runs the string through /bin/sh.
+--
+-- string.format("%q", s) is LUA quoting, not shell quoting: it wraps in double
+-- quotes and leaves $, `, ( and ) live, so a book named
+--   Blood$(rm -rf /mnt/onboard).epub
+-- would execute that substitution. Single quotes suppress every shell
+-- expansion; the only character needing care is ' itself. Same idiom as
+-- xray_seriesmanager.lua:141.
+local function shellQuote(s)
+    return "'" .. (tostring(s):gsub("'", "'\\''")) .. "'"
+end
+
+local function u32le(s, i)
+    local a, b, c, d = s:byte(i, i + 3)
+    if not d then return nil end
+    return a + b * 256 + c * 65536 + d * 16777216
+end
+
+-- Is `name` listed in the zip's central directory? Pure Lua: parse the
+-- End-Of-Central-Directory record, read the central directory, search it for the
+-- literal name (filenames are stored uncompressed there).
+--
+-- ponytail: no zip64 support -- the offset check below simply fails and we
+-- report "absent". EPUBs are never zip64; revisit only if that changes.
+function M._zipHasEntry(zip_path, name)
+    local fh = io.open(zip_path, "rb")
+    if not fh then return false end
+    local size = fh:seek("end")
+    if not size or size < 22 then fh:close(); return false end
+
+    local tail_len = math.min(size, 65557)  -- 22-byte EOCD + up to 65535 comment
+    fh:seek("end", -tail_len)
+    local tail = fh:read(tail_len) or ""
+
+    local eocd, pos = nil, 1
+    while true do
+        local hit = tail:find("PK\5\6", pos, true)
+        if not hit then break end
+        eocd, pos = hit, hit + 1   -- keep the LAST signature
+    end
+    if not eocd then fh:close(); return false end
+
+    local cd_size = u32le(tail, eocd + 12)
+    local cd_off = u32le(tail, eocd + 16)
+    if not cd_size or not cd_off or cd_size == 0 or cd_off + cd_size > size then
+        fh:close(); return false
+    end
+
+    fh:seek("set", cd_off)
+    local cd = fh:read(cd_size) or ""
+    fh:close()
+    return cd:find(name, 1, true) ~= nil
+end
+
+-- Read `xray/xray.json` out of the EPUB.
+--
+-- The probe above already told us the member exists, so an empty extraction can
+-- only mean this unzip build ignored the member argument. That is exactly the
+-- 26.7.6 failure class (BusyBox lacking a flag we assumed), so we fall back to
+-- the whole-archive form xray_updater.lua:375-382 actually ships and trusts.
+-- Extraction goes into the book's own .sdr dir (always writable, unlike /tmp on
+-- some firmwares); BusyBox unzip creates the -d directory recursively.
+function M:_readEmbeddedXray(book_path)
+    if not M._zipHasEntry(book_path, DATA_PATH) then return nil end
+
+    local ok_json, json = pcall(require, "json")
+    if not ok_json or type(json) ~= "table" or not json.decode then return nil end
+
+    local sidecar = DocSettings:getSidecarDir(book_path)
+    if not sidecar then return nil end
+    local tmp_dir = sidecar .. "/xray_import_tmp"
+    local extracted = tmp_dir .. "/" .. DATA_PATH
+
+    local function cleanup()
+        os.execute("rm -rf " .. shellQuote(tmp_dir))
+    end
+
+    os.execute(string.format("unzip -o -q %s %s -d %s 2>/dev/null",
+        shellQuote(book_path), shellQuote(DATA_PATH), shellQuote(tmp_dir)))
+    local fh = io.open(extracted, "r")
+    if not fh then
+        self:log("XRayPlugin: single-member unzip yielded nothing, extracting whole archive")
+        os.execute(string.format("unzip -o -q %s -d %s 2>/dev/null",
+            shellQuote(book_path), shellQuote(tmp_dir)))
+        fh = io.open(extracted, "r")
+    end
+    if not fh then
+        cleanup()
+        self:log("XRayPlugin: could not extract " .. DATA_PATH)
+        return nil
+    end
+
+    local raw = fh:read("*a")
+    fh:close()
+    cleanup()
+
+    if not raw or raw == "" then return nil end
+    local ok, doc = pcall(json.decode, raw)
+    if not ok or type(doc) ~= "table" then
+        self:log("XRayPlugin: embedded xray.json is not valid JSON")
+        return nil
+    end
+    return doc
+end
+
+-- Cheap guards first, then the zip probe, then the gate.
+function M:maybeImportEmbeddedXray()
+    if self.prefetch_active or self.bg_fetch_active then return end
+    local book_path = self.ui and self.ui.document and self.ui.document.file
+    if not book_path or not book_path:lower():match("%.epub$") then return end
+
+    local doc_json = self:_readEmbeddedXray(book_path)
+    if not doc_json then return end
+
+    local props = (self.ui.document.getProps and self.ui.document:getProps()) or {}
+    local reason = self:_gateImport(doc_json, props)
+    if reason then
+        -- The book DOES carry X-Ray data and we are refusing it. Saying so is the
+        -- only diagnostic the user has: debug logging is off by default.
+        self:log("XRayPlugin: embedded X-Ray data rejected -- " .. reason)
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("import_rejected") or "The embedded X-Ray data does not match this book.",
+            timeout = 4,
+        })
+        return
+    end
+    self:importEmbeddedXray(doc_json)
 end
 
 -- Import a validated document. The anchor resolution and the snapshot writes run
