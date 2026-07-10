@@ -1,4 +1,22 @@
-from xray_core.merge import BookState, clean_response, is_more_complete_name, sort_entity_list
+import pytest
+
+from xray_core.merge import (
+    _CHAR_DESC_KEYS,
+    _CHAR_NAME_KEYS,
+    _CHAR_OCCUPATION_KEYS,
+    _HIST_BIO_KEYS,
+    _HIST_CONTEXT_KEYS,
+    _HIST_IMPORTANCE_KEYS,
+    _HIST_ROLE_KEYS,
+    _LOC_DESC_KEYS,
+    _LOC_IMPORTANCE_KEYS,
+    _LOC_NAME_KEYS,
+    _first_nonempty,
+    BookState,
+    clean_response,
+    is_more_complete_name,
+    sort_entity_list,
+)
 
 
 def test_clean_keeps_nameless_with_placeholder_and_truncates_role():
@@ -246,7 +264,7 @@ def test_is_more_complete_name_unicode_word_boundary():
 
 
 def test_clean_location_name_falls_back_to_place_and_lugar():
-    # xray_aihelper.lua:2046 -- l.name or l.place or l.Lugar
+    # AIHelper:validateAndCleanData (xray_aihelper.lua, ca. line 2052) -- l.name or l.place or l.Lugar
     assert clean_response({"locations": [{"place": "Palermo"}]})["locations"][0]["name"] == "Palermo"
     assert clean_response({"locations": [{"lugar": "Vesuv"}]})["locations"][0]["name"] == "Vesuv"
 
@@ -259,7 +277,7 @@ def test_clean_location_never_uses_character_name_chain():
 
 
 def test_clean_location_description_and_importance_fallbacks():
-    # xray_aihelper.lua:2047-2048
+    # AIHelper:validateAndCleanData (xray_aihelper.lua, ca. lines 2053-2054)
     loc = clean_response({"locations": [{"name": "X", "desc": "d", "significance": "s"}]})["locations"][0]
     assert loc["description"] == "d"
     assert loc["importance"] == "s"
@@ -268,7 +286,7 @@ def test_clean_location_description_and_importance_fallbacks():
 
 
 def test_clean_character_description_and_occupation_fallbacks():
-    # xray_aihelper.lua:2017,2019
+    # AIHelper:validateAndCleanData (xray_aihelper.lua, ca. lines 2023 and 2025)
     c = clean_response({"characters": [{"name": "A", "bio": "b", "job": "j"}]})["characters"][0]
     assert c["description"] == "b"
     assert c["occupation"] == "j"
@@ -277,7 +295,7 @@ def test_clean_character_description_and_occupation_fallbacks():
 
 
 def test_clean_historical_figure_fallbacks():
-    # xray_aihelper.lua:2031-2035
+    # AIHelper:validateAndCleanData (xray_aihelper.lua, ca. lines 2038-2041)
     h = clean_response(
         {
             "historical_figures": [
@@ -295,3 +313,30 @@ def test_clean_historical_figure_fallbacks():
     assert h["role"] == "r"
     assert h["importance_in_book"] == "s"
     assert h["context_in_book"] == "c"
+
+
+_CHAIN_PRIORITY_CASES = [
+    pytest.param(_CHAR_NAME_KEYS, ["name", "full_formal_name", "full_name", "formal_name"], id="_CHAR_NAME_KEYS"),
+    pytest.param(_CHAR_DESC_KEYS, ["description", "bio", "history", "desc"], id="_CHAR_DESC_KEYS"),
+    pytest.param(_CHAR_OCCUPATION_KEYS, ["occupation", "job"], id="_CHAR_OCCUPATION_KEYS"),
+    pytest.param(_LOC_NAME_KEYS, ["name", "place", "lugar"], id="_LOC_NAME_KEYS"),
+    pytest.param(_LOC_DESC_KEYS, ["description", "desc", "short_desc"], id="_LOC_DESC_KEYS"),
+    pytest.param(_LOC_IMPORTANCE_KEYS, ["importance", "significance"], id="_LOC_IMPORTANCE_KEYS"),
+    pytest.param(_HIST_BIO_KEYS, ["biography", "bio", "description"], id="_HIST_BIO_KEYS"),
+    pytest.param(_HIST_ROLE_KEYS, ["role", "historical_role"], id="_HIST_ROLE_KEYS"),
+    pytest.param(_HIST_IMPORTANCE_KEYS, ["importance_in_book", "significance"], id="_HIST_IMPORTANCE_KEYS"),
+    pytest.param(_HIST_CONTEXT_KEYS, ["context_in_book", "context"], id="_HIST_CONTEXT_KEYS"),
+]
+
+
+@pytest.mark.parametrize("keys, expected_order", _CHAIN_PRIORITY_CASES)
+def test_first_nonempty_chain_priority(keys, expected_order):
+    # Every fallback test above sets exactly one alternative key, so an
+    # accidental reorder in merge.py (e.g. swapping ("description", "bio",
+    # ...) to ("bio", "description", ...)) would go unnoticed. `expected_order`
+    # is written out independently here rather than derived from `keys`, so
+    # a reorder of the real chain actually flips which value wins below.
+    d = {key: f"value-from-{key}" for key in expected_order}
+    for winner in expected_order[:-1]:
+        assert _first_nonempty(d, keys, "MUST-NOT-WIN") == f"value-from-{winner}"
+        del d[winner]

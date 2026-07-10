@@ -3,10 +3,14 @@
 Ports `xray_data.lua`'s dedup/promote/stamp/sort logic (`deduplicateByName`
 ~223-289, `isMoreCompleteName` ~184-198, `stampFirstAppearance` ~176-182,
 `sortByFirstAppearance`/`sortByName`/`sortDataByFrequency` ~130-172), the
-per-field defaulting from `AIHelper:validateAndCleanData`
-(`xray_aihelper.lua:2002-2060`), and the checkpoint-merge field rules from
-`xray_fetch.lua` (description/definition = newest non-empty, terms union
-aliases instead of overwriting).
+per-field defaulting from `AIHelper:validateAndCleanData` in
+`xray_aihelper.lua` (function starts ca. line 2008), and the
+checkpoint-merge field rules from `xray_fetch.lua` (description/definition
+= newest non-empty, terms union aliases instead of overwriting).
+
+Lua line numbers in this module are approximate ("ca.") and anchored to
+KOReader-repo commit `42074d9` -- they drift as that repo moves, so prefer
+the named function/file over the number when hunting for the source.
 
 Stdlib-only on purpose (see xray_core/epub.py).
 """
@@ -16,10 +20,15 @@ import re
 
 from xray_core.checkpoints import is_non_narrative
 
-# Alternative keys the model sometimes emits, verbatim from
-# `xray_aihelper.lua:2015-2048`. Lua's upper-case branches (`c.Name`,
-# `l.Lugar`) are dead code there: `:1997` calls
-# `validateAndCleanData(normalizeKeys(data))`. We rely on the same
+# Alternative keys the model sometimes emits, verbatim from the fallback
+# chains inside `AIHelper:validateAndCleanData` (`xray_aihelper.lua`, ca.
+# lines 2021-2054). Only `c.Name` is dead code there: a pure case-duplicate
+# of `c.name`, already handled once `AIHelper:parseAIResponse` (ca. line
+# 2003) lower-cases keys via `validateAndCleanData(normalizeKeys(data))`
+# before this runs -- so it's dropped here without a Python equivalent.
+# `l.Lugar` is different: a genuine third alternative key (Spanish for
+# "place"), not a duplicate of anything else in its chain -- it lives on
+# below as `"lugar"` in `_LOC_NAME_KEYS`. We rely on the same lower-casing
 # precondition -- see clean_response's docstring.
 _CHAR_NAME_KEYS = ("name", "full_formal_name", "full_name", "formal_name")
 _CHAR_DESC_KEYS = ("description", "bio", "history", "desc")
@@ -40,6 +49,19 @@ def _str(d: dict, key: str, default: str = "") -> str:
 
 
 def _first_nonempty(d: dict, keys, default: str) -> str:
+    """Return the first present-and-non-empty string value among `keys`.
+
+    Deliberate divergence from Lua: `ensureString(c.description or c.bio or
+    c.history or c.desc, default)` uses Lua's `or`, where the empty string
+    is truthy (only `nil` and `false` are falsy in Lua) -- so that chain
+    stops at the first key that merely *exists*, even if its value is `""`,
+    and `ensureString` then returns the default for it. E.g. for
+    `{"name": "A", "description": "", "bio": "echter Text"}`, Lua yields the
+    placeholder even though "echter Text" is sitting right there in `bio`.
+    Python treats "present but empty" as "missing" and keeps walking the
+    chain instead, on purpose: an empty value from one key must not block a
+    real value the model supplied under a later, alternative key.
+    """
     for key in keys:
         v = d.get(key)
         if isinstance(v, str) and v:
@@ -56,13 +78,16 @@ def clean_response(raw: dict) -> dict:
     """Port of `validateAndCleanData`'s per-field defaulting (essentials).
 
     PRECONDITION: `raw`'s keys are already lower-cased by
-    `gemini.normalize_keys` (`gemini.py:192`), exactly as Lua couples the two
-    in `xray_aihelper.lua:1997`. Calling this with raw model output that
-    skipped that step will silently miss upper-case keys.
+    `gemini.normalize_keys` (`gemini.py:192`), exactly as Lua couples the
+    two in `AIHelper:parseAIResponse` (`xray_aihelper.lua`, ca. line 2003:
+    `validateAndCleanData(normalizeKeys(data))`). Calling this with raw
+    model output that skipped that step will silently miss upper-case keys.
 
-    Nameless characters/locations are KEPT with a placeholder name
-    (`xray_aihelper.lua:2015`) -- never dropped, so a character or place the
-    AI described but couldn't name never silently disappears.
+    Nameless characters/locations are KEPT with a placeholder name (the
+    `name` fallback chains inside `AIHelper:validateAndCleanData`,
+    `xray_aihelper.lua`, ca. lines 2021 and 2052) -- never dropped, so a
+    character or place the AI described but couldn't name never silently
+    disappears.
     """
     characters = [
         {
