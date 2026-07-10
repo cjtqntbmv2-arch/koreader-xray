@@ -799,29 +799,37 @@ function M:showCharacters()
         table.insert(items, { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function()
             local ButtonDialog = require("ui/widget/buttondialog")
             local merge_dialog
+            local row = {}
+            if self:isAiFetchingEnabled() then
+                table.insert(row, {
+                    text = "✦ " .. (self.loc:t("ai_scan") or "AI Scan"),
+                    callback = function()
+                        UIManager:close(merge_dialog)
+                        self:showAIFindDuplicatesFlow(self.characters, "characters", self.loc:t("entity_label_characters") or "characters")
+                    end
+                })
+            end
+            table.insert(row, {
+                text = self.loc:t("manual_pick") or "Manual Pick",
+                callback = function()
+                    UIManager:close(merge_dialog)
+                    self:showMergeFlow(self.characters, "characters")
+                end
+            })
             merge_dialog = ButtonDialog:new{
                 title = self.loc:t("merge_duplicates") or "Merge Duplicates...",
-                buttons = {{
-                    {
-                        text = "✦ " .. (self.loc:t("ai_scan") or "AI Scan"),
-                        callback = function()
-                            UIManager:close(merge_dialog)
-                            self:showAIFindDuplicatesFlow(self.characters, "characters", self.loc:t("entity_label_characters") or "characters")
-                        end
-                    },
-                    {
-                        text = self.loc:t("manual_pick") or "Manual Pick",
-                        callback = function()
-                            UIManager:close(merge_dialog)
-                            self:showMergeFlow(self.characters, "characters")
-                        end
-                    }
-                }}
+                buttons = { row }
             }
             UIManager:show(merge_dialog)
         end })
     end
-    table.insert(items, { text = "✚ " .. (self.loc:t("menu_fetch_more_chars") or "Fetch More Characters"), keep_menu_open = true, callback = function() self:fetchMoreCharacters() end, separator = #self.characters > 0 })
+    if self:isAiFetchingEnabled() then
+        table.insert(items, { text = "✚ " .. (self.loc:t("menu_fetch_more_chars") or "Fetch More Characters"), keep_menu_open = true, callback = function() self:fetchMoreCharacters() end, separator = #self.characters > 0 })
+    elseif #self.characters == 0 then
+        table.insert(items, { text = self.loc:t("ai_fetching_disabled_hint")
+            or "AI fetching is disabled. Enable it in the X-Ray settings.",
+            keep_menu_open = true, callback = function() end })
+    end
     for _, char in ipairs(self.characters) do
         local name = char.name or "Unknown"
         if char.source == "series_prior" then
@@ -1543,11 +1551,11 @@ function M:showTermDetails(term, opts)
             }
         }
         if not mentions_enabled then table.remove(buttons[2], 1) end
-        if opts and opts.low_confidence then
+        if opts and opts.low_confidence and self:isAiFetchingEnabled() then
             table.insert(buttons, 1, get_relookup_row())
         end
     else
-        if opts and opts.low_confidence then
+        if opts and opts.low_confidence and self:isAiFetchingEnabled() then
             buttons = { get_relookup_row() }
             if mentions_enabled then
                 table.insert(buttons, {
@@ -1643,7 +1651,13 @@ function M:showTerms()
     if #self.terms > 0 then
         table.insert(items, { text = "⌕ " .. (self.loc:t("search_term") or "Search Terms"), callback = function() self:showTermSearch() end })
     end
-    table.insert(items, { text = "✚ " .. (self.loc:t("menu_fetch_more_terms") or "Fetch More Terms"), callback = function() self:fetchMoreTerms() end, separator = #self.terms > 0 })
+    if self:isAiFetchingEnabled() then
+        table.insert(items, { text = "✚ " .. (self.loc:t("menu_fetch_more_terms") or "Fetch More Terms"), callback = function() self:fetchMoreTerms() end, separator = #self.terms > 0 })
+    elseif #self.terms == 0 then
+        table.insert(items, { text = self.loc:t("ai_fetching_disabled_hint")
+            or "AI fetching is disabled. Enable it in the X-Ray settings.",
+            keep_menu_open = true, callback = function() end })
+    end
     for _, term in ipairs(self.terms) do 
         if type(term) == "table" then
             local captured_term = term
@@ -2204,6 +2218,15 @@ function M:showAIFindDuplicatesFlow(list, list_name, entity_label)
 
     self:log("XRayPlugin: AI duplicate scan started for " .. tostring(list_name))
 
+    if not self:isAiFetchingEnabled() then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("ai_fetching_disabled_hint")
+                or "AI fetching is disabled. Enable it in the X-Ray settings.",
+            timeout = 4,
+        })
+        return
+    end
+
     if not self.ai_helper or not self.ai_helper:hasApiKey() then
         UIManager:show(InfoMessage:new{
             text = self.loc:t("ai_key_required") or "An AI API key is required.",
@@ -2675,6 +2698,14 @@ end
 
 function M:showAuthorInfo()
     if not self.author_info or not self.author_info.description or self.author_info.description == "" or self.author_info.description == (self.loc:t("msg_no_bio") or "No biography available.") then
+        if not self:isAiFetchingEnabled() then
+            UIManager:show(InfoMessage:new{
+                text = self.loc:t("ai_fetching_disabled_hint")
+                    or "AI fetching is disabled. Enable it in the X-Ray settings.",
+                timeout = 4,
+            })
+            return
+        end
         local ButtonDialog = require("ui/widget/buttondialog")
         local ask_dialog
         ask_dialog = ButtonDialog:new{ title = (self.loc:t("menu_fetch_author") or "Fetch Author Info (AI)") .. "\n\n" .. (self.loc:t("no_author_data_fetch") or "No author info available.\n\nWould you like to fetch it from AI?"), buttons = {{{ text = self.loc:t("cancel"), callback = function() UIManager:close(ask_dialog) end }, { text = self.loc:t("fetch_button") or "Fetch", is_enter_default = true, callback = function() UIManager:close(ask_dialog); UIManager:nextTick(function() self:fetchAuthorInfo() end) end }}} }
@@ -2688,31 +2719,39 @@ function M:showLocations()
     self.locations = self.locations or {}
     local items = {}
     if #self.locations == 0 then
-        table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Update X-Ray Data"),
-            keep_menu_open = true, callback = function() self:updateFromAI() end })
+        if self:isAiFetchingEnabled() then
+            table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Update X-Ray Data"),
+                keep_menu_open = true, callback = function() self:updateFromAI() end })
+        else
+            table.insert(items, { text = self.loc:t("ai_fetching_disabled_hint")
+                or "AI fetching is disabled. Enable it in the X-Ray settings.",
+                keep_menu_open = true, callback = function() end })
+        end
     end
     if #self.locations > 0 then
         table.insert(items, { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function()
             local ButtonDialog = require("ui/widget/buttondialog")
             local merge_dialog
+            local row = {}
+            if self:isAiFetchingEnabled() then
+                table.insert(row, {
+                    text = "✦ " .. (self.loc:t("ai_scan") or "AI Scan"),
+                    callback = function()
+                        UIManager:close(merge_dialog)
+                        self:showAIFindDuplicatesFlow(self.locations, "locations", self.loc:t("entity_label_locations") or "locations")
+                    end
+                })
+            end
+            table.insert(row, {
+                text = self.loc:t("manual_pick") or "Manual Pick",
+                callback = function()
+                    UIManager:close(merge_dialog)
+                    self:showMergeFlow(self.locations, "locations")
+                end
+            })
             merge_dialog = ButtonDialog:new{
                 title = self.loc:t("merge_duplicates") or "Merge Duplicates...",
-                buttons = {{
-                    {
-                        text = "✦ " .. (self.loc:t("ai_scan") or "AI Scan"),
-                        callback = function()
-                            UIManager:close(merge_dialog)
-                            self:showAIFindDuplicatesFlow(self.locations, "locations", self.loc:t("entity_label_locations") or "locations")
-                        end
-                    },
-                    {
-                        text = self.loc:t("manual_pick") or "Manual Pick",
-                        callback = function()
-                            UIManager:close(merge_dialog)
-                            self:showMergeFlow(self.locations, "locations")
-                        end
-                    }
-                }}
+                buttons = { row }
             }
             UIManager:show(merge_dialog)
         end, separator = true })
@@ -3640,8 +3679,14 @@ function M:showHistoricalFigures()
     self.historical_figures = self.historical_figures or {}
     local items = {}
     if #self.historical_figures == 0 then
-        table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Update X-Ray Data"),
-            keep_menu_open = true, callback = function() self:updateFromAI() end })
+        if self:isAiFetchingEnabled() then
+            table.insert(items, { text = "✚ " .. (self.loc:t("menu_update_xray") or "Update X-Ray Data"),
+                keep_menu_open = true, callback = function() self:updateFromAI() end })
+        else
+            table.insert(items, { text = self.loc:t("ai_fetching_disabled_hint")
+                or "AI fetching is disabled. Enable it in the X-Ray settings.",
+                keep_menu_open = true, callback = function() end })
+        end
     end
     for _, fig in ipairs(self.historical_figures) do
         table.insert(items, {
@@ -3679,9 +3724,14 @@ function M:showQuickXRayMenu()
         { text = self.loc:t("menu_locations") or "Locations", callback = function() self:showLocations() end },
         { text = self.loc:t("menu_terms") or "Glossary", callback = function() self:showTerms() end },
         { text = self.loc:t("menu_historical_figures") or "Historical Figures", callback = function() self:showHistoricalFigures() end },
-        { text = self.loc:t("menu_update_xray") or "Update X-Ray Data", callback = function() self:updateFromAI() end, separator = true },
         { text = self.loc:t("quick_menu_full") or "All options...", callback = function() self:showFullXRayMenu() end },
     }
+    if self:isAiFetchingEnabled() then
+        table.insert(items, #items, { text = self.loc:t("menu_update_xray") or "Update X-Ray Data", callback = function() self:updateFromAI() end, separator = true })
+    else
+        -- The separator sat on the Update item; without it, "All options" sticks to the list above.
+        items[#items - 1].separator = true
+    end
     self.xray_menu = self:newMenu("xray_menu", {
         title = self.loc:t("quick_menu_title") or "X-Ray Quick Menu",
         item_table = items,
@@ -4156,7 +4206,34 @@ function M:showCharacterSearch()
     if not self.characters or #self.characters == 0 then UIManager:show(InfoMessage:new{ text = self.loc:t("no_character_data"), timeout = 3 }); return end
     local InputDialog = require("ui/widget/inputdialog")
     local input_dialog
-    input_dialog = InputDialog:new{ title = self.loc:t("search_character_title"), input = "", input_hint = self.loc:t("search_hint"), buttons = {{{ text = self.loc:t("cancel"), callback = function() UIManager:close(input_dialog) end }, { text = self.loc:t("search_button"), is_enter_default = true, callback = function() local search_text = input_dialog:getInputText(); UIManager:close(input_dialog); if search_text and #search_text > 0 then local found_char = self:findCharacterByName(search_text); if found_char then self:showCharacterDetails(found_char, { source = "menu" }) else local ConfirmBox = require("ui/widget/confirmbox"); local confirm; confirm = ConfirmBox:new{ text = self.loc:t("fetch_single_word_prompt", search_text) or ("No X-Ray data found for '" .. search_text .. "'. Look it up?"), ok_text = self.loc:t("fetch_button") or "Fetch", cancel_text = self.loc:t("close") or "Close", ok_callback = function() UIManager:close(confirm); self:fetchSingleWord(search_text, nil, nil) end }; UIManager:show(confirm) end end end }}} }
+    input_dialog = InputDialog:new{ title = self.loc:t("search_character_title"), input = "", input_hint = self.loc:t("search_hint"), buttons = {{
+        { text = self.loc:t("cancel"), callback = function() UIManager:close(input_dialog) end },
+        { text = self.loc:t("search_button"), is_enter_default = true, callback = function()
+            local search_text = input_dialog:getInputText()
+            UIManager:close(input_dialog)
+            if search_text and #search_text > 0 then
+                local found_char = self:findCharacterByName(search_text)
+                if found_char then
+                    self:showCharacterDetails(found_char, { source = "menu" })
+                elseif not self:isAiFetchingEnabled() then
+                    UIManager:show(InfoMessage:new{
+                        text = string.format(self.loc:t("lookup_no_data_found") or "No X-Ray data found for '%s'.", search_text),
+                        timeout = 3,
+                    })
+                else
+                    local ConfirmBox = require("ui/widget/confirmbox")
+                    local confirm
+                    confirm = ConfirmBox:new{
+                        text = self.loc:t("fetch_single_word_prompt", search_text) or ("No X-Ray data found for '" .. search_text .. "'. Look it up?"),
+                        ok_text = self.loc:t("fetch_button") or "Fetch",
+                        cancel_text = self.loc:t("close") or "Close",
+                        ok_callback = function() UIManager:close(confirm); self:fetchSingleWord(search_text, nil, nil) end
+                    }
+                    UIManager:show(confirm)
+                end
+            end
+        end }
+    }} }
     UIManager:show(input_dialog); input_dialog:onShowKeyboard()
 end
 

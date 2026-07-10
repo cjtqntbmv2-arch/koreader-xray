@@ -556,13 +556,239 @@ describe("xray_ui", function()
             assert.truthy(last.args.item_table[1].text:find("menu_update_xray"))
         end)
     end)
+
+    describe("ai fetching main switch", function()
+        it("showTerms offers Fetch More only when enabled", function()
+            plugin.terms = {}
+            plugin:showTerms()
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("Menu", last.type)
+            assert.truthy(last.args.item_table[1].text:find("menu_fetch_more_terms", 1, true))
+
+            plugin.ai_helper.settings.ai_fetching_enabled = false
+            plugin.terms = {}
+            plugin:showTerms()
+            last = _G.ui_tracker.last_shown
+            assert.are.equal("Menu", last.type)
+            assert.is_nil(last.args.item_table[1].text:find("menu_fetch_more_terms", 1, true))
+            assert.truthy(last.args.item_table[1].text:find("ai_fetching_disabled_hint", 1, true))
+        end)
+
+        it("showTerms hides the Fetch More item entirely (no hint) when disabled and terms already exist", function()
+            plugin.ai_helper.settings.ai_fetching_enabled = false
+            plugin.terms = { { name = "Term A", definition = "def" } }
+            plugin:showTerms()
+            local last = _G.ui_tracker.last_shown
+            for _, item in ipairs(last.args.item_table) do
+                assert.is_nil(item.text:find("menu_fetch_more_terms", 1, true))
+                assert.is_nil(item.text:find("ai_fetching_disabled_hint", 1, true))
+            end
+        end)
+
+        it("showLocations empty state shows the hint instead of Update when disabled", function()
+            plugin.ai_helper.settings.ai_fetching_enabled = false
+            plugin.locations = {}
+            plugin:showLocations()
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("Menu", last.type)
+            assert.is_nil(last.args.item_table[1].text:find("menu_update_xray", 1, true))
+            assert.truthy(last.args.item_table[1].text:find("ai_fetching_disabled_hint", 1, true))
+        end)
+
+        it("showHistoricalFigures empty state shows the hint instead of Update when disabled", function()
+            plugin.ai_helper.settings.ai_fetching_enabled = false
+            plugin.historical_figures = {}
+            plugin:showHistoricalFigures()
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("Menu", last.type)
+            assert.is_nil(last.args.item_table[1].text:find("menu_update_xray", 1, true))
+            assert.truthy(last.args.item_table[1].text:find("ai_fetching_disabled_hint", 1, true))
+        end)
+
+        it("showCharacters offers Fetch More only when enabled, and shows the hint when empty and disabled", function()
+            plugin.characters = {}
+            plugin:showCharacters()
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("Menu", last.type)
+            assert.truthy(last.args.item_table[1].text:find("menu_fetch_more_chars", 1, true))
+
+            plugin.ai_helper.settings.ai_fetching_enabled = false
+            plugin.characters = {}
+            plugin:showCharacters()
+            last = _G.ui_tracker.last_shown
+            assert.is_nil(last.args.item_table[1].text:find("menu_fetch_more_chars", 1, true))
+            assert.truthy(last.args.item_table[1].text:find("ai_fetching_disabled_hint", 1, true))
+        end)
+
+        it("quick menu hides Update when disabled and keeps a separator before All options", function()
+            plugin.ai_helper.settings.ai_fetching_enabled = false
+            plugin:showQuickXRayMenu()
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("Menu", last.type)
+            local items = last.args.item_table
+            for _, item in ipairs(items) do
+                assert.is_nil(item.text:find("menu_update_xray", 1, true))
+            end
+            -- 6 items in the literal minus none removed (Update was never inserted): Characters, Timeline,
+            -- Locations, Terms, Historical Figures, All options...
+            assert.are.equal(6, #items)
+            assert.are.equal("quick_menu_full", items[6].text)
+            assert.is_true(items[5].separator)
+        end)
+
+        it("quick menu shows Update before All options when enabled", function()
+            plugin:showQuickXRayMenu()
+            local last = _G.ui_tracker.last_shown
+            local items = last.args.item_table
+            assert.are.equal(7, #items)
+            assert.truthy(items[6].text:find("menu_update_xray", 1, true))
+            assert.are.equal("quick_menu_full", items[7].text)
+            assert.is_true(items[6].separator)
+        end)
+
+        it("showAuthorInfo shows the disabled hint instead of the fetch-ask dialog when off", function()
+            plugin.ai_helper.settings.ai_fetching_enabled = false
+            plugin.author_info = nil
+            plugin:showAuthorInfo()
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("InfoMessage", last.type)
+            assert.are.equal("ai_fetching_disabled_hint", last.args.text)
+        end)
+
+        it("showAIFindDuplicatesFlow shows the disabled hint and returns before touching the API key", function()
+            plugin.ai_helper.settings.ai_fetching_enabled = false
+            plugin.ai_helper.hasApiKey = function() error("must not check API key when ai fetching is disabled") end
+            plugin:showAIFindDuplicatesFlow({}, "characters", "characters")
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("InfoMessage", last.type)
+            assert.are.equal("ai_fetching_disabled_hint", last.args.text)
+        end)
+
+        it("showTermDetails: relookup button disappears when disabled but Find Mentions/Close survive", function()
+            plugin.ai_helper.settings.ui_popup_intext = false
+            plugin.ai_helper.settings.ui_popup_menu = false
+            plugin.ai_helper.settings.linked_entries_enabled = false
+            plugin.ai_helper.settings.mentions_enabled = true
+            plugin.ai_helper.settings.ai_fetching_enabled = false
+            plugin.fetchSingleWord = function() error("must not be reachable when ai fetching is disabled") end
+
+            local term = { name = "Foo", definition = "bar" }
+            plugin:showTermDetails(term, {
+                low_confidence = true,
+                original_text = "Foo query",
+                pos0 = nil,
+                pos1 = nil,
+            })
+            local last = _G.ui_tracker.last_shown
+            assert.are.equal("ButtonDialog", last.type)
+            assert.is_not_nil(last.args.buttons)
+            assert.is_true(#last.args.buttons > 0)
+
+            local texts = {}
+            for _, row in ipairs(last.args.buttons) do
+                for _, btn in ipairs(row) do table.insert(texts, btn.text) end
+            end
+            local joined = table.concat(texts, "|")
+            assert.is_nil(joined:find("relookup_button", 1, true))
+            assert.truthy(joined:find("find_mentions", 1, true))
+            assert.truthy(joined:find("close", 1, true))
+        end)
+
+        it("showTermDetails: relookup button is offered when low_confidence and ai fetching enabled", function()
+            plugin.ai_helper.settings.ui_popup_intext = false
+            plugin.ai_helper.settings.ui_popup_menu = false
+            plugin.ai_helper.settings.linked_entries_enabled = false
+            plugin.ai_helper.settings.mentions_enabled = true
+
+            local term = { name = "Foo", definition = "bar" }
+            plugin:showTermDetails(term, {
+                low_confidence = true,
+                original_text = "Foo query",
+                pos0 = nil,
+                pos1 = nil,
+            })
+            local last = _G.ui_tracker.last_shown
+            local texts = {}
+            for _, row in ipairs(last.args.buttons) do
+                for _, btn in ipairs(row) do table.insert(texts, btn.text) end
+            end
+            local joined = table.concat(texts, "|")
+            assert.truthy(joined:find("relookup_button", 1, true))
+        end)
+
+        describe("showCharacterSearch", function()
+            local old_id
+
+            before_each(function()
+                old_id = package.loaded["ui/widget/inputdialog"]
+            end)
+
+            after_each(function()
+                package.loaded["ui/widget/inputdialog"] = old_id
+            end)
+
+            it("shows an InfoMessage instead of the Look-it-up ConfirmBox when ai fetching is disabled", function()
+                package.loaded["ui/widget/inputdialog"] = {
+                    new = function(a, b)
+                        local args = b or a
+                        return {
+                            type = "InputDialog",
+                            args = args,
+                            getInputText = function() return "Nobody" end,
+                            onShowKeyboard = function() end,
+                        }
+                    end
+                }
+                plugin.characters = { { name = "Alice" } }
+                plugin.ai_helper.settings.ai_fetching_enabled = false
+                plugin:showCharacterSearch()
+                local dialog = _G.ui_tracker.last_shown
+                assert.are.equal("InputDialog", dialog.type)
+                local search_button = dialog.args.buttons[1][2]
+
+                _G.ui_tracker.last_shown = nil
+                search_button.callback()
+                local last = _G.ui_tracker.last_shown
+                assert.is_not_nil(last)
+                assert.are.equal("InfoMessage", last.type)
+                assert.is_nil(last.args.ok_callback)
+            end)
+
+            it("still offers the Look-it-up ConfirmBox when ai fetching is enabled", function()
+                package.loaded["ui/widget/inputdialog"] = {
+                    new = function(a, b)
+                        local args = b or a
+                        return {
+                            type = "InputDialog",
+                            args = args,
+                            getInputText = function() return "Nobody" end,
+                            onShowKeyboard = function() end,
+                        }
+                    end
+                }
+                plugin.characters = { { name = "Alice" } }
+                plugin:showCharacterSearch()
+                local dialog = _G.ui_tracker.last_shown
+                local search_button = dialog.args.buttons[1][2]
+
+                _G.ui_tracker.last_shown = nil
+                search_button.callback()
+                local last = _G.ui_tracker.last_shown
+                assert.is_not_nil(last)
+                assert.are.equal("ConfirmBox", last.type)
+                assert.is_not_nil(last.args.ok_callback)
+            end)
+        end)
+    end)
 end)
 
 describe("quick xray menu", function()
     it("is a real short menu, not an alias of the full menu", function()
         local ui = require("xray_ui")
+        local XRayPlugin = require("main")
         local plugin = createMockPlugin()
         for k, v in pairs(ui) do plugin[k] = v end
+        plugin.isAiFetchingEnabled = XRayPlugin.isAiFetchingEnabled
         local captured
         plugin.newMenu = function(_, _, opts)
             captured = opts

@@ -223,10 +223,19 @@ function LookupManager:handleLookup(text, pos0, pos1)
 
     else
         -- No match found
+        local text_to_show = text:sub(1, 30)
+
+        if not (self.plugin.isAiFetchingEnabled and self.plugin:isAiFetchingEnabled()) then
+            local InfoMessage = require("ui/widget/infomessage")
+            UIManager:show(InfoMessage:new{
+                text = string.format(self.plugin.loc:t("lookup_no_data_found") or "No X-Ray data found for '%s'.", text_to_show),
+                timeout = 3,
+            })
+            return
+        end
+
         local ConfirmBox = require("ui/widget/confirmbox")
         local no_data_dialog
-        
-        local text_to_show = text:sub(1, 30)
         local prompt_text = self.plugin.loc:t("fetch_single_word_prompt", text_to_show)
         if not prompt_text or prompt_text == "fetch_single_word_prompt" then
             prompt_text = string.format("No X-Ray data found for '%s'. Would you like to look it up?", text_to_show)
