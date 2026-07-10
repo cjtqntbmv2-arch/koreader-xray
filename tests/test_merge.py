@@ -214,6 +214,26 @@ def test_non_narrative_timeline_events_dropped():
     assert state.timeline[0]["pct"] == 20
 
 
+def test_timeline_drops_events_with_blank_chapter():
+    # xray_fetch.lua:534 filtert Timeline-Ereignisse durch denselben Helper.
+    state = BookState()
+
+    state.merge_segment(
+        clean_response(
+            {
+                "timeline": [
+                    {"chapter": "", "event": "kapitellos"},
+                    {"chapter": "Kapitel 1", "event": "echt"},
+                    {"chapter": "Copyright", "event": "frontmatter"},
+                ]
+            }
+        ),
+        checkpoint_pct=10,
+    )
+
+    assert [ev["event"] for ev in state.timeline] == ["echt"]
+
+
 def test_is_more_complete_name_unicode_word_boundary():
     # "Müller" as its own space-bounded word promotes correctly.
     assert is_more_complete_name("Doktor Müller", "Müller")

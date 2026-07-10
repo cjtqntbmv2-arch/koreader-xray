@@ -58,6 +58,19 @@ def test_chapter_end_anchors():
     assert [cp.offset for cp in cps] == sorted(cp.offset for cp in cps)
 
 
+def test_is_non_narrative_treats_blank_title_as_non_narrative():
+    # xray_data.lua:328 `if not title then return true end`
+    # xray_data.lua:330 `if lower == "" then return true end`
+    assert is_non_narrative(None) is True
+    assert is_non_narrative("") is True
+    assert is_non_narrative("   ") is True
+
+
+def test_is_non_narrative_still_accepts_real_chapters():
+    assert is_non_narrative("Kapitel 1") is False
+    assert is_non_narrative("cover") is True
+
+
 def test_non_narrative_filtered():
     assert is_non_narrative("Copyright")
     assert is_non_narrative("About the Author")
