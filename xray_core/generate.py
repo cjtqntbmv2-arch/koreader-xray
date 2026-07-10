@@ -300,7 +300,14 @@ def generate_xray(book: BookText, client, language, detail_level,
                 path = _chunk_path(workdir, cp_idx, chunk_idx, language, detail_level)
                 if os.path.exists(path):
                     with open(path, "r", encoding="utf-8") as f:
-                        cached = json.load(f)
+                        # Re-clean on load: a workdir written by an older build
+                        # carries whatever clean_response guaranteed back then,
+                        # and merge_segment trusts its input. clean_response is
+                        # idempotent on its own output (every field it emits is
+                        # the canonical head of its own fallback chain), so this
+                        # costs nothing and stops a stale cache from reviving a
+                        # fixed bug on resume.
+                        cached = clean_response(json.load(f), language)
             if cached is not None:
                 results[(cp_idx, chunk_idx)] = cached
                 done += 1

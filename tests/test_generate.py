@@ -1,6 +1,7 @@
 """Tests for the generation orchestrator (Task 7): parallel extraction,
 ordered-merge D4 barrier, sequential enrichment, quota handling, resume.
 """
+import json
 import os
 import time
 
@@ -418,6 +419,37 @@ def test_chunk_path_caps_a_pathological_language(tmp_path):
     with open(path, "w", encoding="utf-8") as f:
         f.write("{}")
     assert os.path.exists(path)
+
+
+def test_resume_recleans_a_stale_cache_written_by_an_older_build(tmp_path):
+    """merge_segment trusts its input. A workdir written before a
+    clean_response fix still holds whatever that older build allowed -- here
+    a whitespace-only description, which _merge's newest_wins guard would
+    treat as real content and use to overwrite the real one."""
+    book = _two_chapter_book(
+        "Alice appears in the CH1MARKER village at dawn today, greeting everyone. " * 5,
+        "Alice returns to the CH2MARKER harbor as the evening tide turns again. " * 5,
+    )
+    workdir = str(tmp_path / "work")
+    os.makedirs(workdir)
+
+    cps = plan_checkpoints(book)
+    poisoned = {
+        "characters": [{"name": "Alice", "description": "   ", "role": "\t"}],
+        "locations": [], "historical_figures": [], "terms": [], "timeline": [],
+        "book_type": "fiction",
+    }
+    for cp_idx in range(len(cps)):
+        with open(_chunk_path(workdir, cp_idx, 0, "en", "normal"), "w", encoding="utf-8") as f:
+            json.dump(poisoned, f)
+
+    client = FakeClient([])  # every chunk is cached; no fetch may happen
+    doc = generate_xray(book, client, "en", "normal", workdir=workdir)
+
+    assert client.calls == []
+    alice = doc["checkpoints"][-1]["snapshot"]["characters"][0]
+    assert alice["description"] == ""  # not "   "
+    assert alice["role"] == ""  # not "\t"
 
 
 # ---------------------------------------------------------------------------
