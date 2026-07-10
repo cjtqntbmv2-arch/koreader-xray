@@ -76,12 +76,19 @@ Alte KOReader ohne Suche → automatisch Stufe 2/3.
 ```
 schema_version, generator + version, detail_level, language,
 book_fingerprint { calibre_uuid, title, authors, text_hash },
-complete (bool; false bei Abbruch, mit last_percent),
+complete (bool; false bei Abbruch, mit last_percent), book_type,
+timeline: [ { chapter, event, pct } ]  (top-level, ein Eintrag pro Ereignis — nicht pro
+                                        Checkpoint im Snapshot),
 checkpoints: [ { percent, snippet_anchor, chapter_anchor { toc_title, spine_index },
-                 snapshot { characters, locations, terms, events } } ]
+                 snapshot { characters, locations, terms, historical_figures } } ]
 ```
 
-Snapshot-Strukturen Feld für Feld wie das heutige `.sdr`-Cache-Format, nur JSON.
+Snapshot-Strukturen Feld für Feld wie das heutige `.sdr`-Cache-Format, nur JSON. `timeline`
+liegt bewusst top-level statt — wie hier ursprünglich skizziert — pro Checkpoint im Snapshot:
+jedes Ereignis trägt sein eigenes `pct`, der KOReader-Importer mappt `pct → Seite` und blendet
+Ereignisse ohne gültiges `pct` aus. Das verletzt D4 nicht, weil die Spoiler-Staffelung beim
+Lesen auf dem Gerät passiert — anhand des `pct` pro Ereignis — und nicht davon abhängt, wie die
+Ereignisse in der Datei angeordnet sind.
 
 ## KOReader-Seite (dieses Repo)
 

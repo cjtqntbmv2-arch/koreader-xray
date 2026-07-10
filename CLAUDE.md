@@ -104,6 +104,65 @@ kopie erst nach `_validate_embedded_epub()` (Zip-Integrität + Byte-Roundtrip de
 - Repo ist lokal (kein Remote). Version in `VERSION` + README-Badge + `XRayGeneratorPlugin.version`,
   SemVer ab 0.1.0; Tags/Push entfallen bis ein Remote existiert. Version bleibt 0.1.0, bis das
   Paar calibre-Generator + KOReader-Importer an einem echten Buch end-to-end verifiziert ist.
+- **Bewusste Divergenzen vom Lua** (jede ist im Code kommentiert, vor allem in `xray_core/merge.py`):
+  - **Keine Inhalts-Platzhalter.** `role`/`description`/`biography`/`importance_in_book`/
+    `context_in_book` bleiben leer, statt wie Lua einen Platzhalter einzubrennen (z. B.
+    `"Not Specified"`, `"No Description"`; `AIHelper:validateAndCleanData`, `xray_aihelper.lua`,
+    ca. Zeile 2008ff.). Der Viewer blendet leere Felder beim Rendern ohnehin aus (`xray_ui.lua`,
+    ca. Zeile 190/218) — ein Platzhalter wäre nur sichtbares Rauschen auf jeder Karte, zu der die
+    KI nichts wusste, und ein nicht-leerer Wert würde eine spätere, informativere Ergänzung blockieren.
+  - **Namens-Platzhalter bleiben dagegen bestehen** (lokalisiert über `fallback_strings`/
+    `clean_response`): `BookState._merge` lässt namenlose Einträge nie kollidieren
+    (`xray_data.lua:232-234`) — ohne Platzhalter würde jedes Segment, das dieselbe unbenannte
+    Figur erneut erwähnt, einen weiteren Eintrag anhängen statt in den bestehenden zu mergen.
+  - **`_str`/`_first_nonempty` strippen Whitespace** und behandeln einen danach leeren String wie
+    ein fehlendes Feld (`xray_core/merge.py`). Luas `ensureString` prüft nur `#v > 0` und strippt
+    nie. Ohne das Strippen ließe `bool("   ")` (in Python wahr) einen Segment-Text aus lauter
+    Leerzeichen jede Truthy-Prüfung bestehen — inklusive `newest_wins` in `BookState._merge` —
+    und so eine echte, bereits vorhandene Beschreibung überschreiben.
+  - **`role` gewinnt vom neuesten nicht-leeren Wert**; Lua überschreibt bedingungslos
+    (`xray_fetch.lua:587` für Charaktere, `:660` für historische Figuren) und kann so eine
+    bekannte Rolle mit einem leeren Wert löschen.
+  - **Trunkierung (`role[:40]`) schneidet nach Zeichen**, Luas `:sub(1, 40)` nach Bytes — Python
+    zerschneidet dadurch nie einen mehrbyte UTF-8-Codepoint.
+  - **Terms vereinigen Aliase**, statt sie wie Lua wholesale zu überschreiben (`xray_fetch.lua:737`)
+    — sonst ginge ein Alias verloren, den ein späteres Segment einfach nicht wiederholt.
+- **`clean_response` erwartet normalisierte Schlüssel** (`gemini.normalize_keys`), genau wie Lua
+  die beiden koppelt (`AIHelper:parseAIResponse`, `xray_aihelper.lua`, ca. Zeile 2003:
+  `validateAndCleanData(normalizeKeys(data))`). Ein Aufrufer, der das überspringt, verliert
+  stillschweigend Felder mit großgeschriebenen Keys.
+- **`schema.py` ist der verlässliche Vertrag**, nicht `schema/xray.schema.json`: Cross-Field-Regeln
+  wie D4 (`first_pct <= checkpoint.percent`, siehe `_validate_chronology_entry`) oder
+  `timeline[i].pct >= 1` (siehe unten) kann draft-07 JSON Schema nicht ausdrücken. Wer den
+  Vertrag prüft, prüft `schema.py`.
+- **`plan_checkpoints` klemmt `percent` auf mindestens 1** (`xray_core/checkpoints.py`): eine
+  Kapitelgrenze unter 1 % des Buches würde sonst `percent = 0` erzeugen, was `schema.validate()`
+  ablehnt — und `generate_xray` validiert erst, nachdem das gesamte API-Budget für den Lauf
+  bereits verbraucht ist.
+- **`timeline[i].pct` muss `>= 1` sein, nicht `>= 0`** (`xray_core/schema.py`). Auf dem Gerät ist
+  `tonumber(0)` in Lua wahr, `pctToPage(0, ...)` läuft also durch und klemmt auf Seite 1, statt
+  das Ereignis wie bei fehlendem `pct` zu verbergen — es würde ab Checkpoint 1 gezeigt, und die
+  Spoiler-Richtung kehrt sich um (Kommentar im Timeline-Mapping von `xray_import.lua`).
+- **Der Chunk-Cache ist nach `language` UND `detail_level` geschlüsselt** (`_chunk_path` in
+  `xray_core/generate.py`): eine Cache-Datei enthält bereits bereinigte, sprachgebundene Prosa
+  unter den Zeichen-Caps des jeweiligen Detailgrads, daher lässt ein Resume nach Sprach- oder
+  Detailgrad-Wechsel den Cache absichtlich verfehlen, statt Deutsch/Englisch oder falsch bemessene
+  Prosa in ein Dokument zu mischen, das nur eine Sprache deklariert. Zusätzlich schickt der
+  Resume-Pfad jeden geladenen Chunk erneut durch `clean_response` — nicht wegen der Sprache (die
+  steckt bereits im Dateinamen), sondern weil ein `workdir` aus einem älteren Lauf noch die
+  Feld-Semantik einer älteren `clean_response`-Version tragen kann; erneutes Bereinigen ist
+  idempotent und billig und verhindert, dass ein seither gefixter Bug über den Cache zurückkommt.
+  Die Pfadkomponenten werden auf `[a-z0-9_-]` sanitisiert und auf 32 Zeichen gekappt, weil
+  `--language` freier Nutzertext ohne `argparse`-`choices=` ist und direkt in einen Dateinamen
+  fließt (Schutz vor Path-Traversal und vor dem OS-Dateinamenlimit).
+- **Lua-Zeilenverweise im Code sind Näherungen, kein exakter Anker.** `../koreader-xray-plugin-main`
+  ist ein eigenständig weiterentwickeltes Repo mit eigener Commit-Historie (HEAD z. B. `ddd8a96`
+  zum Zeitpunkt dieser Notiz, während `xray_core/merge.py`s Moduldocstring an `42074d9` verankert
+  ist) — zitierte Zeilennummern verrutschen dadurch, auch innerhalb einer einzelnen Umsetzung
+  (in diesem Plan allein um sechs Zeilen). Konvention: Funktionsname/Datei zuerst nennen,
+  Zeilennummer höchstens als `ca.`-Näherung danebenschreiben, den Anker-Commit einmal pro Modul im
+  Docstring nennen (Beispiel: `xray_core/merge.py`) statt bei jeder einzelnen Referenz — nicht
+  wieder exakte Zahlen eintragen.
 
 ## Festgelegte Entscheidungen (Brainstorming 2026-07-09)
 

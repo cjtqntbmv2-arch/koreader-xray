@@ -5,11 +5,28 @@ Layout calibre requires: the plugin's own files (calibre_plugin/*) go at the
 zip ROOT (calibre's multi-file-plugin convention -- see
 calibre_plugin/plugin-import-name-xray_generator.txt), flattened out of the
 calibre_plugin/ directory they live in on disk. The whole xray_core/ package
-and VERSION are bundled alongside them at that same root: xray_core.generate
-reads VERSION as "../VERSION" relative to itself, i.e. a zip-root sibling,
-and calibre_plugin/__init__.py aliases calibre_plugins.xray_generator.xray_core
+and VERSION are bundled alongside them at that same root, and
+calibre_plugin/__init__.py aliases calibre_plugins.xray_generator.xray_core
 (this same bundled copy) to the bare name "xray_core" so xray_core's own
 top-level absolute imports resolve unmodified inside the plugin.
+
+The bundled VERSION file is NOT actually read by an installed plugin at
+runtime, even though xray_core.generate._generator_version() looks for it at
+"../VERSION" relative to itself (a zip-root sibling, matching this layout):
+calibre loads a multi-file plugin straight out of the zip via zipimport
+rather than extracting it, so Path(__file__).resolve().parent.parent lands
+on the zip file itself, not a directory, and reading ".../VERSION" under it
+raises NotADirectoryError -- an OSError subclass _generator_version() catches
+broadly, falling back to its own hardcoded "0.1.0" constant. That fallback is
+what ends up in "generator_version" in every xray.json an installed plugin
+produces. (The bundled copy isn't dead weight, though: it's what the CLI
+reads successfully when xray_core runs from a real on-disk checkout instead
+of a zip.)
+
+Consequence: a version bump touches FOUR places, not one -- this VERSION
+file, XRayGeneratorPlugin.version in calibre_plugin/__init__.py (calibre's
+own plugin metadata, unrelated to this file), the README badge, and the
+hardcoded fallback constant in xray_core/generate.py's _generator_version().
 """
 import zipfile
 from pathlib import Path
