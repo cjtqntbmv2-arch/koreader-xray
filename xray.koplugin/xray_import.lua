@@ -633,9 +633,11 @@ end
 function M:importEmbeddedXray(doc_json)
     local book_path = self.ui.document.file
     self.prefetch_active = true
-    -- Validate-then-replace: nothing is deleted until the first successful
-    -- write. A re-import that fails validation (e.g. no usable checkpoints)
-    -- must leave a good existing cache untouched.
+    -- Validate-then-replace: a re-import that fails validation (e.g. no usable
+    -- checkpoints) must leave a good existing cache untouched. Once the write
+    -- loop is entered we assume the old snapshots are damaged even if the first
+    -- saveSnapshot reports failure -- a partial write is indistinguishable from
+    -- a clean one here, and a leaking cache is worse than a lost one.
     local wrote_any = false
 
     local function finish(ok, err)
@@ -703,6 +705,7 @@ function M:importEmbeddedXray(doc_json)
 
         -- saveSnapshot/saveCache RETURN false on I/O failure, they do not throw.
         -- Adopt the main cache only once every gating snapshot is durable.
+        -- Set before the first write, not after: see the wrote_any comment above.
         wrote_any = true
         for i, snap in ipairs(snapshots) do
             if not self.cache_manager:saveSnapshot(book_path, i, snap) then
