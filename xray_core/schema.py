@@ -246,6 +246,10 @@ def _validate_timeline(timeline: list) -> list[str]:
             if not isinstance(ev.get(field), str):
                 problems.append(f"{label}.{field} must be a string")
         pct = ev.get("pct")
-        if not (_is_strict_int(pct) and 0 <= pct <= 100):
-            problems.append(f"{label}.pct must be an int between 0 and 100")
+        # pct=0 is rejected, not just out-of-range values: in the KOReader
+        # importer, tonumber(0) is truthy in Lua, so pctToPage(0, ...) runs
+        # and clamps to page 1 -- showing the event from checkpoint 1 onward
+        # instead of hiding it like a missing pct would (xray_import.lua).
+        if not (_is_strict_int(pct) and 1 <= pct <= 100):
+            problems.append(f"{label}.pct must be an int between 1 and 100")
     return problems
