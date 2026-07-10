@@ -470,3 +470,20 @@ def test_enrich_does_not_leak_future_entities():
     assert "LateCharacter" in last_names  # sanity: fixture actually introduces it
 
     assert validate(doc) == []
+
+
+def test_generated_snapshots_carry_localized_name_placeholders():
+    ch1 = "Alice walks through the CH1MARKER village at dawn, greeting everyone she meets today. " * 5
+    ch2 = "Bob arrives at the CH2MARKER harbor just as the tide turns for the evening light. " * 5
+    book = _two_chapter_book(ch1, ch2)
+
+    client = FakeClient([
+        ("CH1MARKER", _ok({"characters": [{"description": "eine namenlose Gestalt"}]})),
+        ("CH2MARKER", _ok({"characters": [{"name": "Bob"}]})),
+    ])
+
+    doc = generate_xray(book, client, "de", "normal")
+
+    assert validate(doc) == []
+    names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
+    assert "Unbenannter Charakter" in names

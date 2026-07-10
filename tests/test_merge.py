@@ -14,6 +14,7 @@ from xray_core.merge import (
     _first_nonempty,
     BookState,
     clean_response,
+    fallback_strings,
     is_more_complete_name,
     sort_entity_list,
 )
@@ -27,9 +28,9 @@ def test_clean_keeps_nameless_with_placeholder_and_truncates_role():
 
     cleaned = clean_response(raw)
 
-    assert cleaned["characters"][0]["name"] == "Unnamed character"
+    assert cleaned["characters"][0]["name"] == "Unnamed Character"
     assert cleaned["characters"][0]["role"] == "x" * 40
-    assert cleaned["locations"][0]["name"] == "Unnamed location"
+    assert cleaned["locations"][0]["name"] == "Unknown Place"
 
 
 def test_clean_name_fallback_chain():
@@ -270,10 +271,9 @@ def test_clean_location_name_falls_back_to_place_and_lugar():
 
 
 def test_clean_location_never_uses_character_name_chain():
-    # Regression: der Ort nutzte die Charakter-Kette (full_formal_name ...).
-    # Ein Ort ohne name/place/lugar ist namenlos, egal was sonst dransteht.
+    # aus Task 2, Platzhalter ist jetzt lokalisiert
     cleaned = clean_response({"locations": [{"full_formal_name": "Lord Farquaad"}]})
-    assert cleaned["locations"][0]["name"] == "Unnamed location"
+    assert cleaned["locations"][0]["name"] == "Unknown Place"
 
 
 def test_clean_location_description_and_importance_fallbacks():
@@ -340,3 +340,46 @@ def test_first_nonempty_chain_priority(keys, expected_order):
     for winner in expected_order[:-1]:
         assert _first_nonempty(d, keys, "MUST-NOT-WIN") == f"value-from-{winner}"
         del d[winner]
+
+
+def test_fallback_strings_are_localized():
+    # prompts/de.lua:361-364, prompts/en.lua:322-325
+    assert fallback_strings("de")["unnamed_character"] == "Unbenannter Charakter"
+    assert fallback_strings("en")["unnamed_character"] == "Unnamed Character"
+    # Unbekannte Sprache faellt auf Englisch zurueck, nie auf KeyError.
+    assert fallback_strings("fr")["unnamed_character"] == "Unnamed Character"
+
+
+def test_clean_response_localizes_name_placeholders():
+    de = clean_response({"characters": [{"role": "x"}]}, language="de")
+    assert de["characters"][0]["name"] == "Unbenannter Charakter"
+
+    de_loc = clean_response({"locations": [{"description": "d"}]}, language="de")
+    assert de_loc["locations"][0]["name"] == "Unbekannter Ort"
+
+    de_hist = clean_response({"historical_figures": [{"biography": "b"}]}, language="de")
+    assert de_hist["historical_figures"][0]["name"] == "Unbenannte Person"
+
+
+def test_clean_response_leaves_content_fields_empty():
+    # Bewusste Divergenz zu Lua: der Viewer blendet leere Felder aus
+    # (xray_ui.lua:190,214), ein Platzhalter waere sichtbares Rauschen.
+    c = clean_response({"characters": [{"name": "A"}]}, language="de")["characters"][0]
+    assert c["role"] == ""
+    assert c["description"] == ""
+
+    h = clean_response({"historical_figures": [{"name": "H"}]}, language="de")["historical_figures"][0]
+    assert h["biography"] == ""
+    assert h["importance_in_book"] == ""
+    assert h["context_in_book"] == ""
+
+
+def test_empty_field_is_still_fillable_by_a_later_segment():
+    # Der Kern der Entscheidung: leere Felder lassen Luecken zuwachsen.
+    state = BookState()
+    state.merge_segment(clean_response({"characters": [{"name": "Alice"}]}), 10)
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Alice", "occupation": "Forscherin"}]}, "de"), 50
+    )
+
+    assert state.characters[0]["occupation"] == "Forscherin"

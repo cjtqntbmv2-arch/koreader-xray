@@ -149,7 +149,7 @@ def _fetch_with_retry(client, rate_limiter, language, detail_level, title, autho
     )
     result = client.generate(system, user)
     if not result.truncated or depth >= _MAX_SPLIT_DEPTH:
-        return clean_response(result.data)
+        return clean_response(result.data, language)
 
     first_half, second_half = _split_in_half_at_paragraph(chunk_text)
     left = _fetch_with_retry(client, rate_limiter, language, detail_level, title,
@@ -217,7 +217,7 @@ def _enrich_checkpoint(client, rate_limiter, language, detail_level, title, auth
         prior_names=prior_names, mode="enrich",
     )
     result = client.generate(system, user)
-    cleaned = clean_response(result.data)
+    cleaned = clean_response(result.data, language)
 
     by_lower_name = {c["name"].lower(): c for c in frozen_characters if c.get("name")}
     for updated in cleaned.get("characters") or []:

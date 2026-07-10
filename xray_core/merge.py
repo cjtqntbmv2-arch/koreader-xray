@@ -42,6 +42,37 @@ _HIST_ROLE_KEYS = ("role", "historical_role")
 _HIST_IMPORTANCE_KEYS = ("importance_in_book", "significance")
 _HIST_CONTEXT_KEYS = ("context_in_book", "context")
 
+# `unnamed_character` / `unnamed_person` verbatim from the fallback-strings
+# table in `prompts/en.lua` (ca. line 323) / `prompts/de.lua` (ca. line 362).
+# `unknown_place` is NOT in that table -- `AIHelper:validateAndCleanData`
+# hardcodes the English literal directly (ca. line 2052) even for German
+# books; the German wording here is ours.
+#
+# Deliberate divergence: `validateAndCleanData` also defaults role,
+# description, biography, importance_in_book and context_in_book to
+# localized (or, for the latter two, hardcoded-English) placeholders. We
+# leave those empty instead -- the device's card renderer in `xray_ui.lua`
+# (e.g. ca. line 190) skips empty fields entirely, so a placeholder would
+# only add visible noise to every card the model knew nothing about, and a
+# non-empty value would block a later segment from filling the gap.
+_FALLBACKS = {
+    "en": {
+        "unnamed_character": "Unnamed Character",
+        "unnamed_person": "Unnamed Person",
+        "unknown_place": "Unknown Place",
+    },
+    "de": {
+        "unnamed_character": "Unbenannter Charakter",
+        "unnamed_person": "Unbenannte Person",
+        "unknown_place": "Unbekannter Ort",
+    },
+}
+
+
+def fallback_strings(language: str) -> dict:
+    """Localized placeholder names; unknown languages fall back to English."""
+    return _FALLBACKS.get(language, _FALLBACKS["en"])
+
 
 def _str(d: dict, key: str, default: str = "") -> str:
     v = d.get(key)
@@ -74,7 +105,7 @@ def _aliases(d: dict) -> list:
     return [a for a in v if isinstance(a, str) and a] if isinstance(v, list) else []
 
 
-def clean_response(raw: dict) -> dict:
+def clean_response(raw: dict, language: str = "en") -> dict:
     """Port of `validateAndCleanData`'s per-field defaulting (essentials).
 
     PRECONDITION: `raw`'s keys are already lower-cased by
@@ -89,9 +120,10 @@ def clean_response(raw: dict) -> dict:
     character or place the AI described but couldn't name never silently
     disappears.
     """
+    strings = fallback_strings(language)
     characters = [
         {
-            "name": _first_nonempty(c, _CHAR_NAME_KEYS, "Unnamed character"),
+            "name": _first_nonempty(c, _CHAR_NAME_KEYS, strings["unnamed_character"]),
             "role": _str(c, "role")[:40],
             "description": _first_nonempty(c, _CHAR_DESC_KEYS, ""),
             "gender": _str(c, "gender"),
@@ -104,7 +136,7 @@ def clean_response(raw: dict) -> dict:
 
     locations = [
         {
-            "name": _first_nonempty(loc, _LOC_NAME_KEYS, "Unnamed location"),
+            "name": _first_nonempty(loc, _LOC_NAME_KEYS, strings["unknown_place"]),
             "description": _first_nonempty(loc, _LOC_DESC_KEYS, ""),
             "importance": _first_nonempty(loc, _LOC_IMPORTANCE_KEYS, ""),
             "aliases": _aliases(loc),
@@ -115,7 +147,7 @@ def clean_response(raw: dict) -> dict:
 
     historical_figures = [
         {
-            "name": _first_nonempty(h, _HIST_NAME_KEYS, "Unnamed historical figure"),
+            "name": _first_nonempty(h, _HIST_NAME_KEYS, strings["unnamed_person"]),
             "biography": _first_nonempty(h, _HIST_BIO_KEYS, ""),
             "role": _first_nonempty(h, _HIST_ROLE_KEYS, "")[:40],
             "importance_in_book": _first_nonempty(h, _HIST_IMPORTANCE_KEYS, ""),
