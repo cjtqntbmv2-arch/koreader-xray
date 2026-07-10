@@ -678,7 +678,11 @@ describe("xray_import", function()
                 saveSnapshot = function(cm, _, i, data) cm.snaps[i] = data; return true end,
                 loadSnapshot = function(cm, _, i) return cm.snaps[i] end,
                 snapshotExists = function(cm, _, i) return cm.snaps[i] ~= nil end,
-                deleteSnapshots = function(cm) cm.snaps = {}; cm.deleted = true; return true end,
+                deleteSnapshots = function(cm, _, from_index)
+                    for i = (from_index or 1), 24 do cm.snaps[i] = nil end
+                    cm.deleted = true
+                    return true
+                end,
             }
         end
 
@@ -814,6 +818,77 @@ describe("xray_import", function()
             assert.is_nil(self_.book_data)
             assert.falsy(self_.prefetch_active)
         end)
+
+    describe("manualImportEmbeddedXray", function()
+        it("reports when the book has no embedded data", function()
+            local self_ = prepared()
+            self_._readEmbeddedXray = function() return nil end
+            local imported = false
+            self_.importEmbeddedXray = function() imported = true end
+            _G.ui_tracker.last_shown = nil
+            self_:manualImportEmbeddedXray()
+            assert.is_false(imported)
+            assert.is_not_nil(_G.ui_tracker.last_shown)
+        end)
+
+        it("imports directly when no cache exists", function()
+            local self_ = prepared()
+            self_.book_data = nil
+            self_._readEmbeddedXray = function() return mock_doc() end
+            self_._gateImport = function() return nil end
+            local imported = false
+            self_.importEmbeddedXray = function() imported = true end
+            self_:manualImportEmbeddedXray()
+            assert.is_true(imported)
+        end)
+
+        it("asks before replacing an existing cache and imports on OK", function()
+            local self_ = prepared()
+            self_.book_data = { characters = {} }
+            self_._readEmbeddedXray = function() return mock_doc() end
+            self_._gateImport = function() return nil end
+            local imported = false
+            self_.importEmbeddedXray = function() imported = true end
+            self_:manualImportEmbeddedXray()
+            assert.is_false(imported)
+            local confirm = _G.ui_tracker.last_shown
+            assert.are.equal("ConfirmBox", confirm.type)
+            assert.is_not_nil(confirm.args.ok_callback)
+            confirm.args.ok_callback()
+            assert.is_true(imported)
+        end)
+
+        it("refuses while a prefetch runs", function()
+            local self_ = prepared()
+            self_.prefetch_active = true
+            local imported = false
+            self_.importEmbeddedXray = function() imported = true end
+            self_:manualImportEmbeddedXray()
+            assert.is_false(imported)
+        end)
+    end)
+
+    describe("re-import robustness", function()
+        it("keeps old snapshots when validation fails before any write", function()
+            local self_ = prepared()
+            self_.cache_manager.snaps[1] = { old = true }
+            self_._resolveCheckpointPages = function() return nil end
+            self_:importEmbeddedXray(mock_doc())
+            assert.is_not_nil(self_.cache_manager.snaps[1])
+            assert.are.equal(false, self_.cache_manager.deleted)
+        end)
+
+        it("removes orphan snapshots above the imported count and resets series ctx", function()
+            local self_ = prepared()
+            self_._series_ctx = { something = true }
+            for i = 4, 8 do self_.cache_manager.snaps[i] = { old = i } end
+            self_:importEmbeddedXray(mock_doc())  -- mock_doc yields 3 checkpoints
+            assert.are.equal(3, #self_.cache_manager.snaps)
+            assert.is_nil(self_.cache_manager.snaps[4])
+            assert.is_nil(self_.cache_manager.snaps[8])
+            assert.is_nil(self_._series_ctx)
+        end)
+    end)
     end)
 
     describe("_zipHasEntry", function()

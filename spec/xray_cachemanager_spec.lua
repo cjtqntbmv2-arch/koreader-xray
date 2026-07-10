@@ -127,6 +127,24 @@ describe("xray_cachemanager", function()
             assert.is_false(cache_manager:snapshotExists(test_book, 1))
             assert.is_nil(cache_manager:loadCache(test_book))
         end)
+
+        describe("deleteSnapshots from_index", function()
+            it("keeps snapshots below from_index", function()
+                for i = 1, 5 do cache_manager:saveSnapshot(test_book, i, { x = i }) end
+                cache_manager:deleteSnapshots(test_book, 4)
+                assert.is_true(cache_manager:snapshotExists(test_book, 1))
+                assert.is_true(cache_manager:snapshotExists(test_book, 3))
+                assert.is_false(cache_manager:snapshotExists(test_book, 4))
+                assert.is_false(cache_manager:snapshotExists(test_book, 5))
+            end)
+
+            it("sweeps everything without from_index", function()
+                for i = 1, 3 do cache_manager:saveSnapshot(test_book, i, { x = i }) end
+                cache_manager:deleteSnapshots(test_book)
+                assert.is_false(cache_manager:snapshotExists(test_book, 1))
+                assert.is_false(cache_manager:snapshotExists(test_book, 3))
+            end)
+        end)
     end)
 end)
 

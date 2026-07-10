@@ -555,10 +555,10 @@ function CacheManager:snapshotExists(book_path, index)
     return false
 end
 
-function CacheManager:deleteSnapshots(book_path)
+function CacheManager:deleteSnapshots(book_path, from_index)
     -- ponytail: fixed index sweep 1..24 instead of a directory listing — lfs
     -- can be nil on old devices; 24 is well above the hard cap of 12 checkpoints.
-    for i = 1, 24 do
+    for i = (from_index or 1), 24 do
         local path = self:getSnapshotPath(book_path, i)
         if path then os.remove(path) end
     end

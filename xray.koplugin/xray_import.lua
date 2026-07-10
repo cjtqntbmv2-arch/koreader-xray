@@ -557,6 +557,56 @@ function M:maybeImportEmbeddedXray()
     self:importEmbeddedXray(doc_json)
 end
 
+-- Manual import from the X-Ray menu: unlike the automatic onReaderReady path
+-- this also runs when a cache exists -- after an explicit confirmation that
+-- the import replaces it.
+function M:manualImportEmbeddedXray()
+    if self.prefetch_active or self.bg_fetch_active then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("prefetch_busy") or "A fetch is already running. Try again in a moment.",
+            timeout = 4,
+        })
+        return
+    end
+    local book_path = self.ui and self.ui.document and self.ui.document.file
+    local doc_json = book_path and book_path:lower():match("%.epub$")
+        and self:_readEmbeddedXray(book_path) or nil
+    if not doc_json then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("import_no_data") or "No calibre X-Ray data found in this book.",
+            timeout = 4,
+        })
+        return
+    end
+    local props = (self.ui.document.getProps and self.ui.document:getProps()) or {}
+    local reason = self:_gateImport(doc_json, props)
+    if reason then
+        self:log("XRayPlugin: manual import rejected -- " .. reason)
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("import_rejected") or "The embedded X-Ray data does not match this book.",
+            timeout = 4,
+        })
+        return
+    end
+    if self.book_data then
+        local ConfirmBox = require("ui/widget/confirmbox")
+        local confirm
+        confirm = ConfirmBox:new{
+            text = self.loc:t("import_replace_confirm")
+                or "This replaces the existing X-Ray data for this book (characters, locations, terms, snapshots). Continue?",
+            ok_text = self.loc:t("menu_import_calibre") or "Import calibre X-Ray",
+            cancel_text = self.loc:t("cancel") or "Cancel",
+            ok_callback = function()
+                UIManager:close(confirm)
+                self:importEmbeddedXray(doc_json)
+            end,
+        }
+        UIManager:show(confirm)
+        return
+    end
+    self:importEmbeddedXray(doc_json)
+end
+
 -- Import a validated document. The anchor resolution and the snapshot writes run
 -- on a coroutine that yields after every checkpoint, so a multi-checkpoint
 -- findAllText sweep never freezes the reader for the whole run -- the same
@@ -573,6 +623,10 @@ end
 function M:importEmbeddedXray(doc_json)
     local book_path = self.ui.document.file
     self.prefetch_active = true
+    -- Validate-then-replace: nothing is deleted until the first successful
+    -- write. A re-import that fails validation (e.g. no usable checkpoints)
+    -- must leave a good existing cache untouched.
+    local wrote_any = false
 
     local function finish(ok, err)
         self.prefetch_active = false
@@ -580,7 +634,9 @@ function M:importEmbeddedXray(doc_json)
             self:log("XRayPlugin: import failed: " .. tostring(err))
             -- Orphan snapshot files without a manifest are worse than none:
             -- a later partial write could mix them with fresh data.
-            pcall(function() self.cache_manager:deleteSnapshots(book_path) end)
+            if wrote_any then
+                pcall(function() self.cache_manager:deleteSnapshots(book_path) end)
+            end
             UIManager:show(InfoMessage:new{
                 text = self.loc:t("import_failed") or "Could not import the embedded X-Ray data.",
                 timeout = 4,
@@ -594,6 +650,12 @@ function M:importEmbeddedXray(doc_json)
         -- lists are deliberately NOT mirrored here: they are owned by
         -- applySnapshot, applied below via updateSnapshotViewForPage.
         self.book_type = self.book_data.book_type
+
+        -- A replaced cache must not keep session leftovers alive: applySnapshot
+        -- would re-merge old series_prior entities from _series_ctx.
+        self._series_ctx = nil
+        self.active_snapshot_index = nil
+        self.active_snapshot_page = nil
 
         self:invalidateSnapshotExistsCache()
         local page = (self.ui and self.ui.getCurrentPage) and self.ui:getCurrentPage() or nil
@@ -618,6 +680,7 @@ function M:importEmbeddedXray(doc_json)
 
         -- saveSnapshot/saveCache RETURN false on I/O failure, they do not throw.
         -- Adopt the main cache only once every gating snapshot is durable.
+        wrote_any = true
         for i, snap in ipairs(snapshots) do
             if not self.cache_manager:saveSnapshot(book_path, i, snap) then
                 error("snapshot " .. tostring(i) .. " could not be written", 0)
@@ -627,6 +690,9 @@ function M:importEmbeddedXray(doc_json)
         if not self.cache_manager:saveCache(book_path, book_data) then
             error("main cache could not be written", 0)
         end
+        -- Re-import over a bigger old cache: indexes beyond the new count are
+        -- stale orphans resolveSnapshotIndexForPage would happily adopt.
+        self.cache_manager:deleteSnapshots(book_path, #snapshots + 1)
 
         self.book_data = book_data
         self.timeline = book_data.timeline
@@ -643,7 +709,9 @@ function M:importEmbeddedXray(doc_json)
             -- index -- so a stale orphan left here would be silently adopted
             -- as "done" under a possibly later, spoilier boundary. Same
             -- guarded delete as the failure branch above.
-            pcall(function() self.cache_manager:deleteSnapshots(book_path) end)
+            if wrote_any then
+                pcall(function() self.cache_manager:deleteSnapshots(book_path) end)
+            end
             return
         end
         local ok, err = coroutine.resume(co)
