@@ -5,3 +5,4 @@ __pycache__/
 tests/cassettes/local_*
 *_config.json
 .DS_Store
+.superpowers/

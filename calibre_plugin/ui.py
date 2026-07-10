@@ -7,10 +7,10 @@ import shutil
 import tempfile
 import zipfile
 
+from calibre.constants import cache_dir  # NB: calibre.utils.config has no cache_dir
 from calibre.gui2 import Dispatcher, error_dialog, info_dialog, warning_dialog
 from calibre.gui2.actions import InterfaceAction
 from calibre.gui2.threaded_jobs import ThreadedJob
-from calibre.utils.config import cache_dir
 
 from calibre_plugins.xray_generator.config import prefs
 from xray_core.embed import embed_xray, read_embedded
