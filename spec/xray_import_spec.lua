@@ -878,6 +878,19 @@ describe("xray_import", function()
             assert.is_true(importer._zipHasEntry(p, "xray/xray.json"))
             pcall(os.remove, p)
         end)
+
+        it("advances past a record with a zero-length filename instead of spinning forever", function()
+            -- Regression guard: the walk's cursor advance is a fixed
+            -- `i + 46 + n + m + k`. If that fixed 46 is ever dropped in favor
+            -- of deriving the step from n/m/k alone, a record with
+            -- n = m = k = 0 (a zero-length filename, still a validly shaped
+            -- PK\1\2 record) would advance the cursor by 0 and spin on the
+            -- same record forever instead of erroring or returning.
+            local p = "/tmp/xray_import_spec_zerolen.zip"
+            write_zip(p, nil, cd_record("") .. cd_record("xray/xray.json"))
+            assert.is_true(importer._zipHasEntry(p, "xray/xray.json"))
+            pcall(os.remove, p)
+        end)
     end)
 
     describe("maybeImportEmbeddedXray", function()

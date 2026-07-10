@@ -21,6 +21,10 @@ local norm_cache_size = 0
 
 local roman_map = { i = 1, v = 5, x = 10, l = 50, c = 100, d = 500, m = 1000 }
 
+-- MUST stay identical to `NON_NARRATIVE` in the calibre-xray repo
+-- (xray_core/checkpoints.py). Both sides derive checkpoint boundaries from the
+-- narrative-filtered TOC; if the lists diverge, xray_import.lua's chapter anchor
+-- resolves to the wrong page and a snapshot can activate early (spoiler).
 local NON_NARRATIVE_TITLE_PATTERNS = {
     "^cover$", "^title", "^half%-title", "^copyright", "^table of contents",
     "^contents$", "^dedication", "^acknowledgment", "^also by", "^other books",

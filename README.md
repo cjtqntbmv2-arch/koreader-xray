@@ -21,6 +21,7 @@ This plugin brings Kindle-style X-Ray features to KOReader. It uses AI to track 
 - **Silent Weekly Updates**: Automatically checks for new plugin versions in the background once a week.
 - **Offline First**: You only need internet to fetch the data. After that, it's saved locally.
 - **Multilingual**: Available in English and German.
+- **Desktop Import**: Import X-Ray data prepared on the desktop by the companion calibre plugin: generate once on your computer, read offline everywhere.
 
 ## Installation
 

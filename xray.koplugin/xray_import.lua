@@ -102,8 +102,12 @@ function M:_tocEndPage(narrative, toc_title, cursor, page_count)
             -- would silently drop checkpoint 1 in _resolveCheckpointPages.
             -- Clamp, don't drop: the chapter genuinely ends on page 1, so
             -- activating its snapshot there shows the reader data they have
-            -- actually reached -- computeCheckpoints guards the identical
-            -- end_page the same way (`>= 1`).
+            -- actually reached. computeCheckpoints checks the identical
+            -- `>= 1` threshold (xray_prefetch.lua:56) but to SKIP the
+            -- candidate, not clamp it -- wrong here, since dropping
+            -- checkpoint 1 would let the next, richer checkpoint inherit
+            -- slot 1, the slot resolveSnapshotIndexForPage shows to a
+            -- reader who has not even reached checkpoint 1 yet (a spoiler).
             if page < 1 then page = 1 end
             return page, i
         end
@@ -575,7 +579,7 @@ function M:importEmbeddedXray(doc_json)
         -- stays stale until the book is closed and reopened. The four entity
         -- lists are deliberately NOT mirrored here: they are owned by
         -- applySnapshot, applied below via updateSnapshotViewForPage.
-        self.book_type = self.book_data.book_type or nil
+        self.book_type = self.book_data.book_type
 
         self:invalidateSnapshotExistsCache()
         local page = (self.ui and self.ui.getCurrentPage) and self.ui:getCurrentPage() or nil

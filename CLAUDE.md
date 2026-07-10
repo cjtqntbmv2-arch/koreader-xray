@@ -65,6 +65,7 @@ Module map (by responsibility, not exhaustive):
 - `xray_fetch.lua` — fetch orchestration and networking; `xray_chapteranalyzer.lua` — which entities appear in the current chapter/page; `xray_data.lua` — data processing; `xray_mentions.lua` — mention scanning; `xray_lookupmanager.lua` — text-selection lookups; `xray_seriesmanager.lua` — standalone series-recap logic.
 - `xray_cachemanager.lua` — persistence: per-book X-Ray data is stored in the book's `.sdr` sidecar dir (`DocSettings:getSidecarDir`). Offline-first: fetch once, read from cache after.
 - `xray_updater.lua` — OTA plugin updates; deliberately preserves the user-edited `xray_config.lua` (API keys). Don't rename `xray_config.lua` keys — user configs in the wild depend on them.
+- `xray_import.lua` — one-time adoption of a calibre-generated `xray/xray.json` embedded in the EPUB (companion project `calibre-xray`). Writes exactly what a completed on-device prefetch would leave behind: main cache + `xray_snapshot_NN.lua` per checkpoint. Anchors resolve TOC → unique text snippet (`findAllText`, **not** `findText`) → percent; the strict-ascent drop rule keeps D4 intact when device pages collide. Runs on `onReaderReady` only when no cache exists. `xray_data.lua`'s non-narrative title list must stay identical to the calibre repo's — the TOC anchor depends on it.
 - `localization_xray.lua` — runtime `.po` loader; strings are used as `self.loc:t("key")`.
 - `prompts/<lang>.lua` — AI prompt templates per language; `languages/<lang>.po` — UI translations.
 
