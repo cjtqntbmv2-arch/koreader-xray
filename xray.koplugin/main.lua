@@ -837,6 +837,7 @@ function XRayPlugin:autoLoadCache()
 end
 
 function XRayPlugin:getSubMenuItems()
+    local ai_on = self:isAiFetchingEnabled()
     local items = {
         {
             text = self.loc:t("menu_characters") or "Characters",
@@ -879,19 +880,124 @@ function XRayPlugin:getSubMenuItems()
         separator = true,
     })
 
+    if ai_on then
+        table.insert(items, {
+            text = self.loc:t("menu_update_xray") or "Update X-Ray Data",
+            help_text = self.loc:t("menu_update_xray_help"),
+            keep_menu_open = true,
+            callback = function() self:updateFromAI() end,
+            separator = true,
+        })
+    end
+
     table.insert(items, {
-        text = self.loc:t("menu_update_xray") or "Update X-Ray Data",
-        help_text = self.loc:t("menu_update_xray_help"),
+        text = self.loc:t("menu_import_calibre") or "Import calibre X-Ray",
+        help_text = self.loc:t("menu_import_calibre_help"),
         keep_menu_open = true,
-        callback = function() self:updateFromAI() end,
+        callback = function() self:manualImportEmbeddedXray() end,
         separator = true,
     })
 
     self.current_xray_menu_table = items
+
+    local fetch_items = {}
+    if ai_on then
+        table.insert(fetch_items, {
+            text = self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings",
+            keep_menu_open = true,
+            sub_item_table = {
+                {
+                    text = self.loc:t("menu_frequency") or "Auto-fetch Frequency",
+                    help_text = self.loc:t("menu_frequency_help"),
+                    keep_menu_open = true,
+                    callback = function() self:showAutoUpdateSettings() end,
+                },
+            }
+        })
+    end
+    table.insert(fetch_items, {
+        text = self.loc:t("auto_dupe_check_setting_title") or "Duplicate Check",
+        help_text = self.loc:t("auto_dupe_check_setting_help"),
+        keep_menu_open = true,
+        callback = function() self:showAutoDupeCheckSettings() end,
+    })
+    if ai_on then
+        table.insert(fetch_items, {
+            text = self.loc:t("menu_prefetch_offline") or "Prepare book for offline reading",
+            help_text = self.loc:t("menu_prefetch_offline_help"),
+            callback = function() self:startOfflinePrefetch(false) end,
+        })
+        table.insert(fetch_items, {
+            text = self.loc:t("menu_prefetch_auto") or "Auto-prepare for offline when online",
+            help_text = self.loc:t("menu_prefetch_auto_help"),
+            keep_menu_open = true,
+            checked_func = function()
+                return (self.ai_helper.settings and self.ai_helper.settings.offline_prefetch_auto) == true
+            end,
+            callback = function()
+                local cur = (self.ai_helper.settings and self.ai_helper.settings.offline_prefetch_auto) == true
+                self.ai_helper:saveSettings({ offline_prefetch_auto = not cur })
+            end,
+        })
+    end
+    table.insert(fetch_items, {
+        text = self.loc:t("menu_book_mode") or "Book Type",
+        help_text = self.loc:t("menu_book_mode_help"),
+        keep_menu_open = true,
+        callback = function() self:showBookTypeSettings() end,
+    })
+    table.insert(fetch_items, {
+        text = self.loc:t("menu_desc_length_settings") or "Description Length",
+        help_text = self.loc:t("menu_desc_length_settings_help"),
+        keep_menu_open = true,
+        callback = function() self:showDescriptionLengthSettings() end,
+    })
+    if ai_on then
+        table.insert(fetch_items, {
+            text = self.loc:t("menu_series_context") or "Series Context",
+            keep_menu_open = true,
+            sub_item_table = {
+                {
+                    text = self.loc:t("series_context_enabled_toggle") or "Enable Series Context",
+                    help_text = self.loc:t("series_context_enabled_help"),
+                    checked_func = function() return self.ai_helper.settings.series_context_enabled end,
+                    callback = function() self:toggleSeriesContextEnabled() end,
+                },
+                {
+                    text = self.loc:t("menu_fetch_series_context") or "Fetch / Refresh Series Context",
+                    help_text = self.loc:t("menu_fetch_series_context_help"),
+                    keep_menu_open = true,
+                    callback = function() self:manualFetchSeriesContext() end,
+                }
+            }
+        })
+    end
+    table.insert(fetch_items, {
+        text = self.loc:t("spoiler_preference_title") or "Spoiler Preference",
+        help_text = self.loc:t("spoiler_preference_help"),
+        keep_menu_open = true,
+        callback = function() self:showSpoilerSettings() end,
+    })
+
     table.insert(items, {
         text = self.loc:t("menu_settings") or "Settings",
         keep_menu_open = true,
         sub_item_table = {
+            {
+                text = self.loc:t("menu_ai_fetching") or "Enable AI fetching",
+                help_text = self.loc:t("menu_ai_fetching_help"),
+                keep_menu_open = true,
+                checked_func = function()
+                    return self:isAiFetchingEnabled() and true or false
+                end,
+                callback = function()
+                    if self.ai_helper and self.ai_helper.settings then
+                        local cur = self.ai_helper.settings.ai_fetching_enabled ~= false
+                        self.ai_helper:saveSettings({ ai_fetching_enabled = not cur })
+                    end
+                end,
+                separator = true,
+            },
             {
                 text = self.loc:t("menu_display_ui_settings") or "Display & UI Settings",
                 keep_menu_open = true,
@@ -945,79 +1051,7 @@ function XRayPlugin:getSubMenuItems()
             {
                 text = self.loc:t("menu_content_fetch_settings") or "Content & Fetch Settings",
                 keep_menu_open = true,
-                sub_item_table = {
-                    {
-                        text = self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings",
-                        keep_menu_open = true,
-                        sub_item_table = {
-                            {
-                                text = self.loc:t("menu_frequency") or "Auto-fetch Frequency",
-                                help_text = self.loc:t("menu_frequency_help"),
-                                keep_menu_open = true,
-                                callback = function() self:showAutoUpdateSettings() end,
-                            },
-                        }
-                    },
-                    {
-                        text = self.loc:t("auto_dupe_check_setting_title") or "Duplicate Check",
-                        help_text = self.loc:t("auto_dupe_check_setting_help"),
-                        keep_menu_open = true,
-                        callback = function() self:showAutoDupeCheckSettings() end,
-                    },
-                    {
-                        text = self.loc:t("menu_prefetch_offline") or "Prepare book for offline reading",
-                        help_text = self.loc:t("menu_prefetch_offline_help"),
-                        callback = function() self:startOfflinePrefetch(false) end,
-                    },
-                    {
-                        text = self.loc:t("menu_prefetch_auto") or "Auto-prepare for offline when online",
-                        help_text = self.loc:t("menu_prefetch_auto_help"),
-                        keep_menu_open = true,
-                        checked_func = function()
-                            return (self.ai_helper.settings and self.ai_helper.settings.offline_prefetch_auto) == true
-                        end,
-                        callback = function()
-                            local cur = (self.ai_helper.settings and self.ai_helper.settings.offline_prefetch_auto) == true
-                            self.ai_helper:saveSettings({ offline_prefetch_auto = not cur })
-                        end,
-                    },
-                    {
-                        text = self.loc:t("menu_book_mode") or "Book Type",
-                        help_text = self.loc:t("menu_book_mode_help"),
-                        keep_menu_open = true,
-                        callback = function() self:showBookTypeSettings() end,
-                    },
-                    {
-                        text = self.loc:t("menu_desc_length_settings") or "Description Length",
-                        help_text = self.loc:t("menu_desc_length_settings_help"),
-                        keep_menu_open = true,
-                        callback = function() self:showDescriptionLengthSettings() end,
-                    },
-                    {
-                        text = self.loc:t("menu_series_context") or "Series Context",
-                        keep_menu_open = true,
-                        sub_item_table = {
-                            {
-                                text = self.loc:t("series_context_enabled_toggle") or "Enable Series Context",
-                                help_text = self.loc:t("series_context_enabled_help"),
-                                checked_func = function() return self.ai_helper.settings.series_context_enabled end,
-                                callback = function() self:toggleSeriesContextEnabled() end,
-                            },
-                            {
-                                text = self.loc:t("menu_fetch_series_context") or "Fetch / Refresh Series Context",
-                                help_text = self.loc:t("menu_fetch_series_context_help"),
-                                keep_menu_open = true,
-                                callback = function() self:manualFetchSeriesContext() end,
-                            }
-                        }
-                    },
-                    {
-                        text = self.loc:t("spoiler_preference_title") or "Spoiler Preference",
-                        help_text = self.loc:t("spoiler_preference_help"),
-                        keep_menu_open = true,
-                        callback = function() self:showSpoilerSettings() end,
-                    },
-                }
+                sub_item_table = fetch_items,
             },
             {
                 text = self.loc:t("menu_xray_mode"),

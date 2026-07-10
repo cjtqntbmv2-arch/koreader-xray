@@ -20,3 +20,54 @@ describe("language slimming", function()
         assert.falsy(plugin:isRTL())
     end)
 end)
+
+describe("ai fetching main switch menu visibility", function()
+    local XRayPlugin = require("main")
+
+    local function mkPlugin()
+        local plugin = createMockPlugin()
+        for k, v in pairs(XRayPlugin) do
+            if plugin[k] == nil then plugin[k] = v end
+        end
+        return plugin
+    end
+
+    local function findText(items, needle, found)
+        found = found or {}
+        for _, item in ipairs(items) do
+            if type(item.text) == "string" and item.text:find(needle, 1, true) then
+                table.insert(found, item.text)
+            end
+            if type(item.sub_item_table) == "table" then
+                findText(item.sub_item_table, needle, found)
+            end
+        end
+        return found
+    end
+
+    it("shows fetch items when enabled (default)", function()
+        local items = mkPlugin():getSubMenuItems()
+        assert.are.equal(1, #findText(items, "menu_update_xray"))
+        assert.are.equal(1, #findText(items, "menu_prefetch_offline"))
+        assert.are.equal(1, #findText(items, "menu_prefetch_auto"))
+        assert.are.equal(1, #findText(items, "menu_frequency"))
+        assert.are.equal(1, #findText(items, "menu_series_context"))
+        assert.are.equal(1, #findText(items, "menu_ai_fetching"))
+        assert.are.equal(1, #findText(items, "menu_import_calibre"))
+    end)
+
+    it("hides fetch items when disabled, keeps toggle/import/display items", function()
+        local plugin = mkPlugin()
+        plugin.ai_helper.settings.ai_fetching_enabled = false
+        local items = plugin:getSubMenuItems()
+        assert.are.equal(0, #findText(items, "menu_update_xray"))
+        assert.are.equal(0, #findText(items, "menu_prefetch_offline"))
+        assert.are.equal(0, #findText(items, "menu_prefetch_auto"))
+        assert.are.equal(0, #findText(items, "menu_frequency"))
+        assert.are.equal(0, #findText(items, "menu_series_context"))
+        assert.are.equal(1, #findText(items, "menu_ai_fetching"))
+        assert.are.equal(1, #findText(items, "menu_import_calibre"))
+        assert.are.equal(1, #findText(items, "menu_characters"))
+        assert.are.equal(1, #findText(items, "auto_dupe_check_setting_title"))
+    end)
+end)
