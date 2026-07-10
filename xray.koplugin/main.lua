@@ -396,7 +396,17 @@ function XRayPlugin:onReaderReady()
         if self._import_checked then return end
         self._import_checked = true
         if not self.book_data and self.maybeImportEmbeddedXray then
-            self:maybeImportEmbeddedXray()
+            -- pcall: this is the one path that parses an arbitrary zip archive
+            -- and shells out, on every cacheless EPUB open. UIManager runs a
+            -- scheduled callback unprotected, so an error here would take the
+            -- book down with it. Failing to import must never cost the reader
+            -- the book. Drop the pcall once the BusyBox unzip / findAllText
+            -- behaviour is confirmed on the oldest target firmware.
+            local ok, err = pcall(function() self:maybeImportEmbeddedXray() end)
+            if not ok then
+                self:log("XRayPlugin: embedded X-Ray import failed: " .. tostring(err))
+                self.prefetch_active = false
+            end
         end
     end)
 
