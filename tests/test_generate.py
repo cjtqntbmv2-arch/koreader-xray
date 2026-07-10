@@ -9,7 +9,7 @@ import pytest
 from xray_core.checkpoints import plan_checkpoints
 from xray_core.epub import BookText, TocEntry
 from xray_core.gemini import GenResult, QuotaError
-from xray_core.generate import generate_xray
+from xray_core.generate import _chunk_path, generate_xray
 from xray_core.schema import validate
 
 
@@ -326,8 +326,8 @@ def test_resume_skips_fetched_chunks(tmp_path):
     client1 = FailAt20Client()
     doc1 = generate_xray(book, client1, "en", "normal", workdir=workdir, max_workers=1)
     assert doc1["complete"] is False
-    assert os.path.exists(os.path.join(workdir, "chunk_0_0.json"))
-    assert not os.path.exists(os.path.join(workdir, "chunk_1_0.json"))
+    assert os.path.exists(os.path.join(workdir, "chunk_0_0_en_normal.json"))
+    assert not os.path.exists(os.path.join(workdir, "chunk_1_0_en_normal.json"))
 
     client2 = FakeClient()
     doc2 = generate_xray(book, client2, "en", "normal", workdir=workdir, max_workers=1)
@@ -335,6 +335,74 @@ def test_resume_skips_fetched_chunks(tmp_path):
     assert doc2["complete"] is True
     assert not any("Reading Progress: 10%" in c for c in client2.calls)  # loaded from cache
     assert any("Reading Progress: 20%" in c for c in client2.calls)  # re-fetched (had failed)
+
+
+def test_resume_with_language_change_refetches_and_drops_stale_language(tmp_path):
+    """A cached chunk is the OUTPUT of clean_response() -- already bound to
+    one specific language. Resuming under a different language must miss
+    the cache entirely rather than mix stale-language prose into a doc
+    whose top-level `language` field now claims something else."""
+    book = _filler_book()
+    workdir = str(tmp_path / "work")
+
+    client_de = FakeClient([
+        ("", _ok({"characters": [{"name": "Alice", "description": "Deutsche Beschreibung"}]})),
+    ])
+    doc_de = generate_xray(book, client_de, "de", "normal", workdir=workdir, max_workers=1)
+    assert doc_de["complete"] is True
+
+    client_en = FakeClient([
+        ("", _ok({"characters": [{"name": "Alice", "description": "English description"}]})),
+    ])
+    doc_en = generate_xray(book, client_en, "en", "normal", workdir=workdir, max_workers=1)
+
+    assert doc_en["complete"] is True
+    # Every chunk missed the "de" cache -- proves a full refetch, not reuse.
+    assert len(client_en.calls) == len(doc_en["checkpoints"])
+    descriptions = [
+        c.get("description", "")
+        for cp in doc_en["checkpoints"]
+        for c in cp["snapshot"]["characters"]
+    ]
+    assert not any("Deutsche Beschreibung" in d for d in descriptions)
+    assert any("English description" in d for d in descriptions)
+
+
+def test_resume_with_detail_level_change_refetches(tmp_path):
+    """Same cache-busting contract as language, for detail_level: the cached
+    response was fetched under a prompt bound to the OLD detail_level's
+    character caps (xray_core/prompts.py), so it's invalid content once
+    detail_level changes."""
+    book = _filler_book()
+    workdir = str(tmp_path / "work")
+
+    client_normal = FakeClient()
+    doc_normal = generate_xray(book, client_normal, "en", "normal", workdir=workdir, max_workers=1)
+    assert doc_normal["complete"] is True
+
+    client_detailed = FakeClient()
+    doc_detailed = generate_xray(
+        book, client_detailed, "en", "detailed", workdir=workdir, enrich=False, max_workers=1
+    )
+
+    assert doc_detailed["complete"] is True
+    # Every chunk missed the "normal" cache -- proves a full refetch, not reuse.
+    assert len(client_detailed.calls) == len(doc_detailed["checkpoints"])
+
+
+def test_chunk_path_sanitizes_malicious_language(tmp_path):
+    """language is free-form argparse text (no `choices=`, unlike
+    detail_level) and lands directly in a cache filename -- a path-traversal
+    payload must not be able to escape workdir."""
+    workdir = str(tmp_path / "work")
+
+    path = _chunk_path(workdir, 0, 0, "../../evil", "normal")
+
+    workdir_abs = os.path.abspath(workdir)
+    path_abs = os.path.abspath(path)
+    assert os.path.commonpath([workdir_abs, path_abs]) == workdir_abs
+    assert os.path.dirname(path_abs) == workdir_abs  # stays a direct child, no subdirs
+    assert ".." not in os.path.basename(path)
 
 
 # ---------------------------------------------------------------------------
