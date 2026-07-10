@@ -85,6 +85,17 @@ def validate(doc: dict) -> list[str]:
     if isinstance(checkpoints, list):
         problems.extend(_validate_checkpoints(checkpoints, doc.get("last_percent")))
 
+    if isinstance(fingerprint, dict) and isinstance(fingerprint.get("authors"), list):
+        problems.extend(
+            f"book_fingerprint.authors[{i}] must be a string"
+            for i, a in enumerate(fingerprint["authors"])
+            if not isinstance(a, str)
+        )
+
+    timeline = doc.get("timeline")
+    if isinstance(timeline, list):
+        problems.extend(_validate_timeline(timeline))
+
     return problems
 
 
@@ -117,6 +128,19 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
         # for a textless zone (e.g. image-only front matter); the device
         # falls back to chapter/percent anchors, still spoiler-safe.
 
+        anchor = cp.get("chapter_anchor")
+        if anchor is not None:
+            if not isinstance(anchor, dict):
+                problems.append(f"{label}.chapter_anchor must be an object or null")
+            else:
+                if not isinstance(anchor.get("toc_title"), str):
+                    problems.append(f"{label}.chapter_anchor.toc_title must be a string")
+                spine_index = anchor.get("spine_index")
+                if not _is_strict_int(spine_index) or spine_index < 0:
+                    problems.append(
+                        f"{label}.chapter_anchor.spine_index must be a non-negative int"
+                    )
+
         snapshot = cp.get("snapshot")
         if not isinstance(snapshot, dict):
             problems.append(f"{label}.snapshot must be an object")
@@ -126,6 +150,30 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
             if not isinstance(entries, list):
                 problems.append(f"{label}.snapshot.{list_name} must be a list")
                 continue
+
+            # Contract guardrail, not a currently-reachable bug: BookState._merge
+            # (xray_core/merge.py) updates its `seen` name map the instant an item
+            # is appended -- not just once up front -- so same-named entries
+            # already collapse into one within a single merge call, and
+            # characters/locations/historical_figures always get a non-empty
+            # placeholder name when the model omits one. Today's pipeline can't
+            # actually emit a duplicate here. Kept anyway, same bet as the D4
+            # first_pct guard in _validate_chronology_entry: cheap insurance
+            # against a future _merge regression or any other producer of this
+            # format. Nameless entries (e.g. an unnamed term) are exempt --
+            # merge.py never collides those either, so we don't invent a
+            # stricter rule than the pipeline itself relies on.
+            seen_names = set()
+            for j, entry in enumerate(entries):
+                if not isinstance(entry, dict):
+                    continue
+                key = (entry.get("name") or "").strip().lower()
+                if key and key in seen_names:
+                    problems.append(
+                        f"{label}.snapshot.{list_name}[{j}] duplicate name: {entry['name']!r}"
+                    )
+                seen_names.add(key)
+
             if list_name in _CHRONOLOGY_LISTS:
                 for j, entry in enumerate(entries):
                     problems.extend(
@@ -154,9 +202,14 @@ def _validate_chronology_entry(entry, label: str, checkpoint_percent) -> list[st
     ]
     if "name" in entry and (not isinstance(entry["name"], str) or not entry["name"].strip()):
         problems.append(f"{label}.name must be a non-empty string")
-    for field in ("first_pct", "first_seq"):
-        if field in entry and not _is_strict_int(entry[field]):
+    for field, minimum in (("first_pct", 0), ("first_seq", 1)):
+        if field not in entry:
+            continue
+        value = entry[field]
+        if not _is_strict_int(value):
             problems.append(f"{label}.{field} must be an int")
+        elif value < minimum:
+            problems.append(f"{label}.{field} must be >= {minimum}")
 
     # D4 structural guardrail: an entity must never be stamped as first
     # appearing AFTER the checkpoint it's snapshotted in -- that's exactly
@@ -170,4 +223,23 @@ def _validate_chronology_entry(entry, label: str, checkpoint_percent) -> list[st
                 f"{label} ({name!r}) first_pct ({entry['first_pct']}) must be "
                 f"<= checkpoint percent ({checkpoint_percent})"
             )
+    return problems
+
+
+def _validate_timeline(timeline: list) -> list[str]:
+    """The device reads `timeline` top-level and gates each event on `pct`
+    (`xray_import.lua:326-336`); an event without a valid `pct` is silently
+    hidden there. Catch it here instead of shipping data the reader never sees."""
+    problems: list[str] = []
+    for i, ev in enumerate(timeline):
+        label = f"timeline[{i}]"
+        if not isinstance(ev, dict):
+            problems.append(f"{label} must be an object")
+            continue
+        for field in ("chapter", "event"):
+            if not isinstance(ev.get(field), str):
+                problems.append(f"{label}.{field} must be a string")
+        pct = ev.get("pct")
+        if not _is_strict_int(pct) or not (0 <= pct <= 100):
+            problems.append(f"{label}.pct must be an int between 0 and 100")
     return problems
