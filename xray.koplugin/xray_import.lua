@@ -642,10 +642,23 @@ function M:importEmbeddedXray(doc_json)
         self.prefetch_active = false
         if not ok then
             self:log("XRayPlugin: import failed: " .. tostring(err))
-            -- Orphan snapshot files without a manifest are worse than none:
-            -- a later partial write could mix them with fresh data.
+            -- wrote_any: snapshots are already overwritten in place. If this
+            -- replaced an existing cache, that manifest now outlives its
+            -- snapshots -- resolveSnapshotIndexForPage would find none and
+            -- applySnapshot(nil) falls back to the unfiltered whole-book
+            -- cache, a spoiler leak. Full clear degrades to "no data" instead.
             if wrote_any then
-                pcall(function() self.cache_manager:deleteSnapshots(book_path) end)
+                pcall(function() self.cache_manager:clearCache(book_path) end)
+                self.book_data = nil
+                self.characters = {}
+                self.locations = {}
+                self.terms = {}
+                self.historical_figures = {}
+                self.timeline = {}
+                self.author_info = nil
+                self.active_snapshot_index = nil
+                self.active_snapshot_page = nil
+                if self.invalidateSnapshotExistsCache then self:invalidateSnapshotExistsCache() end
             end
             UIManager:show(InfoMessage:new{
                 text = self.loc:t("import_failed") or "Could not import the embedded X-Ray data.",
@@ -711,16 +724,12 @@ function M:importEmbeddedXray(doc_json)
     local function step()
         if self.destroyed then
             self.prefetch_active = false
-            -- Snapshot files from earlier iterations may already be on disk
-            -- with no manifest (saveCache never ran). _nextPendingCheckpoint
-            -- (xray_prefetch.lua:202-212) only checks cache_manager:
-            -- snapshotExists(path, i) -- never whether that file's page
-            -- matches a later, freshly computed manifest's page for the same
-            -- index -- so a stale orphan left here would be silently adopted
-            -- as "done" under a possibly later, spoilier boundary. Same
-            -- guarded delete as the failure branch above.
+            -- Same wrote_any hazard as the failure branch above: a stranded
+            -- manifest would fall back to the unfiltered whole-book cache.
+            -- Full clear instead. Only disk state matters here -- self is
+            -- about to be torn down.
             if wrote_any then
-                pcall(function() self.cache_manager:deleteSnapshots(book_path) end)
+                pcall(function() self.cache_manager:clearCache(book_path) end)
             end
             return
         end

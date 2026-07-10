@@ -683,6 +683,12 @@ describe("xray_import", function()
                     cm.deleted = true
                     return true
                 end,
+                clearCache = function(cm, _)
+                    for i = 1, 24 do cm.snaps[i] = nil end
+                    cm.saved = nil
+                    cm.cleared = true
+                    return true
+                end,
             }
         end
 
@@ -741,7 +747,11 @@ describe("xray_import", function()
             self_:importEmbeddedXray(mock_doc())
             assert.is_nil(self_.cache_manager.saved)
             assert.is_nil(self_.book_data)
-            assert.is_true(self_.cache_manager.deleted)
+            -- wrote_any is already true here (checkpoint 1 landed before the
+            -- failure at 2), so the cleanup must fully clear the cache, not
+            -- merely delete snapshots -- see the Critical-bug regression
+            -- tests below for the case where an OLD cache existed.
+            assert.is_true(self_.cache_manager.cleared)
             assert.falsy(self_.prefetch_active)
         end)
 
@@ -750,7 +760,9 @@ describe("xray_import", function()
             self_.cache_manager.saveCache = function() return false end
             self_:importEmbeddedXray(mock_doc())
             assert.is_nil(self_.book_data)
-            assert.is_true(self_.cache_manager.deleted)
+            -- All snapshots landed (wrote_any true) before saveCache failed,
+            -- so cleanup must fully clear, not just delete snapshots.
+            assert.is_true(self_.cache_manager.cleared)
             assert.falsy(self_.prefetch_active)
         end)
 
@@ -786,7 +798,9 @@ describe("xray_import", function()
                 return ok
             end
             self_:importEmbeddedXray(mock_doc())
-            assert.is_true(self_.cache_manager.deleted)
+            -- The first snapshot landed (wrote_any true) before destruction,
+            -- so cleanup must fully clear, not just delete snapshots.
+            assert.is_true(self_.cache_manager.cleared)
             assert.is_nil(self_.cache_manager.saved)
             assert.is_nil(self_.book_data)
             assert.falsy(self_.prefetch_active)
@@ -817,6 +831,48 @@ describe("xray_import", function()
             assert.are.equal(0, #self_.cache_manager.snaps)
             assert.is_nil(self_.book_data)
             assert.falsy(self_.prefetch_active)
+        end)
+
+        describe("Critical: re-import over an existing cache must never strand a manifest without its snapshots", function()
+            -- Regression for the whole-branch-review Critical finding: a
+            -- re-import that fails after overwriting snapshots in place used
+            -- to delete ONLY the snapshots, leaving the old main cache (an
+            -- unfiltered whole-book manifest) on disk with none of its
+            -- gating snapshots. The next open would then show the full,
+            -- unspoiled entity lists at page 1. Both cleanup branches must
+            -- fully clear instead: no manifest may survive without snapshots.
+            local function with_existing_cache(self_)
+                self_.book_data = { book_title = "Old Book" }
+                self_.cache_manager.saved = { book_title = "Old Book" }
+                self_.cache_manager.snaps[1] = { old = true }
+                self_.cache_manager.snaps[2] = { old = true }
+                return self_
+            end
+
+            it("clears the old main cache and all snapshots when a snapshot write fails mid re-import", function()
+                local self_ = with_existing_cache(prepared())
+                self_.cache_manager.saveSnapshot = function(cm, _, i, data)
+                    if i == 2 then return false end
+                    cm.snaps[i] = data; return true
+                end
+                self_:importEmbeddedXray(mock_doc())
+                assert.is_nil(self_.cache_manager.saved)
+                assert.are.equal(0, #self_.cache_manager.snaps)
+                assert.is_nil(self_.book_data)
+            end)
+
+            it("clears the old main cache and all snapshots when destroyed mid re-import", function()
+                local self_ = with_existing_cache(prepared())
+                local real_saveSnapshot = self_.cache_manager.saveSnapshot
+                self_.cache_manager.saveSnapshot = function(cm, path, i, data)
+                    local ok = real_saveSnapshot(cm, path, i, data)
+                    if i == 1 then self_.destroyed = true end
+                    return ok
+                end
+                self_:importEmbeddedXray(mock_doc())
+                assert.is_nil(self_.cache_manager.saved)
+                assert.are.equal(0, #self_.cache_manager.snaps)
+            end)
         end)
 
     describe("manualImportEmbeddedXray", function()
