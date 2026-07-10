@@ -299,3 +299,27 @@ def test_snippet_anchor_no_sentence_punctuation():
 
     assert snippet != ""
     assert snippet in normalize_text(text)
+
+
+def test_sub_one_percent_boundary_never_yields_percent_zero():
+    """Two tiny front chapters put a boundary below 1% of the book. percent=0
+    fails schema.validate(), and generate_xray validates only after the whole
+    API budget is spent -- so the floor has to happen here, not there. The
+    coalescing pass absorbs the duplicate this can create."""
+    toc = [
+        TocEntry(title="Kapitel 1", offset=200, spine_index=0),
+        TocEntry(title="Kapitel 2", offset=500, spine_index=1),
+        TocEntry(title="Kapitel 3", offset=60000, spine_index=2),
+        TocEntry(title="Kapitel 4", offset=130000, spine_index=3),
+    ]
+    book = BookText(
+        title="T", authors=["A"], language="de", full_text="x" * 200000,
+        spine_offsets=[0, 200, 500, 60000, 130000], toc=toc,
+        text_hash="sha256:" + "0" * 64,
+    )
+
+    percents = [cp.percent for cp in plan_checkpoints(book)]
+
+    assert 0 not in percents
+    assert percents == sorted(set(percents))  # strictly ascending, no duplicates
+    assert percents[-1] == 100

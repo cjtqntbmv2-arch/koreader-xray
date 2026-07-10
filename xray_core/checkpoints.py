@@ -109,7 +109,14 @@ def plan_checkpoints(book: BookText) -> list[Checkpoint]:
 
     cps = []
     for i, p in enumerate(ends):
-        pct = 100 if i == len(ends) - 1 else p * 100 // total
+        # Floor to 1, not 0: a chapter boundary below 1% of the book (two tiny
+        # front chapters is enough) would otherwise yield percent=0, which
+        # schema.validate() rejects -- and generate_xray only validates after
+        # the whole API budget is spent. The device treats pct=0 as page 1
+        # anyway (`pctToPage` in the KOReader importer clamps `p < 1` up),
+        # so 1 is what it would show regardless. Any duplicate this creates
+        # is absorbed by the coalescing pass below.
+        pct = 100 if i == len(ends) - 1 else max(1, p * 100 // total)
         a = anchors.get(p)
         cps.append(Checkpoint(
             offset=p,
