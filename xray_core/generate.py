@@ -160,13 +160,18 @@ def _fetch_with_retry(client, rate_limiter, language, detail_level, title, autho
     return _union_cleaned(left, right)
 
 
+_MAX_PATH_COMPONENT = 32
+
+
 def _sanitize_path_component(value):
-    """Collapse anything outside [a-z0-9_-] to '_'. language/detail_level
-    reach _chunk_path as free-form argparse text (language has no
-    `choices=`) and land directly in a filename below -- this makes path
-    traversal (e.g. --language ../../etc) structurally impossible rather
-    than merely unlikely."""
-    return re.sub(r"[^a-z0-9_-]", "_", str(value).lower())
+    """Collapse anything outside [a-z0-9_-] to '_', then cap the length.
+    language/detail_level reach _chunk_path as free-form argparse text
+    (language has no `choices=`) and land directly in a filename below --
+    this makes path traversal (e.g. --language ../../etc) structurally
+    impossible rather than merely unlikely. The cap keeps a pathological
+    --language from pushing the filename past the OS limit, where the
+    open() in _fetch_and_persist would raise OSError mid-run."""
+    return re.sub(r"[^a-z0-9_-]", "_", str(value).lower())[:_MAX_PATH_COMPONENT]
 
 
 def _chunk_path(workdir, cp_idx, chunk_idx, language, detail_level):

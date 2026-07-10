@@ -405,6 +405,21 @@ def test_chunk_path_sanitizes_malicious_language(tmp_path):
     assert ".." not in os.path.basename(path)
 
 
+def test_chunk_path_caps_a_pathological_language(tmp_path):
+    """A 5000-char --language would push the filename past the OS limit and
+    make _fetch_and_persist's open() raise OSError mid-run. The component is
+    capped, and the resulting path must actually be writable."""
+    workdir = str(tmp_path / "work")
+    os.makedirs(workdir)
+
+    path = _chunk_path(workdir, 0, 0, "a" * 5000, "normal")
+
+    assert len(os.path.basename(path)) < 255  # every mainstream fs allows 255
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("{}")
+    assert os.path.exists(path)
+
+
 # ---------------------------------------------------------------------------
 # Enrichment (Phase C)
 # ---------------------------------------------------------------------------
