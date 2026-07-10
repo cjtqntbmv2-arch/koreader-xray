@@ -29,6 +29,14 @@ describe("ai fetching main switch menu visibility", function()
         for k, v in pairs(XRayPlugin) do
             if plugin[k] == nil then plugin[k] = v end
         end
+        -- Add saveSettings mock function for toggle tests
+        plugin.ai_helper.saveSettings = function(self, settings_update)
+            if type(settings_update) == "table" then
+                for k, v in pairs(settings_update) do
+                    self.settings[k] = v
+                end
+            end
+        end
         return plugin
     end
 
@@ -45,6 +53,19 @@ describe("ai fetching main switch menu visibility", function()
         return found
     end
 
+    local function findItem(items, needle)
+        for _, item in ipairs(items) do
+            if type(item.text) == "string" and item.text:find(needle, 1, true) then
+                return item
+            end
+            if type(item.sub_item_table) == "table" then
+                local found = findItem(item.sub_item_table, needle)
+                if found then return found end
+            end
+        end
+        return nil
+    end
+
     it("shows fetch items when enabled (default)", function()
         local items = mkPlugin():getSubMenuItems()
         assert.are.equal(1, #findText(items, "menu_update_xray"))
@@ -54,6 +75,10 @@ describe("ai fetching main switch menu visibility", function()
         assert.are.equal(1, #findText(items, "menu_series_context"))
         assert.are.equal(1, #findText(items, "menu_ai_fetching"))
         assert.are.equal(1, #findText(items, "menu_import_calibre"))
+        -- These three items live in fetch_items and must always be visible
+        assert.are.equal(1, #findText(items, "menu_book_mode"))
+        assert.are.equal(1, #findText(items, "menu_desc_length_settings"))
+        assert.are.equal(1, #findText(items, "spoiler_preference_title"))
     end)
 
     it("hides fetch items when disabled, keeps toggle/import/display items", function()
@@ -69,5 +94,28 @@ describe("ai fetching main switch menu visibility", function()
         assert.are.equal(1, #findText(items, "menu_import_calibre"))
         assert.are.equal(1, #findText(items, "menu_characters"))
         assert.are.equal(1, #findText(items, "auto_dupe_check_setting_title"))
+        -- These three items live in fetch_items and must always be visible even when disabled
+        assert.are.equal(1, #findText(items, "menu_book_mode"))
+        assert.are.equal(1, #findText(items, "menu_desc_length_settings"))
+        assert.are.equal(1, #findText(items, "spoiler_preference_title"))
+    end)
+
+    it("toggle callback updates ai_fetching_enabled setting", function()
+        local plugin = mkPlugin()
+        local items = plugin:getSubMenuItems()
+        -- Find the toggle item (nested in Settings > sub_item_table)
+        local toggle = findItem(items, "menu_ai_fetching")
+        assert.is_not_nil(toggle)
+        -- Default state: ai_fetching should be enabled (no setting = default true)
+        assert.is_true(toggle.checked_func())
+        -- Call the callback to toggle it
+        toggle.callback()
+        -- After toggle, it should be disabled
+        assert.is_false(toggle.checked_func())
+        assert.is_false(plugin.ai_helper.settings.ai_fetching_enabled)
+        -- Toggle again to re-enable
+        toggle.callback()
+        assert.is_true(toggle.checked_func())
+        assert.is_true(plugin.ai_helper.settings.ai_fetching_enabled)
     end)
 end)
