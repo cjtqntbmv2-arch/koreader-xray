@@ -16,7 +16,22 @@ import re
 
 from xray_core.checkpoints import is_non_narrative
 
-_NAME_FALLBACKS = ("name", "full_formal_name", "full_name", "formal_name", "Name")
+# Alternative keys the model sometimes emits, verbatim from
+# `xray_aihelper.lua:2015-2048`. Lua's upper-case branches (`c.Name`,
+# `l.Lugar`) are dead code there: `:1997` calls
+# `validateAndCleanData(normalizeKeys(data))`. We rely on the same
+# precondition -- see clean_response's docstring.
+_CHAR_NAME_KEYS = ("name", "full_formal_name", "full_name", "formal_name")
+_CHAR_DESC_KEYS = ("description", "bio", "history", "desc")
+_CHAR_OCCUPATION_KEYS = ("occupation", "job")
+_LOC_NAME_KEYS = ("name", "place", "lugar")
+_LOC_DESC_KEYS = ("description", "desc", "short_desc")
+_LOC_IMPORTANCE_KEYS = ("importance", "significance")
+_HIST_NAME_KEYS = ("name",)
+_HIST_BIO_KEYS = ("biography", "bio", "description")
+_HIST_ROLE_KEYS = ("role", "historical_role")
+_HIST_IMPORTANCE_KEYS = ("importance_in_book", "significance")
+_HIST_CONTEXT_KEYS = ("context_in_book", "context")
 
 
 def _str(d: dict, key: str, default: str = "") -> str:
@@ -40,17 +55,22 @@ def _aliases(d: dict) -> list:
 def clean_response(raw: dict) -> dict:
     """Port of `validateAndCleanData`'s per-field defaulting (essentials).
 
+    PRECONDITION: `raw`'s keys are already lower-cased by
+    `gemini.normalize_keys` (`gemini.py:192`), exactly as Lua couples the two
+    in `xray_aihelper.lua:1997`. Calling this with raw model output that
+    skipped that step will silently miss upper-case keys.
+
     Nameless characters/locations are KEPT with a placeholder name
     (`xray_aihelper.lua:2015`) -- never dropped, so a character or place the
     AI described but couldn't name never silently disappears.
     """
     characters = [
         {
-            "name": _first_nonempty(c, _NAME_FALLBACKS, "Unnamed character"),
+            "name": _first_nonempty(c, _CHAR_NAME_KEYS, "Unnamed character"),
             "role": _str(c, "role")[:40],
-            "description": _str(c, "description"),
+            "description": _first_nonempty(c, _CHAR_DESC_KEYS, ""),
             "gender": _str(c, "gender"),
-            "occupation": _str(c, "occupation"),
+            "occupation": _first_nonempty(c, _CHAR_OCCUPATION_KEYS, ""),
             "aliases": _aliases(c),
         }
         for c in raw.get("characters") or []
@@ -59,9 +79,9 @@ def clean_response(raw: dict) -> dict:
 
     locations = [
         {
-            "name": _first_nonempty(loc, _NAME_FALLBACKS, "Unnamed location"),
-            "description": _str(loc, "description"),
-            "importance": _str(loc, "importance"),
+            "name": _first_nonempty(loc, _LOC_NAME_KEYS, "Unnamed location"),
+            "description": _first_nonempty(loc, _LOC_DESC_KEYS, ""),
+            "importance": _first_nonempty(loc, _LOC_IMPORTANCE_KEYS, ""),
             "aliases": _aliases(loc),
         }
         for loc in raw.get("locations") or []
@@ -70,11 +90,11 @@ def clean_response(raw: dict) -> dict:
 
     historical_figures = [
         {
-            "name": _first_nonempty(h, ("name", "Name"), "Unnamed historical figure"),
-            "biography": _str(h, "biography"),
-            "role": _str(h, "role")[:40],
-            "importance_in_book": _str(h, "importance_in_book"),
-            "context_in_book": _str(h, "context_in_book"),
+            "name": _first_nonempty(h, _HIST_NAME_KEYS, "Unnamed historical figure"),
+            "biography": _first_nonempty(h, _HIST_BIO_KEYS, ""),
+            "role": _first_nonempty(h, _HIST_ROLE_KEYS, "")[:40],
+            "importance_in_book": _first_nonempty(h, _HIST_IMPORTANCE_KEYS, ""),
+            "context_in_book": _first_nonempty(h, _HIST_CONTEXT_KEYS, ""),
         }
         for h in raw.get("historical_figures") or []
         if isinstance(h, dict)

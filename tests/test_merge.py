@@ -243,3 +243,55 @@ def test_is_more_complete_name_unicode_word_boundary():
     # middle of the string so neither prefix nor suffix applies either.
     assert not is_more_complete_name("the Müllerübung club", "Müller")
     assert not is_more_complete_name("Al", "Alice")  # shorter never promotes
+
+
+def test_clean_location_name_falls_back_to_place_and_lugar():
+    # xray_aihelper.lua:2046 -- l.name or l.place or l.Lugar
+    assert clean_response({"locations": [{"place": "Palermo"}]})["locations"][0]["name"] == "Palermo"
+    assert clean_response({"locations": [{"lugar": "Vesuv"}]})["locations"][0]["name"] == "Vesuv"
+
+
+def test_clean_location_never_uses_character_name_chain():
+    # Regression: der Ort nutzte die Charakter-Kette (full_formal_name ...).
+    # Ein Ort ohne name/place/lugar ist namenlos, egal was sonst dransteht.
+    cleaned = clean_response({"locations": [{"full_formal_name": "Lord Farquaad"}]})
+    assert cleaned["locations"][0]["name"] == "Unnamed location"
+
+
+def test_clean_location_description_and_importance_fallbacks():
+    # xray_aihelper.lua:2047-2048
+    loc = clean_response({"locations": [{"name": "X", "desc": "d", "significance": "s"}]})["locations"][0]
+    assert loc["description"] == "d"
+    assert loc["importance"] == "s"
+    loc2 = clean_response({"locations": [{"name": "X", "short_desc": "sd"}]})["locations"][0]
+    assert loc2["description"] == "sd"
+
+
+def test_clean_character_description_and_occupation_fallbacks():
+    # xray_aihelper.lua:2017,2019
+    c = clean_response({"characters": [{"name": "A", "bio": "b", "job": "j"}]})["characters"][0]
+    assert c["description"] == "b"
+    assert c["occupation"] == "j"
+    assert clean_response({"characters": [{"name": "A", "history": "h"}]})["characters"][0]["description"] == "h"
+    assert clean_response({"characters": [{"name": "A", "desc": "d"}]})["characters"][0]["description"] == "d"
+
+
+def test_clean_historical_figure_fallbacks():
+    # xray_aihelper.lua:2031-2035
+    h = clean_response(
+        {
+            "historical_figures": [
+                {
+                    "name": "N",
+                    "description": "d",
+                    "historical_role": "r",
+                    "significance": "s",
+                    "context": "c",
+                }
+            ]
+        }
+    )["historical_figures"][0]
+    assert h["biography"] == "d"
+    assert h["role"] == "r"
+    assert h["importance_in_book"] == "s"
+    assert h["context_in_book"] == "c"
