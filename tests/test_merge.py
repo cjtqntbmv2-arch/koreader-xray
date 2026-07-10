@@ -178,6 +178,45 @@ def test_historical_figures_field_merge_split():
     assert fig["importance_in_book"] == "central to Act II"  # fill-if-empty
 
 
+def test_role_is_overwritten_by_newest_nonempty_value():
+    # xray_fetch.lua:587 -- existing_char.role = new_char.role
+    state = BookState()
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "role": "Protagonist"}]}), 10)
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "role": "Trauerredner"}]}), 50)
+
+    assert state.characters[0]["role"] == "Trauerredner"
+
+
+def test_character_role_survives_a_segment_that_omits_it():
+    # Bewusste Divergenz: Lua wuerde hier mit dem Platzhalter ueberschreiben.
+    state = BookState()
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "role": "Protagonist"}]}), 10)
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "description": "d"}]}), 50)
+
+    assert state.characters[0]["role"] == "Protagonist"
+
+
+def test_historical_figure_role_also_newest_wins():
+    # xray_fetch.lua:660 -- existing_fig.role = new_fig.role
+    state = BookState()
+    state.merge_segment(clean_response({"historical_figures": [{"name": "Cäsar", "role": "Feldherr"}]}), 10)
+    state.merge_segment(clean_response({"historical_figures": [{"name": "Cäsar", "role": "Diktator"}]}), 50)
+
+    assert state.historical_figures[0]["role"] == "Diktator"
+
+
+def test_historical_figure_role_survives_a_segment_that_omits_it():
+    # Hier ist die Divergenz am schaerfsten: Lua defaultet Hist-role auf ""
+    # (AIHelper:validateAndCleanData, xray_aihelper.lua, ca. line 2039) und
+    # ueberschreibt bedingungslos (xray_fetch.lua:660) -- es kann eine
+    # bekannte Rolle also loeschen.
+    state = BookState()
+    state.merge_segment(clean_response({"historical_figures": [{"name": "Cäsar", "role": "Feldherr"}]}), 10)
+    state.merge_segment(clean_response({"historical_figures": [{"name": "Cäsar", "biography": "b"}]}), 50)
+
+    assert state.historical_figures[0]["role"] == "Feldherr"
+
+
 def test_snapshot_is_deep_copy():
     state = BookState()
     state.merge_segment(

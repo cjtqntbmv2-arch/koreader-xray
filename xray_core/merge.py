@@ -317,7 +317,11 @@ class BookState:
     def merge_segment(self, cleaned: dict, checkpoint_pct: int) -> None:
         self._merge(
             self.characters, cleaned.get("characters") or [],
-            newest_wins=("description",), fill_if_empty=("role", "gender", "occupation"),
+            # `role` newest-wins per xray_fetch.lua:587. Divergence: Lua
+            # overwrites unconditionally; since we no longer default `role`
+            # to a placeholder, an unconditional overwrite would let a
+            # segment that never mentions the role erase a known one.
+            newest_wins=("description", "role"), fill_if_empty=("gender", "occupation"),
             stamp=True, checkpoint_pct=checkpoint_pct,
         )
         self._merge(
@@ -335,8 +339,12 @@ class BookState:
         )
         self._merge(
             self.historical_figures, cleaned.get("historical_figures") or [],
-            newest_wins=("biography",),
-            fill_if_empty=("role", "importance_in_book", "context_in_book"),
+            # xray_fetch.lua:660. Same non-empty guard -- and here Lua really
+            # can blank a role: it defaults hist `role` to "" (AIHelper:
+            # validateAndCleanData, xray_aihelper.lua, ca. line 2039) and
+            # overwrites regardless. We keep the known value instead.
+            newest_wins=("biography", "role"),
+            fill_if_empty=("importance_in_book", "context_in_book"),
             stamp=False, checkpoint_pct=checkpoint_pct,
         )
 
