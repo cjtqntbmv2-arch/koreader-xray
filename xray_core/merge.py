@@ -75,8 +75,17 @@ def fallback_strings(language: str) -> dict:
 
 
 def _str(d: dict, key: str, default: str = "") -> str:
+    """Deliberate divergence from Lua's `ensureString` (`xray_aihelper.lua:
+    2014`: `(type(v) == "string" and #v > 0) and v or d or ""`), which only
+    checks length and never strips: we also strip whitespace and treat a
+    value that's empty afterwards as missing. Without this, `bool("   ")`
+    being True in Python let a whitespace-only model value pass every
+    truthy check downstream -- including `BookState._merge`'s `newest_wins`
+    overwrite -- as if it were real content.
+    """
     v = d.get(key)
-    return v if isinstance(v, str) and v else default
+    v = v.strip() if isinstance(v, str) else ""
+    return v or default
 
 
 def _first_nonempty(d: dict, keys, default: str) -> str:
@@ -92,15 +101,26 @@ def _first_nonempty(d: dict, keys, default: str) -> str:
     Python treats "present but empty" as "missing" and keeps walking the
     chain instead, on purpose: an empty value from one key must not block a
     real value the model supplied under a later, alternative key.
+
+    "Empty" includes whitespace-only, checked after stripping -- same
+    divergence as `_str` and same reason (Lua's `ensureString` checks only
+    `#v > 0` and never strips).
     """
     for key in keys:
         v = d.get(key)
-        if isinstance(v, str) and v:
+        v = v.strip() if isinstance(v, str) else ""
+        if v:
             return v
     return default
 
 
 def _aliases(d: dict) -> list:
+    # ponytail: filters only the exact empty string, not whitespace-only
+    # (same root cause as _str/_first_nonempty above) -- left out of this
+    # fix on purpose. Aliases union rather than overwrite (xray_data.lua
+    # dedup), so a whitespace-only alias is cosmetic list noise, not the
+    # data-loss overwrite this fix targets. Give it the same `.strip()`
+    # treatment here if that noise ever turns out to matter.
     v = d.get("aliases")
     return [a for a in v if isinstance(a, str) and a] if isinstance(v, list) else []
 

@@ -12,6 +12,7 @@ from xray_core.merge import (
     _LOC_IMPORTANCE_KEYS,
     _LOC_NAME_KEYS,
     _first_nonempty,
+    _str,
     BookState,
     clean_response,
     fallback_strings,
@@ -422,3 +423,102 @@ def test_empty_field_is_still_fillable_by_a_later_segment():
     )
 
     assert state.characters[0]["occupation"] == "Forscherin"
+
+
+# ---------------------------------------------------------------------------
+# Task-4-Review (Important): bool("   ") ist True in Python -- _str und
+# _first_nonempty behandelten einen Whitespace-only-String bislang wie einen
+# echten Wert, statt wie ein fehlendes Feld.
+# ---------------------------------------------------------------------------
+
+
+def test_str_treats_whitespace_only_as_missing():
+    assert _str({"role": "   "}, "role", "default") == "default"
+    assert _str({"role": "\t\n "}, "role", "default") == "default"
+    assert _str({"role": "  Held  "}, "role", "default") == "Held"
+
+
+def test_first_nonempty_treats_whitespace_only_as_missing():
+    # Wie im Docstring-Beispiel fuer den literalen Leerstring: eine leere
+    # Kandidatin darf eine echte weiter hinten in der Kette nicht blockieren
+    # -- das muss auch fuer Whitespace-only gelten, nicht nur fuer "".
+    assert _first_nonempty({"description": "   ", "bio": "echt"}, _CHAR_DESC_KEYS, "default") == "echt"
+    assert _first_nonempty({"description": "  echt  "}, _CHAR_DESC_KEYS, "default") == "echt"
+
+
+def test_whitespace_only_name_falls_back_to_placeholder():
+    # Ein Whitespace-only Name darf nicht als "" durchgereicht werden: die
+    # Dedup-Logik in _merge schluesselt ueber name.lower(), und ein leerer
+    # Schluessel traefe die "nameless entries never collide"-Sonderbehandlung
+    # (xray_data.lua:232-234) statt des Platzhalter-Pfads.
+    c = clean_response({"characters": [{"name": "   "}]}, language="de")["characters"][0]
+    assert c["name"] == "Unbenannter Charakter"
+
+    loc = clean_response({"locations": [{"name": "\t"}]}, language="de")["locations"][0]
+    assert loc["name"] == "Unbekannter Ort"
+
+
+def test_role_stripped_before_truncation_cap():
+    # Strippen muss vor dem [:40]-Schnitt passieren, sonst zaehlt Leerraum
+    # gegen das Limit und kappt echten Text ab.
+    role = "  " + "x" * 40 + "  "
+    c = clean_response({"characters": [{"name": "A", "role": role}]})["characters"][0]
+    assert c["role"] == "x" * 40
+
+
+def test_clean_response_treats_whitespace_only_value_as_missing():
+    # Alle vier betroffenen newest_wins-Felder aus dem Bugreport, auf
+    # clean_response-Ebene: keins darf Leerraum ausliefern.
+    c = clean_response({"characters": [{"name": "A", "role": "   ", "description": "\t\n "}]})["characters"][0]
+    assert c["role"] == ""
+    assert c["description"] == ""
+
+    h = clean_response({"historical_figures": [{"name": "H", "biography": "  \t "}]})["historical_figures"][0]
+    assert h["biography"] == ""
+
+    t = clean_response({"terms": [{"name": "T", "definition": "   "}]})["terms"][0]
+    assert t["definition"] == ""
+
+
+def test_whitespace_only_role_does_not_overwrite_known_role():
+    # Reproduziert den Bugreport: 'role nach Whitespace-Segment: "   "'.
+    state = BookState()
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "role": "Protagonist"}]}), 10)
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "role": "   "}]}), 50)
+
+    assert state.characters[0]["role"] == "Protagonist"
+
+
+def test_whitespace_only_description_does_not_overwrite_known_description():
+    # Reproduziert den Bugreport: 'description nach Whitespace-Segment: "\t\n "'.
+    state = BookState()
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "description": "echt"}]}), 10)
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "description": "\t\n "}]}), 50)
+
+    assert state.characters[0]["description"] == "echt"
+
+
+def test_whitespace_only_value_does_not_permanently_block_fill_if_empty_field():
+    # Der Fix an der Quelle zahlt sich auch hier aus, ohne _merge anzufassen:
+    # eine Whitespace-only occupation wuerde das leere Feld sonst dauerhaft
+    # "fuellen" (fill_if_empty prueft nur "match.get(field) ist falsy") und
+    # einen echten Wert aus einem spaeteren Segment fuer immer blockieren.
+    state = BookState()
+    state.merge_segment(clean_response({"characters": [{"name": "Alice", "occupation": "   "}]}), 10)
+    state.merge_segment(clean_response({"characters": [{"name": "Alice", "occupation": "Forscherin"}]}), 50)
+
+    assert state.characters[0]["occupation"] == "Forscherin"
+
+
+def test_timeline_drops_events_with_whitespace_only_chapter():
+    # Bereits vor diesem Fix gruen: is_non_narrative() strippt selbst
+    # (xray_core/checkpoints.py:41, Port von isNonNarrativeChapter), filtert
+    # also unabhaengig davon, ob _str vorher schon gestrippt hat. Als
+    # Regressions-Beleg trotzdem hier verankert (siehe Bericht).
+    state = BookState()
+    state.merge_segment(
+        clean_response({"timeline": [{"chapter": "   ", "event": "sollte fehlen"}]}),
+        checkpoint_pct=10,
+    )
+
+    assert state.timeline == []
