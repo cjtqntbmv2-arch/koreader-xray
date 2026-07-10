@@ -341,6 +341,45 @@ describe("xray_import", function()
             self_:_resolveCheckpointPages(mock_doc(), function() n = n + 1 end)
             assert.are.equal(3, n)
         end)
+
+        it("returns nil for a complete document with only one checkpoint", function()
+            -- A lone checkpoint cannot be spoiler-staged: is_final pins it to
+            -- page_count, so it would be the only snapshot in existence --
+            -- occupying slot 1, the slot resolveSnapshotIndexForPage shows to
+            -- a reader who has not even reached checkpoint 1. Build this from
+            -- the 3-checkpoint mock by dropping the first two, so index 1 is
+            -- the old checkpoint 3 (percent = 100, complete = true).
+            local doc = mock_doc()
+            table.remove(doc.checkpoints, 1)
+            table.remove(doc.checkpoints, 1)
+            assert.are.equal(1, #doc.checkpoints)
+            assert.are.equal(100, doc.checkpoints[1].percent)
+            local self_ = with_document(mock_plugin(), 100, toc, {})
+            assert.is_nil(self_:_resolveCheckpointPages(doc))
+        end)
+
+        it("returns nil when several checkpoints all collapse onto one surviving page", function()
+            -- Proves the guard checks the SURVIVING count, not the input
+            -- count: 3 checkpoints go in, but with no TOC/snippet match and a
+            -- percent that only decreases, 2 and 3 each land at or before
+            -- checkpoint 1's page and get dropped by the existing collision
+            -- rule -- leaving a single-entry result that is just as
+            -- unstageable as a document that only ever had one checkpoint.
+            local doc = mock_doc()
+            doc.complete = false
+            doc.checkpoints[1].percent = 50
+            doc.checkpoints[2].percent = 10
+            doc.checkpoints[3].percent = 5
+            local self_ = with_document(mock_plugin(), 100, {}, {})
+            assert.is_nil(self_:_resolveCheckpointPages(doc))
+        end)
+
+        it("still returns all checkpoints for a normal multi-checkpoint document", function()
+            -- The new guard must not over-trigger on the common case.
+            local self_ = with_document(mock_plugin(), 100, toc, { [SNIP2] = hits(47) })
+            local mapped = self_:_resolveCheckpointPages(mock_doc())
+            assert.are.equal(3, #mapped)
+        end)
     end)
 
     describe("_buildImportedCache", function()
@@ -758,6 +797,22 @@ describe("xray_import", function()
             aborted.cache_manager.saveCache = function() return false end
             aborted:importEmbeddedXray(mock_doc())
             assert.is_nil(aborted.book_type)
+        end)
+
+        it("writes nothing for a document with only one checkpoint", function()
+            -- _resolveCheckpointPages now refuses a single surviving
+            -- checkpoint (it cannot be spoiler-staged), so the import must
+            -- abort cleanly instead of adopting a snapshot that holds the
+            -- entire book at page 1.
+            local doc = mock_doc()
+            table.remove(doc.checkpoints, 1)
+            table.remove(doc.checkpoints, 1)
+            local self_ = prepared()
+            self_:importEmbeddedXray(doc)
+            assert.is_nil(self_.cache_manager.saved)
+            assert.are.equal(0, #self_.cache_manager.snaps)
+            assert.is_nil(self_.book_data)
+            assert.falsy(self_.prefetch_active)
         end)
     end)
 

@@ -209,6 +209,20 @@ function M:_resolveCheckpointPages(doc_json, yield_fn)
     end
 
     if #out == 0 then return nil end
+    -- A single surviving checkpoint cannot be spoiler-staged: it would be the
+    -- only snapshot in existence, so it occupies slot 1 -- the slot
+    -- resolveSnapshotIndexForPage (xray_prefetch.lua:477-499) shows to a
+    -- reader who has not yet reached checkpoint 1. A lone COMPLETE checkpoint
+    -- is pinned to page_count by is_final above, so that reader would see the
+    -- entire book's characters, locations, terms and timeline at page 1 -- a
+    -- whole-book spoiler. Returning nil here makes importEmbeddedXray abort
+    -- the import cleanly and leaves the book to the normal on-device
+    -- prefetch. Costs nothing for a real calibre document: plan_checkpoints
+    -- (companion calibre-xray repo) always emits at least two checkpoints --
+    -- falling back to ~10 decile steps when the table of contents yields
+    -- fewer than two chapter boundaries -- and this function never drops
+    -- checkpoint 1. Mirrors the page_count < 3 -> nil guard above.
+    if #out < 2 then return nil end
     return out
 end
 
