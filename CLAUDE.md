@@ -60,7 +60,8 @@ nicht ein Implementierungsdetail:
   ursprüngliche Spoiler-Leak-Bug.
 
 **Resume/Teilergebnis:** mit `workdir` landet jeder Chunk atomar als
-`chunk_<cp>_<chunk>.json`; ein Rerun lädt ihn ohne API-Call. Nach einer `QuotaError` merged
+`chunk_<cp>_<chunk>_<language>_<detail>.json`; ein Rerun lädt ihn ohne API-Call und schickt ihn
+erneut durch `clean_response` (siehe Divergenzen unten). Nach einer `QuotaError` merged
 Phase B nur das **zusammenhängende Präfix** ab Checkpoint 0 (`_completed_prefix_len`) —
 das Doc trägt dann `complete: false` + `last_percent`, die CLI exitet mit 2, das Plugin
 zeigt einen Warn-Dialog und behält das `workdir`.
