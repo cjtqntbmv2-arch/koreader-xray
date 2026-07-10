@@ -1,6 +1,7 @@
 -- xray_ui_spec.lua
 require("spec/spec_helper")
 local xray_ui = require("xray_ui")
+local XRayPlugin = require("main")
 
 describe("xray_ui", function()
     local plugin
@@ -10,6 +11,11 @@ describe("xray_ui", function()
         -- Mix in UI methods
         for k, v in pairs(xray_ui) do
             plugin[k] = v
+        end
+        -- main.lua and the six mixins share one `self` in production (see
+        -- CLAUDE.md); mirror that here so guards like isAiFetchingEnabled() work.
+        for k, v in pairs(XRayPlugin) do
+            if plugin[k] == nil then plugin[k] = v end
         end
         -- Reset UI tracker
         _G.ui_tracker.shown = {}

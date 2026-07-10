@@ -10,6 +10,7 @@ package.loaded["ui/network/manager"] = {
 }
 
 local prefetch = require("xray_prefetch")
+local XRayPlugin = require("main")
 
 local function toc_entry(page, title)
     return { page = page, title = title or ("Chapter " .. page) }
@@ -24,6 +25,11 @@ local function makePlugin(toc, page_count)
     end
     for k, v in pairs(prefetch) do
         plugin[k] = v
+    end
+    -- main.lua and the six mixins share one `self` in production (see
+    -- CLAUDE.md); mirror that here so guards like isAiFetchingEnabled() work.
+    for k, v in pairs(XRayPlugin) do
+        if plugin[k] == nil then plugin[k] = v end
     end
     return plugin
 end
@@ -116,6 +122,9 @@ describe("xray_prefetch", function()
             plugin.ui.getCurrentPage = function() return 10 end
             for k, v in pairs(prefetch) do
                 plugin[k] = v
+            end
+            for k, v in pairs(XRayPlugin) do
+                if plugin[k] == nil then plugin[k] = v end
             end
             -- isolate the loop from the D1 math
             plugin.computeCheckpoints = function()
@@ -300,6 +309,9 @@ describe("xray_prefetch", function()
             local plugin = createMockPlugin()
             for k, v in pairs(prefetch) do
                 plugin[k] = v
+            end
+            for k, v in pairs(XRayPlugin) do
+                if plugin[k] == nil then plugin[k] = v end
             end
             plugin.book_data = {}
             plugin._spec_starts = {}
@@ -659,6 +671,51 @@ describe("xray_prefetch", function()
             local names = {}
             for _, c in ipairs(host.book_data.characters) do names[#names+1] = c.name end
             assert.same({ "Early", "Middle", "Late" }, names)
+        end)
+    end)
+
+    describe("ai fetching main switch", function()
+        local function switchPlugin(enabled)
+            local toc = {}
+            for i = 0, 4 do table.insert(toc, toc_entry(i * 100 + 1)) end
+            local plugin = makePlugin(toc, 500)
+            -- isAiFetchingEnabled comes from makePlugin's XRayPlugin merge.
+            plugin.ai_helper.settings.ai_fetching_enabled = enabled
+            plugin.ai_helper.hasApiKey = function() return true end
+            return plugin
+        end
+
+        it("maybeStartAutoPrefetch is a no-op when disabled", function()
+            local plugin = switchPlugin(false)
+            plugin.ai_helper.settings.offline_prefetch_auto = true
+            local started = false
+            plugin.startOfflinePrefetch = function() started = true end
+            plugin:maybeStartAutoPrefetch()
+            assert.is_false(started)
+        end)
+
+        it("startOfflinePrefetch refuses silently when disabled", function()
+            local plugin = switchPlugin(false)
+            local fetched = false
+            plugin.continueWithFetch = function() fetched = true end
+            plugin.fetchFromAI = function() fetched = true end
+            plugin:startOfflinePrefetch(true)
+            assert.is_false(fetched)
+            assert.falsy(plugin.prefetch_active)
+        end)
+
+        it("_prefetchNext aborts a running loop when disabled mid-run", function()
+            local plugin = switchPlugin(false)
+            plugin.prefetch_active = true
+            plugin.prefetch_silent = true
+            plugin.book_data = { prefetch = { checkpoints = { { page = 100, percent = 20 } } } }
+            local finished
+            plugin._finishPrefetch = function(_, completed) finished = completed end
+            local fetched = false
+            plugin.continueWithFetch = function() fetched = true end
+            plugin:_prefetchNext()
+            assert.is_false(fetched)
+            assert.is_false(finished)
         end)
     end)
 end)

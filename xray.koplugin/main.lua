@@ -643,6 +643,7 @@ end
 
 function XRayPlugin:triggerBackgroundMergeFetch(chapter_title, unique_id)
     if self.bg_fetch_active then return end
+    if not self:isAiFetchingEnabled() then return end
     if not self.ui or not self.ui.document then return end
     -- Checkpoint-prefetch guards: no auto-merge while the prefetch loop runs,
     -- while a snapshot view covers the position, or when the book is fully

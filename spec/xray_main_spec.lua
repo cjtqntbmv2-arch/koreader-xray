@@ -228,3 +228,18 @@ describe("autoLoadCache staged timers", function()
         end
     end)
 end)
+
+describe("triggerBackgroundMergeFetch main switch", function()
+    local XRayPlugin = require("main")
+    it("returns before any work when disabled", function()
+        local plugin = createMockPlugin()
+        for k, v in pairs(XRayPlugin) do
+            if plugin[k] == nil then plugin[k] = v end
+        end
+        plugin.ai_helper.settings.ai_fetching_enabled = false
+        local keyChecked = false
+        plugin.ai_helper.hasApiKey = function() keyChecked = true; return true end
+        plugin:triggerBackgroundMergeFetch("Chapter 1", "id1")
+        assert.is_false(keyChecked)
+    end)
+end)

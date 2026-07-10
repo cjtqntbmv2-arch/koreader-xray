@@ -124,6 +124,13 @@ function M:startOfflinePrefetch(is_silent)
         end
         return
     end
+    if not self:isAiFetchingEnabled() then
+        if not is_silent then
+            self:showPrefetchInfo(self.loc:t("ai_fetching_disabled_hint")
+                or "AI fetching is disabled. Enable it in the X-Ray settings.")
+        end
+        return
+    end
     if not self.ui or not self.ui.document then return end
 
     local spoiler_setting = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
@@ -186,6 +193,7 @@ end
 -- onNetworkConnected; at most one attempt per book and session. Network and
 -- API-key guards live in startOfflinePrefetch.
 function M:maybeStartAutoPrefetch()
+    if not self:isAiFetchingEnabled() then return end
     local s = self.ai_helper and self.ai_helper.settings or {}
     if s.offline_prefetch_auto ~= true then return end
     if self.auto_prefetch_attempted then return end
@@ -217,6 +225,17 @@ function M:_prefetchNext()
         return
     end
     if self.prefetch_cancelled then
+        self:_finishPrefetch(false)
+        return
+    end
+    if not self:isAiFetchingEnabled() then
+        -- Mid-run toggle: stop with our own message, not the generic
+        -- "Interrupted" one; _finishPrefetch skips its message when silent.
+        if not self.prefetch_silent then
+            self:showPrefetchInfo(self.loc:t("ai_fetching_disabled_hint")
+                or "AI fetching is disabled. Enable it in the X-Ray settings.")
+            self.prefetch_silent = true
+        end
         self:_finishPrefetch(false)
         return
     end

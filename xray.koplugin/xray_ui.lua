@@ -4461,6 +4461,10 @@ function M:checkSeriesContext()
         self:log("XRayPlugin: Series: checkSeriesContext: document/ui not available, skipping")
         return
     end
+    if not self:isAiFetchingEnabled() then
+        self:log("XRayPlugin: Series: checkSeriesContext: AI fetching disabled, skipping")
+        return
+    end
 
     if not self.ai_helper or not self.ai_helper.settings or not self.ai_helper.settings.series_context_enabled then
         self:log("XRayPlugin: Series: checkSeriesContext: series_context_enabled setting is false/nil, skipping")
