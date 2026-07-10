@@ -717,6 +717,38 @@ describe("xray_prefetch", function()
             assert.is_false(fetched)
             assert.is_false(finished)
         end)
+
+        it("startOfflinePrefetch(false) with switch off shows the disabled hint and returns early", function()
+            local plugin = switchPlugin(false)
+            local shown_text = nil
+            plugin.showPrefetchInfo = function(_, text) shown_text = text end
+
+            plugin:startOfflinePrefetch(false)
+
+            assert.are.equal("ai_fetching_disabled_hint", shown_text)
+            assert.falsy(plugin.prefetch_active)
+            local fetched = false
+            plugin.continueWithFetch = function() fetched = true end
+        end)
+
+        it("_prefetchNext with switch off and prefetch_silent false shows hint, sets silent flag, and calls _finishPrefetch", function()
+            local plugin = switchPlugin(false)
+            plugin.prefetch_active = true
+            plugin.prefetch_silent = false
+            plugin.book_data = { prefetch = { checkpoints = { { page = 100, percent = 20 } } } }
+
+            local shown_text = nil
+            plugin.showPrefetchInfo = function(_, text) shown_text = text end
+
+            local finished_with = nil
+            plugin._finishPrefetch = function(_, completed) finished_with = completed end
+
+            plugin:_prefetchNext()
+
+            assert.are.equal("ai_fetching_disabled_hint", shown_text)
+            assert.is_true(plugin.prefetch_silent)
+            assert.is_false(finished_with)
+        end)
     end)
 end)
 
