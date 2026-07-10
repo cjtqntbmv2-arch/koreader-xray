@@ -726,6 +726,9 @@ describe("xray_prefetch", function()
             plugin.continueWithFetch = function() fetched = true end
             plugin.fetchFromAI = function() fetched = true end
 
+            -- Tripwire: computeCheckpoints should never be called if the guard returns early
+            plugin.computeCheckpoints = function() error("startOfflinePrefetch did not return early", 0) end
+
             plugin:startOfflinePrefetch(false)
 
             assert.are.equal("ai_fetching_disabled_hint", shown_text)
