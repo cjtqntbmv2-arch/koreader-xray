@@ -866,6 +866,22 @@ describe("xray_import", function()
             self_:manualImportEmbeddedXray()
             assert.is_false(imported)
         end)
+
+        it("aborts in the dialog callback if a prefetch starts while the modal is open", function()
+            local self_ = prepared()
+            self_.book_data = { characters = {} }
+            self_._readEmbeddedXray = function() return mock_doc() end
+            self_._gateImport = function() return nil end
+            local imported = false
+            self_.importEmbeddedXray = function() imported = true end
+            self_:manualImportEmbeddedXray()
+            local confirm = _G.ui_tracker.last_shown
+            assert.are.equal("ConfirmBox", confirm.type)
+            -- Simulate a prefetch starting while the dialog is open
+            self_.prefetch_active = true
+            confirm.args.ok_callback()
+            assert.are.equal(false, imported)
+        end)
     end)
 
     describe("re-import robustness", function()

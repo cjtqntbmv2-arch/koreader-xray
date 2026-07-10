@@ -597,6 +597,16 @@ function M:manualImportEmbeddedXray()
             ok_text = self.loc:t("menu_import_calibre") or "Import calibre X-Ray",
             cancel_text = self.loc:t("cancel") or "Cancel",
             ok_callback = function()
+                -- Modal dialogs are an await point; onNetworkConnected may fire and
+                -- start a prefetch between the dialog appearing and user input.
+                if self.prefetch_active or self.bg_fetch_active then
+                    UIManager:close(confirm)
+                    UIManager:show(InfoMessage:new{
+                        text = self.loc:t("prefetch_busy") or "A fetch is already running. Try again in a moment.",
+                        timeout = 4,
+                    })
+                    return
+                end
                 UIManager:close(confirm)
                 self:importEmbeddedXray(doc_json)
             end,
