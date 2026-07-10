@@ -193,6 +193,9 @@ function AIHelper:_reasoningConfigured()
 end
 
 function AIHelper:makeRequest(url, headers, request_body, timeout, maxtime)
+    if self.settings and self.settings.ai_fetching_enabled == false then
+        return nil, "error_api", "AI fetching disabled"
+    end
     local reasoning = self:_reasoningConfigured()
     timeout = timeout or (reasoning and 600 or 180)
     maxtime = maxtime or (reasoning and 1200 or 360)
@@ -455,6 +458,9 @@ end
 
 -- Fork a child process to perform the HTTP request. Returns true if started.
 function AIHelper:makeRequestAsync(request_params, result_file)
+    if self.settings and self.settings.ai_fetching_enabled == false then
+        return false
+    end
     local ok_ffi, ffiutil = pcall(require, "ffi/util")
     if not ok_ffi then
         ok_ffi, ffiutil = pcall(require, "ffiutil")

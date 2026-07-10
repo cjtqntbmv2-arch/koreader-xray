@@ -348,6 +348,13 @@ function XRayPlugin:log(msg)
     XRayLogger:log(msg)
 end
 
+-- Main switch: false = no on-device AI calls at all; the plugin then runs on
+-- cached and calibre-imported data only. Absent key = enabled (existing users).
+function XRayPlugin:isAiFetchingEnabled()
+    return self.ai_helper and self.ai_helper.settings
+        and self.ai_helper.settings.ai_fetching_enabled ~= false
+end
+
 function XRayPlugin:onReaderReady()
     self:autoLoadCache()
     -- Reset per-session chapter fetch tracking

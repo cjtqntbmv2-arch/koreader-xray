@@ -9,6 +9,26 @@ describe("AIHelper", function()
         AIHelper = require("xray_aihelper")
     end)
 
+    describe("ai_fetching_enabled chokepoint guard", function()
+        it("makeRequest refuses when fetching is disabled", function()
+            local old = AIHelper.settings
+            AIHelper.settings = { ai_fetching_enabled = false }
+            local ok, code, msg = AIHelper:makeRequest("http://example.invalid", {}, "{}")
+            AIHelper.settings = old
+            assert.is_nil(ok)
+            assert.are.equal("error_api", code)
+            assert.are.equal("AI fetching disabled", msg)
+        end)
+
+        it("makeRequestAsync refuses when fetching is disabled", function()
+            local old = AIHelper.settings
+            AIHelper.settings = { ai_fetching_enabled = false }
+            local started = AIHelper:makeRequestAsync({ url = "http://example.invalid" }, "/tmp/xray_spec_result")
+            AIHelper.settings = old
+            assert.is_false(started)
+        end)
+    end)
+
     describe("sanitize_utf8", function()
         it("should preserve valid ASCII", function()
             local input = "Hello World"

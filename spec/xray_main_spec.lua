@@ -49,6 +49,34 @@ describe("xray_main lifecycle", function()
     end)
 end)
 
+describe("isAiFetchingEnabled", function()
+    local XRayPlugin = require("main")
+    local function mk()
+        local plugin = createMockPlugin()
+        for k, v in pairs(XRayPlugin) do
+            if plugin[k] == nil then plugin[k] = v end
+        end
+        return plugin
+    end
+
+    it("defaults to enabled when the key is absent", function()
+        local plugin = mk()
+        assert.is_true(plugin:isAiFetchingEnabled())
+    end)
+
+    it("is disabled when the setting is false", function()
+        local plugin = mk()
+        plugin.ai_helper.settings.ai_fetching_enabled = false
+        assert.is_false(plugin:isAiFetchingEnabled())
+    end)
+
+    it("is disabled (falsy) before ai_helper exists", function()
+        local plugin = mk()
+        plugin.ai_helper = nil
+        assert.falsy(plugin:isAiFetchingEnabled())
+    end)
+end)
+
 describe("onPageUpdate battery short-circuit", function()
     it("does no timeline string work on later pages of an already handled chapter", function()
         local plugin = mkPlugin()
