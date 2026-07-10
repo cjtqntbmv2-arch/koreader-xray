@@ -722,13 +722,15 @@ describe("xray_prefetch", function()
             local plugin = switchPlugin(false)
             local shown_text = nil
             plugin.showPrefetchInfo = function(_, text) shown_text = text end
+            local fetched = false
+            plugin.continueWithFetch = function() fetched = true end
+            plugin.fetchFromAI = function() fetched = true end
 
             plugin:startOfflinePrefetch(false)
 
             assert.are.equal("ai_fetching_disabled_hint", shown_text)
             assert.falsy(plugin.prefetch_active)
-            local fetched = false
-            plugin.continueWithFetch = function() fetched = true end
+            assert.is_false(fetched)
         end)
 
         it("_prefetchNext with switch off and prefetch_silent false shows hint, sets silent flag, and calls _finishPrefetch", function()
