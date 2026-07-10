@@ -716,6 +716,160 @@ describe("xray_ui", function()
             assert.truthy(joined:find("relookup_button", 1, true))
         end)
 
+        describe("Merge Duplicates button gating", function()
+            it("showCharacters: Merge Duplicates dialog shows AI Scan button when ai_fetching enabled", function()
+                plugin.characters = { { name = "Alice", description = "Test" } }
+                plugin:showCharacters()
+                local menu = _G.ui_tracker.last_shown
+                assert.are.equal("Menu", menu.type)
+
+                -- Find Merge Duplicates item
+                local merge_item = nil
+                for _, item in ipairs(menu.args.item_table) do
+                    if item.text:find("merge_duplicates", 1, true) then
+                        merge_item = item
+                        break
+                    end
+                end
+                assert.is_not_nil(merge_item, "Merge Duplicates item not found")
+
+                -- Call the merge callback
+                _G.ui_tracker.last_shown = nil
+                merge_item.callback()
+
+                -- Check the ButtonDialog
+                local dialog = _G.ui_tracker.last_shown
+                assert.are.equal("ButtonDialog", dialog.type)
+                assert.is_not_nil(dialog.args.buttons)
+                assert.are.equal(1, #dialog.args.buttons)
+
+                local row = dialog.args.buttons[1]
+                -- When enabled, should have both AI Scan and Manual Pick
+                assert.are.equal(2, #row)
+
+                local has_ai_scan = false
+                local has_manual_pick = false
+                for _, btn in ipairs(row) do
+                    if btn.text:find("ai_scan", 1, true) then has_ai_scan = true end
+                    if btn.text:find("manual_pick", 1, true) then has_manual_pick = true end
+                end
+                assert.is_true(has_ai_scan, "AI Scan button should be present when enabled")
+                assert.is_true(has_manual_pick, "Manual Pick button should always be present")
+            end)
+
+            it("showCharacters: Merge Duplicates dialog hides AI Scan button when ai_fetching disabled", function()
+                plugin.ai_helper.settings.ai_fetching_enabled = false
+                plugin.characters = { { name = "Alice", description = "Test" } }
+                plugin:showCharacters()
+                local menu = _G.ui_tracker.last_shown
+                assert.are.equal("Menu", menu.type)
+
+                -- Find Merge Duplicates item
+                local merge_item = nil
+                for _, item in ipairs(menu.args.item_table) do
+                    if item.text:find("merge_duplicates", 1, true) then
+                        merge_item = item
+                        break
+                    end
+                end
+                assert.is_not_nil(merge_item, "Merge Duplicates item not found")
+
+                -- Call the merge callback
+                _G.ui_tracker.last_shown = nil
+                merge_item.callback()
+
+                -- Check the ButtonDialog
+                local dialog = _G.ui_tracker.last_shown
+                assert.are.equal("ButtonDialog", dialog.type)
+                assert.is_not_nil(dialog.args.buttons)
+                assert.are.equal(1, #dialog.args.buttons)
+
+                local row = dialog.args.buttons[1]
+                -- When disabled, should have only Manual Pick
+                assert.are.equal(1, #row)
+
+                local button_text = row[1].text
+                assert.is_nil(button_text:find("ai_scan", 1, true))
+                assert.truthy(button_text:find("manual_pick", 1, true))
+            end)
+
+            it("showLocations: Merge Duplicates dialog shows AI Scan button when ai_fetching enabled", function()
+                plugin.locations = { { name = "Winterfell", description = "Test" } }
+                plugin:showLocations()
+                local menu = _G.ui_tracker.last_shown
+                assert.are.equal("Menu", menu.type)
+
+                -- Find Merge Duplicates item
+                local merge_item = nil
+                for _, item in ipairs(menu.args.item_table) do
+                    if item.text:find("merge_duplicates", 1, true) then
+                        merge_item = item
+                        break
+                    end
+                end
+                assert.is_not_nil(merge_item, "Merge Duplicates item not found")
+
+                -- Call the merge callback
+                _G.ui_tracker.last_shown = nil
+                merge_item.callback()
+
+                -- Check the ButtonDialog
+                local dialog = _G.ui_tracker.last_shown
+                assert.are.equal("ButtonDialog", dialog.type)
+                assert.is_not_nil(dialog.args.buttons)
+                assert.are.equal(1, #dialog.args.buttons)
+
+                local row = dialog.args.buttons[1]
+                -- When enabled, should have both AI Scan and Manual Pick
+                assert.are.equal(2, #row)
+
+                local has_ai_scan = false
+                local has_manual_pick = false
+                for _, btn in ipairs(row) do
+                    if btn.text:find("ai_scan", 1, true) then has_ai_scan = true end
+                    if btn.text:find("manual_pick", 1, true) then has_manual_pick = true end
+                end
+                assert.is_true(has_ai_scan, "AI Scan button should be present when enabled")
+                assert.is_true(has_manual_pick, "Manual Pick button should always be present")
+            end)
+
+            it("showLocations: Merge Duplicates dialog hides AI Scan button when ai_fetching disabled", function()
+                plugin.ai_helper.settings.ai_fetching_enabled = false
+                plugin.locations = { { name = "Winterfell", description = "Test" } }
+                plugin:showLocations()
+                local menu = _G.ui_tracker.last_shown
+                assert.are.equal("Menu", menu.type)
+
+                -- Find Merge Duplicates item
+                local merge_item = nil
+                for _, item in ipairs(menu.args.item_table) do
+                    if item.text:find("merge_duplicates", 1, true) then
+                        merge_item = item
+                        break
+                    end
+                end
+                assert.is_not_nil(merge_item, "Merge Duplicates item not found")
+
+                -- Call the merge callback
+                _G.ui_tracker.last_shown = nil
+                merge_item.callback()
+
+                -- Check the ButtonDialog
+                local dialog = _G.ui_tracker.last_shown
+                assert.are.equal("ButtonDialog", dialog.type)
+                assert.is_not_nil(dialog.args.buttons)
+                assert.are.equal(1, #dialog.args.buttons)
+
+                local row = dialog.args.buttons[1]
+                -- When disabled, should have only Manual Pick
+                assert.are.equal(1, #row)
+
+                local button_text = row[1].text
+                assert.is_nil(button_text:find("ai_scan", 1, true))
+                assert.truthy(button_text:find("manual_pick", 1, true))
+            end)
+        end)
+
         describe("showCharacterSearch", function()
             local old_id
 
