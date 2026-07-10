@@ -17,6 +17,9 @@ msgstr "Erfolgreich von %s abgerufen!\n\nBuch: %s\nAutor: %s\n\nCharaktere: %d\n
 msgid "ai_fetch_complete_msg"
 msgstr "KI-Abruf abgeschlossen!"
 
+msgid "ai_fetching_disabled_hint"
+msgstr "KI-Abruf ist deaktiviert. In den X-Ray-Einstellungen aktivieren."
+
 msgid "ai_key_required"
 msgstr "Ein KI-API-Schlüssel ist erforderlich."
 
@@ -350,8 +353,14 @@ msgstr "X-Ray-Daten importiert (vorbereitet bis %d%%)."
 msgid "import_failed"
 msgstr "Die eingebetteten X-Ray-Daten konnten nicht importiert werden."
 
+msgid "import_no_data"
+msgstr "Keine calibre-X-Ray-Daten in diesem Buch gefunden."
+
 msgid "import_rejected"
 msgstr "Die eingebetteten X-Ray-Daten gehören nicht zu diesem Buch."
+
+msgid "import_replace_confirm"
+msgstr "Ersetzt die vorhandenen X-Ray-Daten dieses Buchs (Charaktere, Orte, Begriffe, Snapshots). Fortfahren?"
 
 msgid "import_running"
 msgstr "X-Ray-Daten aus calibre werden vorbereitet…"
@@ -428,6 +437,9 @@ msgstr "Logs gelöscht!"
 msgid "looking_up_msg"
 msgstr "Suche nach '%s'..."
 
+msgid "lookup_no_data_found"
+msgstr "Keine X-Ray-Daten zu '%s' gefunden."
+
 msgid "low_conf_match"
 msgstr "Teilweise Übereinstimmung – zeige '%s' für Ihre Anfrage. Tippen Sie unten, um den genauen Begriff abzurufen."
 
@@ -481,6 +493,12 @@ msgstr "Über"
 
 msgid "menu_about_help"
 msgstr "Plugin-Version und Beschreibung anzeigen; prüft auch auf Updates."
+
+msgid "menu_ai_fetching"
+msgstr "KI-Abruf aktivieren"
+
+msgid "menu_ai_fetching_help"
+msgstr "Wenn deaktiviert, ruft das Plugin keine KI-Daten mehr ab und nutzt nur vorhandene bzw. aus calibre importierte X-Ray-Daten."
 
 msgid "menu_ai_settings"
 msgstr "KI-Einstellungen"
@@ -580,6 +598,12 @@ msgstr "Historische Personen"
 
 msgid "menu_historical_figures_help"
 msgstr "Reale historische Personen, auf die das Buch verweist, mit kurzer Notiz."
+
+msgid "menu_import_calibre"
+msgstr "calibre-X-Ray importieren"
+
+msgid "menu_import_calibre_help"
+msgstr "Übernimmt im Buch eingebettete X-Ray-Daten aus calibre. Ersetzt nach Rückfrage die vorhandenen X-Ray-Daten dieses Buchs."
 
 msgid "menu_language"
 msgstr "Sprache"

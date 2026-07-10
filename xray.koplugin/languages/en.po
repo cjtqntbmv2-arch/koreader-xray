@@ -17,6 +17,9 @@ msgstr "Successfully fetched from %s!\n\nBook: %s\nAuthor: %s\n\nCharacters: %d\
 msgid "ai_fetch_complete_msg"
 msgstr "AI Fetch Complete!"
 
+msgid "ai_fetching_disabled_hint"
+msgstr "AI fetching is disabled. Enable it in the X-Ray settings."
+
 msgid "ai_key_required"
 msgstr "An AI API key is required."
 
@@ -350,8 +353,14 @@ msgstr "X-Ray data imported (prepared to %d%%)."
 msgid "import_failed"
 msgstr "Could not import the embedded X-Ray data."
 
+msgid "import_no_data"
+msgstr "No calibre X-Ray data found in this book."
+
 msgid "import_rejected"
 msgstr "The embedded X-Ray data does not match this book."
+
+msgid "import_replace_confirm"
+msgstr "This replaces the existing X-Ray data for this book (characters, locations, terms, snapshots). Continue?"
 
 msgid "import_running"
 msgstr "Preparing X-Ray data from calibre…"
@@ -428,6 +437,9 @@ msgstr "Logs cleared!"
 msgid "looking_up_msg"
 msgstr "Looking up '%s'..."
 
+msgid "lookup_no_data_found"
+msgstr "No X-Ray data found for '%s'."
+
 msgid "low_conf_match"
 msgstr "Partial match — showing '%s' for your query. Tap below to fetch the exact term."
 
@@ -481,6 +493,12 @@ msgstr "About"
 
 msgid "menu_about_help"
 msgstr "Show plugin version and description; also checks for updates."
+
+msgid "menu_ai_fetching"
+msgstr "Enable AI fetching"
+
+msgid "menu_ai_fetching_help"
+msgstr "When disabled, the plugin makes no AI requests and uses only existing or calibre-imported X-Ray data."
 
 msgid "menu_ai_settings"
 msgstr "AI Settings"
@@ -580,6 +598,12 @@ msgstr "Historical Figures"
 
 msgid "menu_historical_figures_help"
 msgstr "Real-world historical figures the book references, with a short note on each."
+
+msgid "menu_import_calibre"
+msgstr "Import calibre X-Ray"
+
+msgid "menu_import_calibre_help"
+msgstr "Adopts X-Ray data embedded in the book by calibre. Replaces this book's existing X-Ray data after a confirmation."
 
 msgid "menu_language"
 msgstr "Language"
