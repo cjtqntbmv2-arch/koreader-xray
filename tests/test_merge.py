@@ -522,3 +522,20 @@ def test_timeline_drops_events_with_whitespace_only_chapter():
     )
 
     assert state.timeline == []
+
+
+def test_clean_response_is_a_fixpoint_even_when_role_truncation_lands_on_a_space():
+    """generate.py re-cleans cached chunks on resume, so a resumed run must
+    produce the same bytes as a fresh one. The 40-char role cut can land
+    mid-space; without rstrip the second pass would remove it."""
+    raw = {
+        "characters": [{"name": "A", "role": "x" * 39 + " tail"}],
+        "historical_figures": [{"name": "H", "role": "y" * 39 + " tail"}],
+    }
+
+    once = clean_response(raw)
+    twice = clean_response(once)
+
+    assert once == twice
+    assert once["characters"][0]["role"] == "x" * 39
+    assert once["historical_figures"][0]["role"] == "y" * 39

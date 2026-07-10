@@ -144,7 +144,12 @@ def clean_response(raw: dict, language: str = "en") -> dict:
     characters = [
         {
             "name": _first_nonempty(c, _CHAR_NAME_KEYS, strings["unnamed_character"]),
-            "role": _str(c, "role")[:40],
+            # rstrip AFTER the cut: a 40-char slice can end mid-space, and a
+            # second pass over this output would strip that space away. Without
+            # it clean_response is not a fixpoint -- generate.py re-cleans
+            # cached chunks on resume, so a resumed run would differ from a
+            # fresh one by exactly that trailing byte.
+            "role": _str(c, "role")[:40].rstrip(),
             "description": _first_nonempty(c, _CHAR_DESC_KEYS, ""),
             "gender": _str(c, "gender"),
             "occupation": _first_nonempty(c, _CHAR_OCCUPATION_KEYS, ""),
@@ -169,7 +174,7 @@ def clean_response(raw: dict, language: str = "en") -> dict:
         {
             "name": _first_nonempty(h, _HIST_NAME_KEYS, strings["unnamed_person"]),
             "biography": _first_nonempty(h, _HIST_BIO_KEYS, ""),
-            "role": _first_nonempty(h, _HIST_ROLE_KEYS, "")[:40],
+            "role": _first_nonempty(h, _HIST_ROLE_KEYS, "")[:40].rstrip(),  # fixpoint, see above
             "importance_in_book": _first_nonempty(h, _HIST_IMPORTANCE_KEYS, ""),
             "context_in_book": _first_nonempty(h, _HIST_CONTEXT_KEYS, ""),
         }
