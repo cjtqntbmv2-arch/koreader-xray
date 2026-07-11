@@ -1,6 +1,6 @@
 # X-Ray Plugin for KOReader
 
-![version](https://img.shields.io/badge/version-26.7.17-blue)
+![version](https://img.shields.io/badge/version-26.7.18-blue)
 ![Platform](https://img.shields.io/badge/platform-KOReader-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-yellow.svg)
 
