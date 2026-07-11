@@ -1277,6 +1277,22 @@ describe("xray_import", function()
             assert.are.equal("no checkpoints", reason)
             assert.is_true(had)
         end)
+
+        it("returns the companion's reason when it fails the gate and embedded is absent", function()
+            -- Distinct from the test above: there the ONLY source is embedded.
+            -- Here companion is the one present-but-rejected source, and
+            -- embedded is absent -- pinning the tail `if companion then return
+            -- nil, companion_reason, true end` branch specifically.
+            local p = newPlugin{
+                _readCompanionXray = function() return BADGATE end,
+                _readEmbeddedXray  = function() return nil end,
+                _gateImport = function() return "no checkpoints" end,
+            }
+            local doc, reason, had = p:_selectXraySource("/b.epub", {})
+            assert.is_nil(doc)
+            assert.are.equal("no checkpoints", reason)
+            assert.is_true(had)
+        end)
     end)
 
     describe("callers adopt companion", function()
@@ -1303,6 +1319,20 @@ describe("xray_import", function()
         it("manual path imports the selected companion (no existing cache)", function()
             local p, imported = pluginWithDoc(nil)
             p:manualImportEmbeddedXray()
+            assert.are.equal(GOOD, imported.doc)
+        end)
+
+        it("manual path with an existing cache shows a ConfirmBox and imports only on confirm", function()
+            local p, imported = pluginWithDoc({ characters = {} })
+            p:manualImportEmbeddedXray()
+
+            -- Import deferred: the ConfirmBox is up, but nothing has fired yet.
+            local confirm = _G.ui_tracker.last_shown
+            assert.are.equal("ConfirmBox", confirm.type)
+            assert.is_not_nil(confirm.args.ok_callback)
+            assert.is_nil(imported.doc)
+
+            confirm.args.ok_callback()
             assert.are.equal(GOOD, imported.doc)
         end)
     end)
