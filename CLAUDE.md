@@ -103,8 +103,13 @@ kopie erst nach `_validate_embedded_epub()` (Zip-Integrität + Byte-Roundtrip de
 - **API-Keys** nie committen; Nutzer-Config bleibt außerhalb des Repos bzw. in
   gitignorten Dateien.
 - Repo ist lokal (kein Remote). Version in `VERSION` + README-Badge + `XRayGeneratorPlugin.version`,
-  SemVer ab 0.1.0; Tags/Push entfallen bis ein Remote existiert. Version bleibt 0.1.0, bis das
-  Paar calibre-Generator + KOReader-Importer an einem echten Buch end-to-end verifiziert ist.
+  SemVer ab 0.1.0; Tags/Push entfallen bis ein Remote existiert. **End-to-end verifiziert am
+  2026-07-11** (echtes Buch „Die Herren von Winterfell" auf einem Kobo: calibre generiert → embeddet
+  → KOReader-Importer liest `xray/xray.json` → Viewer zeigt spoiler-gestaffelte Daten; `xray_cache.lua`
+  + Snapshots entstehen). Die calibre-Seite war dabei korrekt; der Erst-Lauf legte allein einen Bug im
+  KOReader-Importer offen (BusyBox-`unzip` legt das `-d`-Zielverzeichnis nicht an — gefixt in
+  `../koreader-xray-plugin-main`, `xray_import.lua:_readEmbeddedXray` via `mkdir -p`). Damit ist die
+  bisherige Freeze-Bedingung erfüllt; künftige nennenswerte Änderungen bumpen normal nach SemVer.
 - **Bewusste Divergenzen vom Lua** (jede ist im Code kommentiert, vor allem in `xray_core/merge.py`):
   - **Keine Inhalts-Platzhalter.** `role`/`description`/`biography`/`importance_in_book`/
     `context_in_book` bleiben leer, statt wie Lua einen Platzhalter einzubrennen (z. B.
