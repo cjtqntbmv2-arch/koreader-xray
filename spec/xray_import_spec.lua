@@ -1278,4 +1278,32 @@ describe("xray_import", function()
             assert.is_true(had)
         end)
     end)
+
+    describe("callers adopt companion", function()
+        local GOOD = { schema_version = 1, checkpoints = {{}}, book_fingerprint = { title = "T" } }
+
+        local function pluginWithDoc(book_data)
+            local imported = {}
+            local p = newPlugin{
+                book_data = book_data,
+                ui = { document = { file = "/b.epub", getProps = function() return { title = "T" } end } },
+                loc = { t = function(_, k) return k end },
+                _selectXraySource = function() return GOOD, nil, true end,
+                importEmbeddedXray = function(self, doc) imported.doc = doc end,
+            }
+            return p, imported
+        end
+
+        it("auto path imports the selected companion", function()
+            local p, imported = pluginWithDoc(nil)
+            p:maybeImportEmbeddedXray()
+            assert.are.equal(GOOD, imported.doc)
+        end)
+
+        it("manual path imports the selected companion (no existing cache)", function()
+            local p, imported = pluginWithDoc(nil)
+            p:manualImportEmbeddedXray()
+            assert.are.equal(GOOD, imported.doc)
+        end)
+    end)
 end)

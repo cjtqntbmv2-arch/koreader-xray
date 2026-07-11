@@ -582,25 +582,24 @@ function M:_selectXraySource(book_path, props)
     return nil, nil, false
 end
 
--- Cheap guards first, then the zip probe, then the gate.
+-- Cheap guards first, then source selection (companion, then embedded zip probe + gate).
 function M:maybeImportEmbeddedXray()
     if self.prefetch_active or self.bg_fetch_active then return end
     local book_path = self.ui and self.ui.document and self.ui.document.file
     if not book_path or not book_path:lower():match("%.epub$") then return end
 
-    local doc_json = self:_readEmbeddedXray(book_path)
-    if not doc_json then return end
-
     local props = (self.ui.document.getProps and self.ui.document:getProps()) or {}
-    local reason = self:_gateImport(doc_json, props)
-    if reason then
-        -- The book DOES carry X-Ray data and we are refusing it. Saying so is the
-        -- only diagnostic the user has: debug logging is off by default.
-        self:log("XRayPlugin: embedded X-Ray data rejected -- " .. reason)
-        UIManager:show(InfoMessage:new{
-            text = self.loc:t("import_rejected") or "The embedded X-Ray data does not match this book.",
-            timeout = 4,
-        })
+    local doc_json, reason = self:_selectXraySource(book_path, props)
+    if not doc_json then
+        if reason then
+            -- The book DOES carry X-Ray data and we are refusing it. Saying so is the
+            -- only diagnostic the user has: debug logging is off by default.
+            self:log("XRayPlugin: X-Ray data rejected -- " .. reason)
+            UIManager:show(InfoMessage:new{
+                text = self.loc:t("import_rejected") or "The embedded X-Ray data does not match this book.",
+                timeout = 4,
+            })
+        end
         return
     end
     self:importEmbeddedXray(doc_json)
@@ -618,9 +617,7 @@ function M:manualImportEmbeddedXray()
         return
     end
     local book_path = self.ui and self.ui.document and self.ui.document.file
-    local doc_json = book_path and book_path:lower():match("%.epub$")
-        and self:_readEmbeddedXray(book_path) or nil
-    if not doc_json then
+    if not book_path or not book_path:lower():match("%.epub$") then
         UIManager:show(InfoMessage:new{
             text = self.loc:t("import_no_data") or "No calibre X-Ray data found in this book.",
             timeout = 4,
@@ -628,11 +625,12 @@ function M:manualImportEmbeddedXray()
         return
     end
     local props = (self.ui.document.getProps and self.ui.document:getProps()) or {}
-    local reason = self:_gateImport(doc_json, props)
-    if reason then
-        self:log("XRayPlugin: manual import rejected -- " .. reason)
+    local doc_json, reason = self:_selectXraySource(book_path, props)
+    if not doc_json then
+        if reason then self:log("XRayPlugin: manual import rejected -- " .. reason) end
         UIManager:show(InfoMessage:new{
-            text = self.loc:t("import_rejected") or "The embedded X-Ray data does not match this book.",
+            text = (reason and (self.loc:t("import_rejected") or "The embedded X-Ray data does not match this book."))
+                   or (self.loc:t("import_no_data") or "No calibre X-Ray data found in this book."),
             timeout = 4,
         })
         return
