@@ -1547,7 +1547,9 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
         local min_tl_len = math.floor(tl_len * 0.75)
         local note_tpl = (self.prompts and self.prompts.timeline_length_note)
             or " Write between %d and %d characters. Do NOT write a shorter summary unless the chapter has almost no content."
-        tl_guidance = tl_guidance .. string.format(note_tpl, min_tl_len, tl_len)
+        local ok_note, note = pcall(string.format, note_tpl, min_tl_len, tl_len)
+        tl_guidance = tl_guidance .. (ok_note and note
+            or (" Write between " .. tostring(min_tl_len) .. " and " .. tostring(tl_len) .. " characters."))
 
         final_prompt = final_prompt
             :gsub("{MAX_CHAR_DESC}",    tostring(char_len))
