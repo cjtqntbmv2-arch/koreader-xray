@@ -26,7 +26,8 @@ return {
 1. AUSGABE: ausschließlich EIN gültiges JSON-Objekt. Kein Markdown, keine Codezäune (```), kein Text davor oder danach.
 2. JSON-SICHERHEIT: Doppelte Anführungszeichen in Strings escapen (\"). Keine rohen Zeilenumbrüche in Strings (außer als \n).
 3. QUELLE: Aussagen zu fiktiven Inhalten stützen Sie ausschließlich auf den mitgelieferten Buchkontext. Trainingswissen ist nur dort erlaubt, wo die Aufgabe es ausdrücklich freigibt (reale historische Personen, Serien-Metadaten).
-4. SPOILER: Die angegebene Lesefortschritts-Grenze ist absolut. Inhalte danach existieren für Sie nicht.]],
+4. SPOILER: Die angegebene Lesefortschritts-Grenze ist absolut. Inhalte danach existieren für Sie nicht.
+5. AUSGABESPRACHE: Schreibe jeden beschreibenden Text-Wert (event, description, role, occupation, biography, definition, context_in_book, importance_in_book) auf Deutsch. AUSNAHME: Übernimm chapter, name und aliases wörtlich aus dem Buchtext — übersetze keine Eigennamen oder Kapitelüberschriften.]],
 
     -- Author-only prompt (For quick bio lookup)
     author_only = [[# METADATEN
@@ -78,6 +79,7 @@ Vollständige X-Ray-Analyse. Ausgabe: genau EIN JSON-Objekt nach dem Schema unte
 - Bis zu {NUM_HIST} reale, allgemein anerkannte historische Personen (z. B. Präsidenten, Autoren, Generäle), die in erzählenden Teilen erwähnt werden.
 - Fiktive Charaktere gehören immer in "characters" – auch wenn sie mit realen Ereignissen interagieren.
 - "biography" und "role": internes Wissen erlaubt. "context_in_book": ausschließlich aus dem Buchkontext.
+- KLARSTELLUNG: historical_figures ist ausschließlich für reale Personen der echten Menschheitsgeschichte (z. B. Napoleon, Abraham Lincoln) – nimm eine solche Person auch dann auf, wenn das Buch sie nur erwähnt und sie nie auf der Seite auftritt. Erfundene In-World-Ahnen, Legenden oder lange verstorbene fiktive Figuren gehören in "characters", auch wenn sie in der Story-Welt berühmt sind – niemals in historical_figures oder terms. Bei reiner Sekundärwelt-Fiktion ist die Liste oft leer; das ist korrekt – erfinde oder erzwinge keine Einträge.
 
 ## 4. locations
 - Extrahieren Sie {NUM_LOCS} bedeutende Orte aus dem Kontext.
@@ -353,7 +355,15 @@ Sekundärbeschreibung: %s
     context_footer = [[
 
 ---
-Führen Sie jetzt, basierend ausschließlich auf dem gesamten Kontext oben, die eingangs definierte Aufgabe aus. Beachten Sie die Spoiler-Grenze und geben Sie nur das geforderte JSON-Objekt aus – ohne Codezäune, ohne Begleittext.]],
+Führen Sie jetzt, basierend ausschließlich auf dem gesamten Kontext oben, die eingangs definierte Aufgabe aus. Beachten Sie die Spoiler-Grenze und geben Sie nur das geforderte JSON-Objekt aus – ohne Codezäune, ohne Begleittext. AUSGABESPRACHE: Alle beschreibenden Text-Werte auf Deutsch; chapter, name und aliases wörtlich aus dem Buchtext.]],
+
+    timeline_guidance = {
+        brief    = { guidance = "Schreibe eine kurze, stichwortartige Zusammenfassung.", example = "Der Held entkommt der brennenden Stadt." },
+        concise  = { guidance = "Schreibe eine knappe Zusammenfassung in einem Satz.", example = "Der Held entkommt der brennenden Stadt und trifft am Flussübergang wieder auf seine Gefährten." },
+        detailed = { guidance = "Schreibe eine ausführliche Zusammenfassung mit Kontext und wesentlichen Folgen.", example = "Der Held entkommt der brennenden Stadt, von Wachen verfolgt, und trifft am Flussübergang wieder auf seine Gefährten, wo sie ihr weiteres Vorgehen gegen den Antagonisten planen." },
+        rich     = { guidance = "Schreibe eine reichhaltige, ausführliche Schilderung mit Handlungen der Figuren, wichtigen Ereignissen und deren Folgen.", example = "Der Held entkommt im Schutz der Dunkelheit der brennenden Stadt, verfolgt von den Wachen des Königs. Nach einer aufreibenden Hetzjagd trifft er am Flussübergang wieder auf seine Gefährten, wo sie erfahren, dass der Antagonist die östliche Festung eingenommen hat, und mit der Planung eines Gegenschlags beginnen." },
+    },
+    timeline_length_note = " Schreibe zwischen %d und %d Zeichen. Schreibe keine kürzere Zusammenfassung, es sei denn, das Kapitel hat kaum Inhalt.",
 
     -- Fallback strings (unverändert)
     fallback = {

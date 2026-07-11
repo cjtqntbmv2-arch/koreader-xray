@@ -1,6 +1,6 @@
 return {
     -- System instruction
-    system_instruction = "You are an expert literary researcher. Your response must be ONLY in valid JSON format. Ensure data is highly accurate and pertains strictly to the provided context.",
+    system_instruction = "You are an expert literary researcher. Your response must be ONLY in valid JSON format. Ensure data is highly accurate and pertains strictly to the provided context. OUTPUT LANGUAGE: Write every descriptive text value (event, description, role, occupation, biography, definition, context_in_book, importance_in_book) in English. EXCEPTION: keep chapter, name, and aliases verbatim from the book text — never translate proper names or chapter titles.",
 
     -- Author-only prompt (For quick bio lookup)
     author_only = [[Identify and provide biography for the author of the book "%s". 
@@ -83,6 +83,7 @@ CRITICAL for Characters & Historical Figures:
 - Historical Figures MUST be verified real-world people with widespread historical recognition.
 - DO NOT include purely fictional characters in the historical figures list, even if they interact with real historical events. Fictional characters MUST go in the `characters` array.
 - For Historical Figures ONLY, you may use your internal knowledge to write their general `biography` and historical `role`, but you MUST use the book context for their `context_in_book`.
+- CLARIFICATION: `historical_figures` is EXCLUSIVELY for real people from actual human history (e.g. Napoleon, Abraham Lincoln) — include such a person even if the book only mentions them and they never appear on-page. Invented in-world ancestors, legends, or long-dead fictional figures belong in the `characters` array, even if famous within the story's world — never in `historical_figures` or `terms`. For pure secondary-world fiction this list is often empty; that is correct — do not invent or force entries.
 NO SPOILERS: Stop exactly at the %d%% mark.
 
 ALGORITHM FOR LOCATIONS:
@@ -315,6 +316,14 @@ REQUIRED JSON FORMAT:
     { "chapter": "Book Summary", "event": "A single, highly detailed, comprehensive recap of the entire book's plot, main events, and resolution (max 2000 characters). You MUST format this recap using multiple distinct paragraphs separated by double newlines (\\n\\n) for readability instead of a single wall of text." }
   ]
 }]],
+
+    timeline_guidance = {
+        brief    = { guidance = "Write a brief one-phrase summary.", example = "The hero escapes the burning city." },
+        concise  = { guidance = "Write a concise single-sentence summary.", example = "The hero escapes the burning city and reunites with his companions at the river crossing." },
+        detailed = { guidance = "Write a detailed summary including context and key consequences.", example = "The hero escapes the burning city, pursued by guards, and reunites with companions at the river crossing, where they plan their next move against the antagonist." },
+        rich     = { guidance = "Write a rich, full narrative description including character actions, key events, and their consequences.", example = "The hero escapes the burning city under cover of darkness, pursued by the king's guards. After a harrowing chase, he reunites with companions at the river crossing, where they learn the antagonist has seized the eastern fortress and begin planning a counterattack." },
+    },
+    timeline_length_note = " Write between %d and %d characters. Do NOT write a shorter summary unless the chapter has almost no content.",
 
     -- Fallback strings
     fallback = {
