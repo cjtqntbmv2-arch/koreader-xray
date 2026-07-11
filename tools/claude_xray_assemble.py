@@ -55,7 +55,7 @@ def _precheck(workdir, manifest):
 def assemble(epub_path, workdir, out_dir):
     base = os.path.basename(epub_path)
     final_path = os.path.join(out_dir, base)
-    if os.path.abspath(final_path) == os.path.abspath(epub_path):
+    if os.path.realpath(final_path) == os.path.realpath(epub_path):
         raise SystemExit(
             "assemble aborted -- --out resolves to the source EPUB's own "
             f"directory ({os.path.abspath(epub_path)!r}). The embedded copy "
@@ -98,7 +98,7 @@ def assemble(epub_path, workdir, out_dir):
     with open(companion, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
     # embedded copy: identical original filename, source untouched
-    embed_xray(epub_path, doc, os.path.join(out_dir, base))
+    embed_xray(epub_path, doc, final_path)
     return doc
 
 

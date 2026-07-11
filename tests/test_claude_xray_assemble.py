@@ -87,6 +87,27 @@ def test_assemble_refuses_out_dir_matching_source_epub_dir(tmp_path):
     assert open(epub, "rb").read() == src_before
 
 
+def test_assemble_refuses_out_dir_symlinked_to_source_epub_dir(tmp_path):
+    # Same collision as the direct-path test above, but reached through a
+    # symlink: os.path.abspath normalizes . / .. / trailing slashes but does
+    # NOT resolve symlinks. On macOS /tmp -> /private/tmp, so a real-world
+    # relative --out from cwd /tmp slips past an abspath-only guard even
+    # though it is the same file. os.path.realpath resolves symlinks and
+    # closes this gap.
+    epub, workdir = _prepare(tmp_path)
+    src_before = open(epub, "rb").read()
+    link = tmp_path / "link"
+    try:
+        os.symlink(os.path.dirname(epub), link)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported on this platform")
+
+    with pytest.raises(SystemExit):
+        assemble(epub, workdir, str(link))
+
+    assert open(epub, "rb").read() == src_before
+
+
 def test_assemble_detects_text_hash_drift(tmp_path):
     # The manifest records book.text_hash at plan time. If the EPUB changes
     # between planning and assembling, assemble must refuse rather than
