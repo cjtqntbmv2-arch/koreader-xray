@@ -18,6 +18,7 @@ from xray_core.embed import embed_xray
 from xray_core.epub import read_epub
 from xray_core.gemini import GeminiClient
 from xray_core.generate import generate_xray
+from xray_core.prompts import EXTRACT_RESPONSE_SCHEMA
 
 
 def _fixture_transport(fixture_dir):
@@ -53,7 +54,10 @@ def _build_parser():
         prog="xray_core", description="Generate xray.json for an EPUB (Gemini-backed)."
     )
     parser.add_argument("book", help="path to the EPUB file")
-    parser.add_argument("--api-key", required=True, help="Gemini API key")
+    parser.add_argument(
+        "--api-key", default=os.environ.get("GEMINI_API_KEY"),
+        help="Gemini API key (defaults to the GEMINI_API_KEY env var)",
+    )
     parser.add_argument("--model", default="gemini-3.5-flash")
     parser.add_argument("--language", default="en")
     parser.add_argument("--detail", choices=["normal", "detailed"], default="normal")
@@ -70,9 +74,16 @@ def _build_parser():
 def main(argv=None) -> int:
     args = _build_parser().parse_args(argv)
 
+    if not args.api_key:
+        print("error: no API key (pass --api-key or set GEMINI_API_KEY)", file=sys.stderr)
+        return 2
+
     book = read_epub(args.book)
     transport = _fixture_transport(args.transport_fixture) if args.transport_fixture else None
-    client = GeminiClient(args.api_key, model=args.model, transport=transport)
+    client = GeminiClient(
+        args.api_key, model=args.model, transport=transport,
+        response_schema=EXTRACT_RESPONSE_SCHEMA,
+    )
 
     doc = generate_xray(
         book, client, args.language, args.detail,

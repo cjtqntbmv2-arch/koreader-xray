@@ -32,6 +32,43 @@ DETAIL_CAPS = {
     "detailed": {"char": 500, "loc": 300, "tl": 200, "hist": 400, "term": 300},  # Lua very-detailed = clamp maxima
 }
 
+# Chunk-first framing (see build_prompt): [prefix + chunk + sep + instructions].
+# extract and gleaning share [system + prefix + chunk + sep] byte-for-byte.
+_SEGMENT_PREFIX = "BOOK TEXT CONTEXT:\n"
+_INSTR_SEP = "\n\n---\n\n"
+
+# Native structured-output schema for the extract/glean response (Gemini
+# responseSchema = OpenAPI subset). Flat and all-optional so clean_response's
+# tolerant .get() handling stays correct and the same schema fits every call
+# type. Replaces the bulky in-prompt JSON example. Fields mirror
+# merge.clean_response (xray_core/merge.py).
+_STR = {"type": "string"}
+_STR_ARR = {"type": "array", "items": {"type": "string"}}
+
+
+def _obj(**props):
+    return {"type": "object", "properties": dict(props)}
+
+
+def _arr_of(**props):
+    return {"type": "array", "items": _obj(**props)}
+
+
+EXTRACT_RESPONSE_SCHEMA = _obj(
+    book_type={"type": "string", "enum": ["fiction", "non_fiction"]},
+    characters=_arr_of(
+        name=_STR, aliases=_STR_ARR, role=_STR, gender=_STR,
+        occupation=_STR, description=_STR,
+    ),
+    historical_figures=_arr_of(
+        name=_STR, role=_STR, biography=_STR,
+        importance_in_book=_STR, context_in_book=_STR,
+    ),
+    locations=_arr_of(name=_STR, description=_STR, importance=_STR, aliases=_STR_ARR),
+    terms=_arr_of(name=_STR, expanded=_STR, category=_STR, definition=_STR, aliases=_STR_ARR),
+    timeline=_arr_of(chapter=_STR, event=_STR),
+)
+
 SYSTEM_INSTRUCTION_EN = (
     r"""You are an expert literary researcher. Your response must be ONLY in valid JSON format. Ensure data is highly accurate and pertains strictly to the provided context."""
     " Use ONLY information present in the provided text. Do not add facts "
@@ -53,108 +90,29 @@ COMPREHENSIVE_XRAY_EN = r"""Book: %s
 Author: %s
 Reading Progress: %d%%
 
-TASK: Perform a complete X-Ray analysis. Output ONLY a valid JSON object.
+TASK: Perform a complete X-Ray analysis of the BOOK TEXT CONTEXT above -- one bounded segment of the book, up to the reader's current progress. Base every extraction strictly on that text. Return ONLY a valid JSON object with keys: book_type, characters, historical_figures, locations, terms, timeline.
 
-CRITICAL ATTENTION PARTITIONING:
-You are processing a massive document with two text blocks provided at the end of this prompt:
-1. "CHAPTER SAMPLES": This is the macro-context of the book up to the reader's current location.
-2. "BOOK TEXT CONTEXT": This is the micro-context of the most recent 20k characters.
+TIMELINE (highest priority):
+- Identify the narrative chapters in the text; EXCLUDE non-narrative front/backmatter (Cover, Title Page, Copyright, Table of Contents, Dedication, Acknowledgments, Also By).
+- Create EXACTLY ONE `timeline` event per narrative chapter, in reading order. `chapter` matches the heading as it appears; `event` summarizes only that chapter. {TIMELINE_DETAIL_GUIDANCE} Do NOT group or skip chapters. (event: max {MAX_TIMELINE_EVENT} chars.)
 
-ANTI-TRUNCATION PROTOCOL (CRITICAL):
-You have a strict maximum output limit. If the "CHAPTER SAMPLES" contains MORE THAN 40 chapters (e.g., an omnibus edition):
-1. You MUST reduce the characters list to ONLY the top 10 absolute most important characters.
-2. You MUST reduce character descriptions to MAX {MAX_CHAR_DESC} characters.
-3. You MUST reduce timeline event summaries to MAX {MAX_TIMELINE_EVENT} characters.
-Failure to compress your output for massive books will cause the JSON to truncate and fail.
+CHARACTERS & HISTORICAL FIGURES:
+- Use each character's FULL, formal name (e.g. "Abraham Van Helsing"), not a casual nickname. Put up to 3 nicknames/titles in `aliases`. A last name shared by several characters (family members) is NOT an alias for any of them.
+- Fields: `role` (short archetype label, <=40 chars), `gender` (Male/Female/Unknown), `occupation` (job/status), `description` (STRICTLY from the text, no inference or outside knowledge, max {MAX_CHAR_DESC} chars). A character only briefly mentioned gets a correspondingly brief description.
+- Add up to {NUM_HIST} NOTABLE REAL historical people (Presidents, Authors, Generals) to `historical_figures` with `role`, `biography` (max {MAX_HIST_BIO} chars), `importance_in_book`, and `context_in_book` (max 100 chars). They must be verified, widely-recognized real people; for these you MAY use internal knowledge for biography/role, but `context_in_book` must come from the text. Purely fictional figures go in `characters`, never here.
+- Do NOT extract anyone mentioned only in front/backmatter.
 
-ALGORITHM FOR TIMELINE (HIGHEST PRIORITY):
-To prevent skipping chapters or hallucinating events, you MUST execute this exact loop:
-Step 1. Look ONLY at the "CHAPTER SAMPLES" block. Identify the narrative chapters.
-Step 2. EXCLUDE all non-narrative frontmatter and backmatter (e.g., Cover, Title Page, Copyright, Table of Contents, Dedication, Acknowledgments, Also By).
-Step 3. For each narrative chapter, starting from the very first one, create EXACTLY ONE event object in the `timeline` array.
-Step 4. The `chapter` field MUST exactly match the chapter header in the sample. (Map them strictly in sequential order).
-Step 5. Summarize that specific chapter in the `event` field. {TIMELINE_DETAIL_GUIDANCE} Do NOT group chapters.
-Step 6. NO SPOILERS: Stop exactly at the %d%% mark. Do not include events past this progress.
+LOCATIONS:
+- Extract {NUM_LOCS} significant locations, each with a `description` (max {MAX_LOC_DESC} chars).
 
-ALGORITHM FOR CHARACTERS & HISTORICAL FIGURES:
-Step 1. Extract important characters using both text blocks. ({NUM_CHARS} normal, MAX 10 if omnibus).
-Step 2. You MUST use their FULL, formal names (e.g., "Abraham Van Helsing"). Do NOT use casual nicknames as the main name.
-Step 3. Provide up to 3 alternative names, titles, or nicknames this character goes by in an `aliases` array. Include their common first name and last name if used. IMPORTANT: If a last name is shared by multiple characters (e.g., family members), DO NOT include it as an alias for either character.
-Step 4. Actively scan for up to {NUM_HIST} NOTABLE REAL people from human history (e.g., Presidents, Authors, Generals). Add them to `historical_figures`.
-CRITICAL for Characters & Historical Figures:
-- DO NOT extract characters or historical figures mentioned ONLY in non-narrative frontmatter or backmatter (e.g., Acknowledgments, Author Bio, Dedications, Title Page, Copyright).
-- Historical Figures MUST be verified real-world people with widespread historical recognition.
-- DO NOT include purely fictional characters in the historical figures list, even if they interact with real historical events. Fictional characters MUST go in the `characters` array.
-- For Historical Figures ONLY, you may use your internal knowledge to write their general `biography` and historical `role`, but you MUST use the book context for their `context_in_book`.
-NO SPOILERS: Stop exactly at the %d%% mark.
+TERMS:
+- non_fiction: {NUM_TERMS} technical terms, acronyms, or concepts a layperson wouldn't know (category: Acronym / Technical Term / Concept / Jargon).
+- fiction: {NUM_TERMS} world-building elements a new reader needs explained -- invented factions, organizations, magic systems, technologies, creatures, languages, lore (category: Faction / Magic System / Technology / Creature / Organization / Lore / Language).
+- Not character or location names, not everyday words. `expanded`: the acronym's full form, else repeat the name. `definition`: max {MAX_TERM_DEF} chars.
 
-ALGORITHM FOR LOCATIONS:
-Step 1. Extract {NUM_LOCS} significant locations. NO SPOILERS: Stop exactly at the %d%% mark.
-
-ALGORITHM FOR TERMS:
-Step 0. Declare "book_type" as "fiction" or "non_fiction" at the JSON root.
-Step 1. If non_fiction: extract {NUM_TERMS} significant technical terms, acronyms, jargon, or concepts readers would not know without specialized knowledge. Use appropriate categories like Acronym, Technical Term, Concept, or Jargon.
-Step 2. If fiction: extract {NUM_TERMS} significant world-building elements that a new reader would need explained—such as invented factions, organizations, magic systems, technologies, creatures, languages, or in-universe lore.
-   - Do NOT include character names or location names (those are tracked separately).
-   - DO NOT extract real-world common words or concepts.
-   - Use appropriate categories: Faction, Magic System, Technology, Creature, Organization, Lore, Language.
-Step 3. Include what the acronym/phrase stands for in "expanded". If not an acronym/phrase, repeat the name.
-Step 4. DO NOT include common everyday words.
-
-STRICT SPOILER RULES:
-- ABSOLUTELY NO information from after the current reading progress. Stop exactly at the %d%% mark.
-- Descriptions must reflect the characters' state at this exact point in the book.
-
-STRICT KNOWLEDGE SOURCE RULES (CRITICAL):
-- For FICTIONAL CHARACTERS: Your descriptions MUST be based SOLELY on what is explicitly stated or clearly implied in the provided text. Do NOT supplement with knowledge from prior training, external sources, or general awareness of the book/series/author.
-- If a character has only been briefly mentioned in the text so far, your description must reflect that limited information only. Do NOT infer, assume, or add any detail not grounded in the provided context.
-- The ONLY exception is for REAL HISTORICAL FIGURES (placed in `historical_figures`): you may use internal knowledge for their general biography/role, but still rely on the book text for their `context_in_book`.
-
-STRICT JSON SAFETY RULES:
-- You MUST properly escape all double quotes (\") inside strings.
-- Do NOT use unescaped line breaks inside strings.
-- Output ONLY valid, parseable JSON.
-
-REQUIRED JSON FORMAT:
-{
-  "book_type": "fiction",
-  "characters": [
-    {
-      "name": "Full Formal Name",
-      "aliases": ["Alias 1", "Alias 2"],
-      "role": "Short archetype label (3-5 words, e.g. 'Antagonist', 'Protagonist', 'The Victim')",
-      "gender": "Male / Female / Unknown",
-      "occupation": "Job/Status",
-      "description": "Description based STRICTLY on text provided. Do not infer or add external knowledge. NO SPOILERS. (Max {MAX_CHAR_DESC} chars)"
-    }
-  ],
-  "historical_figures": [
-    {
-      "name": "Real Historical Person Name",
-      "role": "Historical Role",
-      "biography": "Short biography (MAX {MAX_HIST_BIO} chars)",
-      "importance_in_book": "Significance up to current progress",
-      "context_in_book": "How they are mentioned (MAX 100 chars)"
-    }
-  ],
-  "locations": [
-    {"name": "Place Name", "description": "Short desc (MAX {MAX_LOC_DESC} chars)"}
-  ],
-  "terms": [
-    {
-      "name": "Term or Acronym",
-      "expanded": "Full expansion or same as name",
-      "category": "Acronym / Technical Term / Concept / Jargon",
-      "definition": "Concise definition in context (MAX {MAX_TERM_DEF} chars)"
-    }
-  ],
-  "timeline": [
-    {
-      "chapter": "Exact Chapter Title from Samples",
-      "event": "{TIMELINE_EXAMPLE}"
-    }
-  ]
-} """
+SPOILERS: The %d%% mark is absolute -- nothing past it exists for you, and every description reflects each entity's state exactly at that mark. (The text above is already cut off there.)
+KNOWLEDGE SOURCE: For fictional content use ONLY the text above -- no training, sequel, series, or author knowledge. The only exception is real historical figures' biography/role.
+Output ONLY the JSON object: escape double quotes inside strings, no unescaped newlines, no code fences, no commentary."""
 
 COMPREHENSIVE_XRAY_DE = r"""# METADATEN
 Buch: %s
@@ -162,98 +120,62 @@ Autor: %s
 Spoiler-Grenze: %d%% Lesefortschritt
 
 # KONTEXT
-Am Ende dieses Prompts folgen zwei Textblöcke:
-1. "CHAPTER SAMPLES" – Kapitel-Stichproben bis zur Spoiler-Grenze (Makro-Kontext).
-2. "BOOK TEXT CONTEXT" – die letzten ca. 20.000 Zeichen vor der Leseposition (Mikro-Kontext).
+Oben steht EIN Textblock "BOOK TEXT CONTEXT" – ein abgegrenzter Buchabschnitt bis zur Spoiler-Grenze. Jede Extraktion stützt sich ausschließlich auf diesen Text.
 
 # AUFGABE
 Vollständige X-Ray-Analyse. Ausgabe: genau EIN JSON-Objekt nach dem Schema unten.
 
 ## 1. timeline (höchste Priorität)
-- Datengrundlage: ausschließlich "CHAPTER SAMPLES".
+- Datengrundlage: der "BOOK TEXT CONTEXT".
 - Nur erzählende Kapitel verwenden. Vor- und Nachspann auslassen (Cover, Titelseite, Copyright, Inhaltsverzeichnis, Widmung, Danksagung, "Auch von").
-- Pro erzählendem Kapitel GENAU EIN Objekt, in exakt der Reihenfolge der Stichproben, beginnend beim allerersten erzählenden Kapitel. Kapitel einzeln behandeln, niemals gruppieren oder überspringen.
-- "chapter" = exakte Kapitelüberschrift aus der Stichprobe.
+- Pro erzählendem Kapitel GENAU EIN Objekt, in Lesereihenfolge. Kapitel einzeln behandeln, niemals gruppieren oder überspringen.
+- "chapter" = exakte Kapitelüberschrift, wie sie im Text erscheint.
 - "event" = Zusammenfassung NUR dieses Kapitels, {TIMELINE_DETAIL_GUIDANCE} (max. {MAX_TIMELINE_EVENT} Zeichen).
 
 ## 2. characters
-- Extrahieren Sie {NUM_CHARS} wichtige Charaktere aus beiden Kontextblöcken.
+- Extrahieren Sie Charaktere aus dem "BOOK TEXT CONTEXT".
 - "name" = vollständiger formeller Name (z. B. "Abraham Van Helsing"). Spitznamen und Titel gehören in "aliases" (max. 3, inkl. gebräuchlichem Vor-/Nachnamen). Ein Nachname, den mehrere Charaktere teilen (z. B. Familienmitglieder), ist für keinen von ihnen ein Alias.
-- "description": ausschließlich Fakten, die im gelieferten Text stehen oder dort eindeutig impliziert sind. Nur kurz erwähnte Charaktere erhalten entsprechend knappe Beschreibungen – ergänzen Sie sie nicht aus anderem Wissen.
+- "description": ausschließlich Fakten, die im gelieferten Text stehen oder dort eindeutig impliziert sind (max. {MAX_CHAR_DESC} Zeichen). Nur kurz erwähnte Charaktere erhalten entsprechend knappe Beschreibungen – ergänzen Sie sie nicht aus anderem Wissen.
 
 ## 3. historical_figures
 - Bis zu {NUM_HIST} reale, allgemein anerkannte historische Personen (z. B. Präsidenten, Autoren, Generäle), die in erzählenden Teilen erwähnt werden.
 - Fiktive Charaktere gehören immer in "characters" – auch wenn sie mit realen Ereignissen interagieren.
-- "biography" und "role": internes Wissen erlaubt. "context_in_book": ausschließlich aus dem Buchkontext.
+- "biography" (max. {MAX_HIST_BIO} Zeichen) und "role": internes Wissen erlaubt. "context_in_book" (max. 100 Zeichen): ausschließlich aus dem Buchkontext.
 
 ## 4. locations
-- Extrahieren Sie {NUM_LOCS} bedeutende Orte aus dem Kontext.
+- Extrahieren Sie {NUM_LOCS} bedeutende Orte aus dem Kontext (Beschreibung max. {MAX_LOC_DESC} Zeichen).
 
 ## 5. terms
 - Setzen Sie zuerst "book_type" im JSON-Root auf "fiction" oder "non_fiction".
 - non_fiction: {NUM_TERMS} Fachbegriffe, Akronyme oder Konzepte, die Laien erklärt werden müssten. Kategorien: Acronym, Technical Term, Concept, Jargon.
 - fiction: {NUM_TERMS} World-Building-Elemente (Fraktionen, Magiesysteme, Technologien, Kreaturen, Organisationen, Lore, Sprachen). Kategorien: Faction, Magic System, Technology, Creature, Organization, Lore, Language.
 - Charakter- und Ortsnamen sowie Alltagsbegriffe gehören nicht in "terms".
-- "expanded" = ausgeschriebene Form des Akronyms; sonst Wiederholung von "name".
+- "expanded" = ausgeschriebene Form des Akronyms; sonst Wiederholung von "name". "definition": max. {MAX_TERM_DEF} Zeichen.
 
 # ELEMENTE AUSSERHALB DER ERZÄHLUNG
 Charaktere, Personen und Begriffe, die NUR in Vor-/Nachspann vorkommen (Danksagung, Autorenbiografie, Widmung, Titelseite, Copyright), werden nicht extrahiert.
 
-# KOMPRESSION BEI SAMMELAUSGABEN
-Enthält "CHAPTER SAMPLES" mehr als 40 Kapitel (z. B. Sammelausgabe), gilt zwingend:
-- "characters" auf die 10 wichtigsten begrenzen.
-- Charakterbeschreibungen auf max. {MAX_CHAR_DESC} Zeichen kürzen.
-- Timeline-Events auf max. {MAX_TIMELINE_EVENT} Zeichen kürzen.
-So bleibt die Ausgabe vollständig und das JSON parsbar.
-
-# JSON-SCHEMA (exakt einhalten, keine zusätzlichen Felder)
-{
-  "book_type": "fiction | non_fiction",
-  "characters": [
-    {
-      "name": "Vollständiger formeller Name",
-      "aliases": ["Alias 1", "Alias 2"],
-      "role": "Rolle bis zur Spoiler-Grenze",
-      "gender": "Männlich / Weiblich / Unbekannt",
-      "occupation": "Beruf/Status",
-      "description": "Nur aus dem gelieferten Text, Stand exakt an der Spoiler-Grenze (max. {MAX_CHAR_DESC} Zeichen)"
-    }
-  ],
-  "historical_figures": [
-    {
-      "name": "Name der realen historischen Person",
-      "role": "Historische Rolle",
-      "biography": "Kurzbiografie (max. {MAX_HIST_BIO} Zeichen)",
-      "importance_in_book": "Bedeutung bis zur Spoiler-Grenze",
-      "context_in_book": "Wie sie im Buch erwähnt wird (max. 100 Zeichen)"
-    }
-  ],
-  "locations": [
-    { "name": "Name des Ortes", "description": "Kurzbeschreibung (max. {MAX_LOC_DESC} Zeichen)" }
-  ],
-  "terms": [
-    {
-      "name": "Begriff oder Akronym",
-      "expanded": "Ausgeschriebene Form oder identisch mit name",
-      "category": "Kategorie gemäß Aufgabe 5",
-      "definition": "Präzise Definition im Buchkontext (max. {MAX_TERM_DEF} Zeichen)"
-    }
-  ],
-  "timeline": [
-    { "chapter": "Exakter Kapiteltitel aus den Stichproben", "event": "{TIMELINE_EXAMPLE}" }
-  ]
-}
+# AUSGABE-SCHLÜSSEL
+Genau ein JSON-Objekt mit den Schlüsseln: book_type, characters, historical_figures, locations, terms, timeline. Charakter-Felder: name, aliases, role (max. 40 Zeichen), gender (Männlich/Weiblich/Unbekannt), occupation, description. historical_figures: name, role, biography, importance_in_book, context_in_book.
 
 # KRITISCHE REGELN – ZULETZT PRÜFEN
-1. Spoiler-Grenze %d%%: keinerlei Informationen aus späteren Abschnitten; Beschreibungen spiegeln exakt den Stand an dieser Marke.
+1. Spoiler-Grenze %d%%: keinerlei Informationen aus späteren Abschnitten; Beschreibungen spiegeln exakt den Stand an dieser Marke. Der Text oben ist bereits dort abgeschnitten.
 2. Quelle: Für alles Fiktive zählt nur der mitgelieferte Text – kein Serien-, Autoren- oder Trainingswissen (einzige Ausnahme: biography/role realer historischer Personen).
 3. Ausgabe: nur das JSON-Objekt, ohne Codezäune und ohne Begleittext."""
 
-CONTEXT_FOOTER_EN = ""  # en.lua has no context_footer key; Lua falls back to "" at the call site
+# Desktop divergence from en.lua (which had no footer): a post-data instruction
+# mirroring the DE one -- official Gemini guidance is to place instructions
+# AFTER the data context, so both languages now end this way.
+CONTEXT_FOOTER_EN = (
+    "\n---\n"
+    "Now, based solely on the BOOK TEXT CONTEXT above, perform the analysis "
+    "described above. Respect the spoiler mark and output ONLY the required "
+    "JSON object -- no code fences, no commentary."
+)
 
 CONTEXT_FOOTER_DE = r"""
 ---
-Führen Sie jetzt, basierend ausschließlich auf dem gesamten Kontext oben, die eingangs definierte Aufgabe aus. Beachten Sie die Spoiler-Grenze und geben Sie nur das geforderte JSON-Objekt aus – ohne Codezäune, ohne Begleittext."""
+Führen Sie jetzt, basierend ausschließlich auf dem BOOK TEXT CONTEXT oben, die oben definierte Aufgabe aus. Beachten Sie die Spoiler-Grenze und geben Sie nur das geforderte JSON-Objekt aus – ohne Codezäune, ohne Begleittext."""
 
 # CHARACTER COMPLETENESS RULES + NAME DISAMBIGUATION RULES, verbatim from
 # xray_aihelper.lua:1480-1489 (see module docstring: English in both variants
@@ -273,15 +195,55 @@ NAME_RULES_DE = NAME_RULES_EN
 # SEGMENT COMPLETENESS MODE addendum, verbatim from xray_aihelper.lua:1490-1498.
 SEGMENT_ADDENDUM_EN = (
     "\n\nSEGMENT COMPLETENESS MODE:"
-    "\n- This fetch covers ONE bounded text segment of the book. Extract EVERY character who speaks or acts within the provided samples, including minor ones."
-    "\n- For this segment fetch, these rules take precedence over the ANTI-TRUNCATION PROTOCOL and the character count guidance in Step 1 above."
-    "\n- The character count target of {NUM_CHARS} applies to NEW characters found in this segment, NOT to the total list."
-    "\n- Apply the SAME exhaustive rule to LOCATIONS and to TERMS/world-building elements: list EVERY location and EVERY term that appears in this segment, including minor ones, with short definitions, counting only NEW entries for this segment."
-    "\n- Give minor characters short descriptions. If output space runs short, drop the least important characters first."
+    "\n- This fetch covers ONE bounded text segment of the book. Extract EVERY character who speaks or acts within the provided text, including minor and single-scene ones. Do NOT omit anyone."
+    "\n- Apply the SAME exhaustive rule to LOCATIONS and to TERMS/world-building elements: list EVERY location and EVERY term that appears in this segment, including minor ones, with short definitions."
+    "\n- Give minor characters short descriptions -- but never drop a character to save space."
 )
 SEGMENT_ADDENDUM_DE = SEGMENT_ADDENDUM_EN
 
+# Gleaning pass (research's top recall booster): resend the same segment plus
+# the names already found and ask ONLY for entities not yet listed. {FOUND_NAMES}
+# is substituted AFTER %-formatting so names containing '%' can't break it.
+GLEAN_EN = r"""Book: %s
+Author: %s
+Reading Progress: %d%%
+
+The following characters have ALREADY been extracted from the BOOK TEXT CONTEXT above:
+{FOUND_NAMES}
+
+TASK: Find EVERY additional character, location, and world-building term that appears in the text but is NOT already in the list above -- especially minor and single-scene ones. Do NOT repeat anything already listed. If you find none, return empty arrays.
+Use the SAME JSON schema and field rules as a full extraction (characters, locations, historical_figures, terms). NO SPOILERS: nothing past the %d%% mark.
+Output ONLY the JSON object."""
+
+GLEAN_DE = r"""Buch: %s
+Autor: %s
+Spoiler-Grenze: %d%% Lesefortschritt
+
+Folgende Charaktere wurden aus dem "BOOK TEXT CONTEXT" oben BEREITS extrahiert:
+{FOUND_NAMES}
+
+AUFGABE: Finden Sie JEDEN zusätzlichen Charakter, Ort und World-Building-Begriff, der im Text vorkommt, aber NICHT in obiger Liste steht -- besonders Neben- und Einzelszenen-Figuren. Wiederholen Sie nichts bereits Gelistetes. Falls nichts, geben Sie leere Arrays zurück.
+Verwenden Sie dasselbe JSON-Schema und dieselben Feldregeln wie bei einer Vollextraktion (characters, locations, historical_figures, terms). SPOILER: nichts nach der %d%%-Marke.
+Ausgabe: NUR das JSON-Objekt."""
+
+# Slim enrich header: enrich only rewrites descriptions of already-known
+# characters, so it ships neither the timeline loop nor locations/terms specs
+# (the caller discards them). The MERGE MODE marker comes from _enrich_block.
+ENRICH_HEADER_EN = r"""Book: %s
+Author: %s
+Reading Progress: %d%%
+
+Output ONLY a JSON object of the form {"characters": [{"name": "...", "description": "..."}]}. Rewrite the description of each character listed below using the BOOK TEXT CONTEXT at the end. Add no new characters and no other fields. NO SPOILERS: use only information up to the %d%% mark."""
+
+ENRICH_HEADER_DE = r"""Buch: %s
+Autor: %s
+Spoiler-Grenze: %d%% Lesefortschritt
+
+Ausgabe: NUR ein JSON-Objekt der Form {"characters": [{"name": "...", "description": "..."}]}. Schreiben Sie die Beschreibung jedes unten gelisteten Charakters neu, basierend auf dem "BOOK TEXT CONTEXT" am Ende. Keine neuen Charaktere, keine weiteren Felder. SPOILER: nur Informationen bis zur %d%%-Marke."""
+
 _COMPREHENSIVE = {"en": COMPREHENSIVE_XRAY_EN, "de": COMPREHENSIVE_XRAY_DE}
+_GLEAN = {"en": GLEAN_EN, "de": GLEAN_DE}
+_ENRICH_HEADER = {"en": ENRICH_HEADER_EN, "de": ENRICH_HEADER_DE}
 _SYSTEM = {"en": SYSTEM_INSTRUCTION_EN, "de": SYSTEM_INSTRUCTION_DE}
 _NAME_RULES = {"en": NAME_RULES_EN, "de": NAME_RULES_DE}
 _SEGMENT_ADDENDUM = {"en": SEGMENT_ADDENDUM_EN, "de": SEGMENT_ADDENDUM_DE}
@@ -342,7 +304,8 @@ def _apply_caps(text: str, caps: dict) -> str:
     since all operands are positive)."""
     char_len, loc_len, tl_len = caps["char"], caps["loc"], caps["tl"]
     hist_len, term_len = caps["hist"], caps["term"]
-    num_chars = min(60, max(10, 50 * 200 // char_len))
+    # No {NUM_CHARS} target any more: characters are extracted exhaustively
+    # (SEGMENT COMPLETENESS MODE), so a numeric cap would only suppress recall.
     num_locs = min(20, max(3, 8 * 100 // loc_len))
     num_hist = min(15, max(3, 8 * 100 // hist_len))
     num_terms = min(20, max(5, 15 * 100 // term_len))
@@ -350,7 +313,6 @@ def _apply_caps(text: str, caps: dict) -> str:
 
     for tag, value in {
         "{MAX_CHAR_DESC}": char_len,
-        "{NUM_CHARS}": num_chars,
         "{MAX_LOC_DESC}": loc_len,
         "{NUM_LOCS}": num_locs,
         "{MAX_TIMELINE_EVENT}": tl_len,
@@ -390,16 +352,36 @@ def build_prompt(language, detail_level, title, author, percent, segment_text,
     mode="extract": phase-A independent chunk extraction, `prior_names` unused.
     mode="enrich": phase-C re-synthesis pass, `prior_names` is a list of
     (name, description) pairs for entities already known before this segment.
+    Enrich uses a slim description-only prompt, not the full comprehensive spec.
     """
     caps = DETAIL_CAPS[detail_level]
     system = _SYSTEM[language]
 
-    prompt = _apply_percent_args(_COMPREHENSIVE[language], title, author, percent)
-    if mode == "enrich" and prior_names:
-        prompt += _enrich_block(prior_names, caps["char"])
-    prompt += _NAME_RULES[language] + _SEGMENT_ADDENDUM[language]
-    prompt = _apply_caps(prompt, caps)
-    prompt += "\n\nBOOK TEXT CONTEXT:\n" + segment_text
-    prompt += _CONTEXT_FOOTER[language]  # must trail segment_text: it tells the model to act on "the context above"
+    if mode == "enrich":
+        instr = _apply_percent_args(_ENRICH_HEADER[language], title, author, percent)
+        instr += _enrich_block(prior_names or [], caps["char"])
+    else:
+        instr = _apply_percent_args(_COMPREHENSIVE[language], title, author, percent)
+        instr += _NAME_RULES[language] + _SEGMENT_ADDENDUM[language]
+        instr = _apply_caps(instr, caps)
 
-    return system, prompt
+    # Chunk-first: the book text leads so the extract and gleaning calls share a
+    # byte-identical [system + chunk] prefix -> Gemini implicit-cache hit on the
+    # second call. Instructions follow the data (also official Gemini guidance).
+    # The instruction part is %-formatted BEFORE prepending the chunk, so a '%'
+    # inside the book text can never be mistaken for a format specifier.
+    return system, _SEGMENT_PREFIX + segment_text + _INSTR_SEP + instr + _CONTEXT_FOOTER[language]
+
+
+def build_glean_prompt(language, detail_level, title, author, percent,
+                        segment_text, found_names):
+    """Build (system, user) for the gleaning pass: resend `segment_text` plus
+    the already-found `found_names` and ask ONLY for entities not yet listed.
+    Chunk-first with the SAME prefix as build_prompt, so the gleaning call hits
+    the extract call's implicit cache. `detail_level` is accepted for call-site
+    symmetry with build_prompt."""
+    system = _SYSTEM[language]
+    instr = _apply_percent_args(_GLEAN[language], title, author, percent)
+    names = ", ".join(found_names) if found_names else "(none yet)"
+    instr = instr.replace("{FOUND_NAMES}", names)
+    return system, _SEGMENT_PREFIX + segment_text + _INSTR_SEP + instr + _CONTEXT_FOOTER[language]

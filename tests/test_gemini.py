@@ -54,11 +54,76 @@ def test_request_body_shape():
         "HARM_CATEGORY_DANGEROUS_CONTENT",
     }
     assert all(s["threshold"] == "BLOCK_NONE" for s in body["safetySettings"])
+    # gemini-3.x: no temperature (Google guidance drops it), full 64k output cap.
     assert body["generationConfig"] == {
-        "temperature": 0.2,
-        "maxOutputTokens": 16384,
+        "maxOutputTokens": 65536,
         "responseMimeType": "application/json",
     }
+
+
+def test_temperature_dropped_for_gemini3_kept_for_older():
+    """temperature/top_p/top_k are no longer recommended for Gemini 3.x and
+    can cause looping/degradation -- drop the key for gemini-3* models. Older
+    models keep the Lua-parity 0.2 so their behavior is unchanged."""
+    captured = {}
+
+    def fake_transport(url, headers, body_bytes):
+        captured["body"] = json.loads(body_bytes)
+        return 200, _ok_response('{"ok": true}')
+
+    GeminiClient("k", model="gemini-3.5-flash", transport=fake_transport).generate("s", "u")
+    assert "temperature" not in captured["body"]["generationConfig"]
+
+    captured.clear()
+    GeminiClient("k", model="gemini-2.0-flash", transport=fake_transport).generate("s", "u")
+    assert captured["body"]["generationConfig"]["temperature"] == 0.2
+
+
+def test_response_schema_passed_through():
+    """A client-level response_schema must land in generationConfig so the
+    model is constrained to native structured output."""
+    captured = {}
+    schema = {"type": "object", "properties": {"characters": {"type": "array"}}}
+
+    def fake_transport(url, headers, body_bytes):
+        captured["body"] = json.loads(body_bytes)
+        return 200, _ok_response('{"ok": true}')
+
+    client = GeminiClient(
+        "k", model="gemini-3.5-flash", transport=fake_transport, response_schema=schema
+    )
+    client.generate("s", "u")
+    assert captured["body"]["generationConfig"]["responseSchema"] == schema
+
+
+def test_no_response_schema_by_default():
+    captured = {}
+
+    def fake_transport(url, headers, body_bytes):
+        captured["body"] = json.loads(body_bytes)
+        return 200, _ok_response('{"ok": true}')
+
+    GeminiClient("k", transport=fake_transport).generate("s", "u")
+    assert "responseSchema" not in captured["body"]["generationConfig"]
+
+
+def test_usage_metadata_parsed():
+    """usageMetadata token counts flow into GenResult -- the cached-token count
+    is how the real test measures the implicit-cache win."""
+    body = {
+        "candidates": [{"content": {"parts": [{"text": '{"a": 1}'}]}, "finishReason": "STOP"}],
+        "usageMetadata": {
+            "promptTokenCount": 9000,
+            "cachedContentTokenCount": 8000,
+            "candidatesTokenCount": 500,
+        },
+    }
+
+    def fake_transport(url, headers, body_bytes):
+        return 200, json.dumps(body).encode("utf-8")
+
+    result = GeminiClient("k", transport=fake_transport).generate("s", "u")
+    assert (result.prompt_tokens, result.cached_tokens, result.output_tokens) == (9000, 8000, 500)
 
 
 def test_thinking_gated_off_by_default():
@@ -94,8 +159,10 @@ def test_thinking_only_for_gemini3():
         "key", model="gemini-3.5-flash", transport=fake_transport, use_thinking=True
     )
     gemini3.generate("sys", "user")
+    # includeThoughts False: _parse_response discards thought parts anyway, so
+    # requesting them would only burn shared output-token budget.
     assert captured["body"]["generationConfig"]["thinkingConfig"] == {
-        "includeThoughts": True,
+        "includeThoughts": False,
         "thinkingLevel": "medium",
     }
 
@@ -126,6 +193,23 @@ def test_skips_thought_parts():
     client = GeminiClient("key", transport=fake_transport)
     result = client.generate("sys", "user")
     assert result.data == {"a": 1}
+
+
+def test_unrepairable_json_yields_empty_truncated_not_crash():
+    """A response whose JSON is malformed BEYOND end-truncation (here a raw
+    newline inside a string, which fix_truncated_json cannot repair) must not
+    raise out of generate() -- that exception is uncaught in generate_xray's
+    fetch loop (only QuotaError is caught) and would crash the whole book.
+    Instead it is treated like a truncated response (empty data, truncated=True)
+    so the caller's split-and-retry recovers on a smaller sub-chunk."""
+    def fake_transport(url, headers, body_bytes):
+        return 200, _ok_response('{"a": "b\nc"}')  # raw newline -> unrepairable
+
+    client = GeminiClient("k", transport=fake_transport)
+    result = client.generate("s", "u")
+
+    assert result.data == {}
+    assert result.truncated is True
 
 
 def test_truncated_flag_on_max_tokens():

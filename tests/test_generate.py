@@ -200,8 +200,9 @@ def test_oversized_segment_subchunked():
     doc = generate_xray(book, client, "en", "normal", max_workers=4)
 
     assert validate(doc) == []
-    # Each 10%-grid segment is ~130k chars > FULL_TEXT_BUDGET (120k), so at
-    # least one checkpoint's segment required >1 client.generate() call.
+    # Each 10%-grid segment is ~184k chars >> FULL_TEXT_BUDGET (32k), so every
+    # checkpoint's segment is split into several extraction chunks -- far more
+    # client.generate() calls than checkpoints (gleaning adds even more).
     assert len(client.calls) > len(doc["checkpoints"])
 
 
@@ -243,7 +244,10 @@ def test_truncated_chunk_split_and_refetched():
             return GenResult(data={"characters": []}, truncated=False)
 
     client = TruncatingClient()
-    doc = generate_xray(book, client, "en", "normal", max_workers=2)
+    # glean=False: this test isolates the truncation split-and-retry path; the
+    # additive gleaning pass would issue its own whole-chunk call and re-add the
+    # truncated PartialAlice, which is orthogonal to what's under test here.
+    doc = generate_xray(book, client, "en", "normal", max_workers=2, glean=False)
 
     assert validate(doc) == []
     whole_calls = [c for c in client.calls if "STARTMARKER" in c and "ENDMARKER" in c]
@@ -256,6 +260,89 @@ def test_truncated_chunk_split_and_refetched():
     names = {c["name"] for c in doc["checkpoints"][0]["snapshot"]["characters"]}
     assert names == {"Alice", "FirstHalfOnly", "SecondHalfOnly"}
     assert "PartialAlice" not in names  # truncated response never accepted as final
+
+
+# ---------------------------------------------------------------------------
+# Gleaning pass (Phase A recall booster)
+# ---------------------------------------------------------------------------
+
+
+def test_gleaning_pass_adds_missed_characters():
+    """Phase A runs a second 'which characters did you miss?' pass per chunk
+    and unions the newly-found characters into the chunk result -- the
+    research's top recall booster. MissedMinor is only ever returned by the
+    gleaning call, so it can reach the snapshot only if gleaning runs."""
+    book = _filler_book()
+
+    class GleanClient:
+        def generate(self, system_instruction, user_prompt, max_output_tokens=65536):
+            if "ALREADY been extracted" in user_prompt:  # the gleaning prompt
+                return _ok({"characters": [{"name": "MissedMinor"}]})
+            return _ok({"characters": [{"name": "MainChar"}]})
+
+    doc = generate_xray(book, GleanClient(), "en", "normal", max_workers=4)
+
+    assert validate(doc) == []
+    names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
+    assert "MainChar" in names
+    assert "MissedMinor" in names
+
+
+def test_gleaning_can_be_disabled():
+    book = _filler_book()
+
+    class GleanClient:
+        def generate(self, system_instruction, user_prompt, max_output_tokens=65536):
+            if "ALREADY been extracted" in user_prompt:
+                return _ok({"characters": [{"name": "MissedMinor"}]})
+            return _ok({"characters": [{"name": "MainChar"}]})
+
+    doc = generate_xray(book, GleanClient(), "en", "normal", glean=False, max_workers=4)
+
+    names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
+    assert "MainChar" in names
+    assert "MissedMinor" not in names
+
+
+def test_gleaning_skipped_on_empty_extract():
+    """A chunk whose extract yields no entities at all (frontmatter/blank) has
+    nothing to glean -- skip the second call to save tokens. Zero content loss:
+    an empty extract carries no relevant content signal to recover."""
+    book = _filler_book()
+
+    class CountingClient:
+        def __init__(self):
+            self.glean_calls = 0
+
+        def generate(self, system_instruction, user_prompt, max_output_tokens=65536):
+            if "ALREADY been extracted" in user_prompt:
+                self.glean_calls += 1
+                return _ok({"characters": []})
+            return _ok({"characters": [], "locations": [], "historical_figures": [],
+                        "terms": [], "timeline": []})
+
+    client = CountingClient()
+    generate_xray(book, client, "en", "normal", max_workers=4)
+    assert client.glean_calls == 0
+
+
+def test_gleaning_does_not_add_timeline():
+    """Gleaning contributes only entities (characters/locations/terms), never
+    timeline -- the extract pass already recorded the chapter timeline once, so
+    a gleaning response's timeline must not double it."""
+    book = _filler_book()
+
+    class GleanTimelineClient:
+        def generate(self, system_instruction, user_prompt, max_output_tokens=65536):
+            return _ok({
+                "characters": [{"name": "Alice", "description": "d"}],
+                "timeline": [{"chapter": "Ch", "event": "Something happens here."}],
+            })
+
+    doc = generate_xray(book, GleanTimelineClient(), "en", "normal", max_workers=4)
+
+    assert validate(doc) == []
+    assert len(doc["timeline"]) == len(doc["checkpoints"])
 
 
 # ---------------------------------------------------------------------------

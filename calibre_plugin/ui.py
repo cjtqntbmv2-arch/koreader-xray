@@ -17,6 +17,7 @@ from xray_core.embed import embed_xray, read_embedded
 from xray_core.epub import DrmError, read_epub
 from xray_core.gemini import GeminiClient
 from xray_core.generate import generate_xray
+from xray_core.prompts import EXTRACT_RESPONSE_SCHEMA
 
 
 def _generate_and_embed(epub_path, calibre_uuid, workdir, api_key, model, language,
@@ -34,7 +35,8 @@ def _generate_and_embed(epub_path, calibre_uuid, workdir, api_key, model, langua
         notifications.put((done / total if total else 0.0, f"{done}/{total} segments"))
 
     book = read_epub(epub_path)
-    client = GeminiClient(api_key, model=model, use_thinking=use_thinking)
+    client = GeminiClient(api_key, model=model, use_thinking=use_thinking,
+                          response_schema=EXTRACT_RESPONSE_SCHEMA)
     doc = generate_xray(
         book, client, language, detail_level,
         calibre_uuid=calibre_uuid, progress_cb=progress_cb,

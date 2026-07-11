@@ -43,6 +43,11 @@ class QuotaError(Exception):
 class GenResult:
     data: dict
     truncated: bool  # True iff candidates[0].finishReason == "MAX_TOKENS"
+    # usageMetadata token counts (0 when absent). cached_tokens > 0 means an
+    # implicit-cache hit -- the measurement for the chunk-first caching win.
+    prompt_tokens: int = 0
+    cached_tokens: int = 0
+    output_tokens: int = 0
 
 
 def normalize_keys(obj: Any) -> Any:
@@ -136,12 +141,17 @@ def parse_ai_json(text: str) -> dict:
 
 class GeminiClient:
     def __init__(self, api_key, model="gemini-3.5-flash", transport=None,
-                 timeout=180, use_thinking=False, max_429_retries=4):
+                 timeout=180, use_thinking=False, max_429_retries=4,
+                 response_schema=None):
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
         self.use_thinking = use_thinking
         self.max_429_retries = max_429_retries
+        # Native structured output: when set, constrains every response to this
+        # flat schema (reliable keys, fewer truncations). Permissive/all-optional
+        # so the same schema fits extract, gleaning, and enrich calls.
+        self.response_schema = response_schema
         self.transport = transport or self._default_transport
 
     def _default_transport(self, url, headers, body_bytes):
@@ -164,14 +174,22 @@ class GeminiClient:
 
     def _build_body(self, system_instruction, user_prompt, max_output_tokens):
         gen_config = {
-            "temperature": 0.2,
             "maxOutputTokens": max_output_tokens,
             "responseMimeType": "application/json",
         }
+        # temperature/top_p/top_k are no longer recommended for Gemini 3.x
+        # (Google guidance: they can cause looping/degradation). Keep the
+        # Lua-parity 0.2 only for older models so their behavior is unchanged.
+        if "gemini-3" not in self.model:
+            gen_config["temperature"] = 0.2
+        if self.response_schema is not None:
+            gen_config["responseSchema"] = self.response_schema
         # Gated: off by default (Lua parity, xray_aihelper.lua:254), and only
         # for gemini-3* models (thinking shares the maxOutputTokens budget).
+        # includeThoughts False -- _parse_response discards thought parts, so
+        # returning them would only burn the shared output budget.
         if self.use_thinking and "gemini-3" in self.model:
-            gen_config["thinkingConfig"] = {"includeThoughts": True, "thinkingLevel": "medium"}
+            gen_config["thinkingConfig"] = {"includeThoughts": False, "thinkingLevel": "medium"}
         return {
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
             "system_instruction": {"parts": [{"text": system_instruction}]},
@@ -189,9 +207,28 @@ class GeminiClient:
         parts = (candidate.get("content") or {}).get("parts") or []
         text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
         truncated = candidate.get("finishReason", "STOP") == "MAX_TOKENS"
-        return GenResult(data=normalize_keys(parse_ai_json(text)), truncated=truncated)
+        usage = data.get("usageMetadata") or {}
+        try:
+            parsed = normalize_keys(parse_ai_json(text))
+        except ValueError:
+            # Malformed BEYOND end-truncation (e.g. a raw control char mid-string
+            # that fix_truncated_json can't repair, an empty/JSON-less body).
+            # Raising here is uncaught in generate_xray's fetch loop (only
+            # QuotaError is caught) and would crash the whole book. Treat it like
+            # a truncated response: caller's split-and-retry re-fetches a smaller
+            # sub-chunk; at max split depth this contributes an empty result for
+            # that sub-chunk rather than aborting generation.
+            parsed = {}
+            truncated = True
+        return GenResult(
+            data=parsed,
+            truncated=truncated,
+            prompt_tokens=usage.get("promptTokenCount", 0) or 0,
+            cached_tokens=usage.get("cachedContentTokenCount", 0) or 0,
+            output_tokens=usage.get("candidatesTokenCount", 0) or 0,
+        )
 
-    def generate(self, system_instruction, user_prompt, max_output_tokens=16384) -> GenResult:
+    def generate(self, system_instruction, user_prompt, max_output_tokens=65536) -> GenResult:
         url = _ENDPOINT.format(model=self.model)
         headers = {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
         body_bytes = json.dumps(

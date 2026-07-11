@@ -33,10 +33,13 @@ from xray_core.checkpoints import plan_checkpoints
 from xray_core.epub import BookText
 from xray_core.gemini import QuotaError
 from xray_core.merge import BookState, clean_response, sort_entity_list
-from xray_core.prompts import build_prompt
+from xray_core.prompts import build_glean_prompt, build_prompt
 from xray_core.schema import SCHEMA_VERSION, validate
 
-FULL_TEXT_BUDGET = 120000
+# ~8k tokens/chunk (moderate). Research: multi-entity recall degrades badly on
+# huge chunks (~2x more entities from small ones), so the extraction unit is
+# kept small; per-checkpoint segments still bound spoilers (D4).
+FULL_TEXT_BUDGET = 32000
 CHUNK_OVERLAP = 800
 ENRICH_TOP_N = 20
 
@@ -137,6 +140,33 @@ def _union_cleaned(a, b):
     return merged
 
 
+def _union_glean(extract, glean):
+    """Union a gleaning result's ENTITIES into the extract result, keeping the
+    extract's own timeline and book_type. Gleaning only surfaces missed
+    characters/locations/terms -- the extract pass already recorded the
+    chapter timeline once, so re-adding a gleaned timeline would double it."""
+    merged = dict(extract)
+    for key in ("characters", "locations", "historical_figures", "terms"):
+        merged[key] = (extract.get(key) or []) + (glean.get(key) or [])
+    return merged
+
+
+def _glean_names(cleaned):
+    return [c["name"] for c in (cleaned.get("characters") or []) if c.get("name")]
+
+
+def _has_entities(cleaned):
+    """True if the extract found anything worth a gleaning follow-up. An
+    all-empty extract means a frontmatter/blank chunk -- gleaning it would
+    only spend a call on text with no entities. ponytail: rare model whiffs on
+    a real content chunk aren't recovered, but an empty extract carries no
+    content signal to recover anyway."""
+    return any(
+        cleaned.get(key)
+        for key in ("characters", "locations", "historical_figures", "terms")
+    )
+
+
 def _fetch_with_retry(client, rate_limiter, language, detail_level, title, author,
                        percent, chunk_text, depth=0):
     """Fetch one chunk; on truncation, split in half at a paragraph boundary
@@ -163,11 +193,31 @@ def _chunk_path(workdir, cp_idx, chunk_idx):
     return os.path.join(workdir, f"chunk_{cp_idx}_{chunk_idx}.json")
 
 
+def _glean_chunk(client, rate_limiter, language, detail_level, title, author,
+                  percent, chunk_text, extract_cleaned):
+    """Second Phase-A pass: resend the chunk plus the names already found and
+    ask only for missed entities; union the new ones in. Best-effort (single
+    call, no split-retry) -- gleaning is purely additive, dedup happens in
+    Phase B."""
+    rate_limiter.acquire()
+    system, user = build_glean_prompt(
+        language, detail_level, title, author, percent, chunk_text,
+        _glean_names(extract_cleaned),
+    )
+    glean = clean_response(client.generate(system, user).data)
+    return _union_glean(extract_cleaned, glean)
+
+
 def _fetch_and_persist(client, rate_limiter, workdir, cp_idx, chunk_idx, language,
-                        detail_level, title, author, percent, chunk_text):
+                        detail_level, title, author, percent, chunk_text, glean=True):
     cleaned = _fetch_with_retry(
         client, rate_limiter, language, detail_level, title, author, percent, chunk_text
     )
+    if glean and _has_entities(cleaned):
+        cleaned = _glean_chunk(
+            client, rate_limiter, language, detail_level, title, author,
+            percent, chunk_text, cleaned,
+        )
     if workdir:
         os.makedirs(workdir, exist_ok=True)
         final_path = _chunk_path(workdir, cp_idx, chunk_idx)
@@ -241,7 +291,7 @@ def _generator_version():
 
 def generate_xray(book: BookText, client, language, detail_level,
                    calibre_uuid=None, progress_cb=None, workdir=None,
-                   max_workers=3, enrich=None) -> dict:
+                   max_workers=3, enrich=None, glean=True) -> dict:
     if enrich is None:
         enrich = detail_level == "detailed"
 
@@ -293,7 +343,7 @@ def generate_xray(book: BookText, client, language, detail_level,
         future_to_key = {
             executor.submit(
                 _fetch_and_persist, client, rate_limiter, workdir, cp_idx, chunk_idx,
-                language, detail_level, book.title, author_str, percent, chunk_text,
+                language, detail_level, book.title, author_str, percent, chunk_text, glean,
             ): (cp_idx, chunk_idx)
             for cp_idx, chunk_idx, percent, chunk_text in to_submit
         }
