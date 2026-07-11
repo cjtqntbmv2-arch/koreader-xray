@@ -23,4 +23,4 @@ Given an EPUB path (and optional `--detail normal|detailed`, default `detailed`)
 
 4. **Report** the three output paths and tell the user: use the companion `.xray.json` (drop next to the book on the device) to preserve reading statistics on already-read books; use the embedded copy for new books before first read. The original EPUB is never modified.
 
-Constraints: never modify the source EPUB; if the assembler aborts listing missing/invalid chunks, re-dispatch subagents for exactly those `(cp,idx)` and re-run the assembler.
+Constraints: never modify the source EPUB; if the assembler aborts listing missing/invalid chunks, re-dispatch subagents for exactly those `(cp,idx)` and re-run the assembler. `--out`/`OUTDIR` must be a directory other than the source EPUB's own directory, or the embedded copy would overwrite (and truncate) the source.

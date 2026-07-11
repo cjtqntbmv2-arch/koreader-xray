@@ -70,3 +70,34 @@ def test_assemble_is_reproducible(tmp_path):
     d2 = assemble(epub, workdir, str(tmp_path / "b"))
     assert json.dumps(d1, sort_keys=True) == json.dumps(d2, sort_keys=True)
     assert open(tmp_path / "a" / "xray.json").read() == open(tmp_path / "b" / "xray.json").read()
+
+
+def test_assemble_refuses_out_dir_matching_source_epub_dir(tmp_path):
+    # --out resolving to the source EPUB's own directory would make the
+    # embedded-copy write path collide with the source path, truncating it
+    # (embed_xray opens epub_path for reading and out_path for writing --
+    # same file means the write side clobbers the read side mid-copy).
+    epub, workdir = _prepare(tmp_path)
+    src_before = open(epub, "rb").read()
+    out_dir = os.path.dirname(epub)  # same directory the source EPUB lives in
+
+    with pytest.raises(SystemExit):
+        assemble(epub, workdir, out_dir)
+
+    assert open(epub, "rb").read() == src_before
+
+
+def test_assemble_detects_text_hash_drift(tmp_path):
+    # The manifest records book.text_hash at plan time. If the EPUB changes
+    # between planning and assembling, assemble must refuse rather than
+    # silently reuse stale chunk extractions against the new text.
+    epub, workdir = _prepare(tmp_path)
+    manifest_path = os.path.join(workdir, "manifest.json")
+    manifest = json.load(open(manifest_path, encoding="utf-8"))
+    manifest["book"]["text_hash"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f)
+
+    with pytest.raises(SystemExit) as ei:
+        assemble(epub, workdir, str(tmp_path / "out_hash_drift"))
+    assert "hash" in str(ei.value).lower()

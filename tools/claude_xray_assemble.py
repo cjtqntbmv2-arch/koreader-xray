@@ -53,8 +53,25 @@ def _precheck(workdir, manifest):
 
 
 def assemble(epub_path, workdir, out_dir):
+    base = os.path.basename(epub_path)
+    final_path = os.path.join(out_dir, base)
+    if os.path.abspath(final_path) == os.path.abspath(epub_path):
+        raise SystemExit(
+            "assemble aborted -- --out resolves to the source EPUB's own "
+            f"directory ({os.path.abspath(epub_path)!r}). The embedded copy "
+            "would overwrite (and truncate) the source EPUB while it is "
+            "still being read. Pass a different --out directory."
+        )
+
     book = read_epub(epub_path)
     manifest = _load_manifest(workdir)
+    if book.text_hash != manifest["book"]["text_hash"]:
+        raise SystemExit(
+            "assemble aborted -- text_hash mismatch: the EPUB has changed "
+            f"since planning (book text_hash={book.text_hash!r}, manifest "
+            f"text_hash={manifest['book']['text_hash']!r}). Re-run the "
+            "planner against the current EPUB before assembling."
+        )
     detail = manifest["detail_level"]
     _precheck(workdir, manifest)
 
@@ -73,7 +90,6 @@ def assemble(epub_path, workdir, out_dir):
                         workdir=workdir, enrich=False, glean=False)
 
     os.makedirs(out_dir, exist_ok=True)
-    base = os.path.basename(epub_path)
     raw_json = os.path.join(out_dir, "xray.json")
     with open(raw_json, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)

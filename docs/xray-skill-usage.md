@@ -23,6 +23,8 @@ EPUB path; it drives three steps:
 - **Haven't started the book yet?** Use the embedded `<book>.epub` copy from
   `<OUTDIR>` instead of the original.
 - The original source EPUB is never modified by this process.
+- `--out`/`OUTDIR` must be a directory other than the source EPUB's own
+  directory, or the embedded copy would overwrite (and truncate) the source.
 
 If assembly aborts listing missing or invalid chunks, re-dispatch subagents
 only for those `(cp,idx)` pairs and re-run the assembler.
