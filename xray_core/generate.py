@@ -24,6 +24,7 @@ threading, time, json, os -- no calibre, no third-party packages.
 
 import json
 import os
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -179,7 +180,7 @@ def _fetch_with_retry(client, rate_limiter, language, detail_level, title, autho
     )
     result = client.generate(system, user)
     if not result.truncated or depth >= _MAX_SPLIT_DEPTH:
-        return clean_response(result.data)
+        return clean_response(result.data, language)
 
     first_half, second_half = _split_in_half_at_paragraph(chunk_text)
     left = _fetch_with_retry(client, rate_limiter, language, detail_level, title,
@@ -189,8 +190,30 @@ def _fetch_with_retry(client, rate_limiter, language, detail_level, title, autho
     return _union_cleaned(left, right)
 
 
-def _chunk_path(workdir, cp_idx, chunk_idx):
-    return os.path.join(workdir, f"chunk_{cp_idx}_{chunk_idx}.json")
+_MAX_PATH_COMPONENT = 32
+
+
+def _sanitize_path_component(value):
+    """Collapse anything outside [a-z0-9_-] to '_', then cap the length.
+    language/detail_level reach _chunk_path as free-form argparse text
+    (language has no `choices=`) and land directly in a filename below --
+    this makes path traversal (e.g. --language ../../etc) structurally
+    impossible rather than merely unlikely. The cap keeps a pathological
+    --language from pushing the filename past the OS limit, where the
+    open() in _fetch_and_persist would raise OSError mid-run."""
+    return re.sub(r"[^a-z0-9_-]", "_", str(value).lower())[:_MAX_PATH_COMPONENT]
+
+
+def _chunk_path(workdir, cp_idx, chunk_idx, language, detail_level):
+    # The cached file holds the OUTPUT of clean_response(): already-cleaned
+    # prose bound to one language, fetched under a prompt whose character
+    # caps were set by detail_level (xray_core/prompts.py). Keying the
+    # filename on both means a resume after either changes simply misses
+    # the cache instead of silently serving stale-language/stale-length
+    # content into the new run.
+    lang = _sanitize_path_component(language)
+    detail = _sanitize_path_component(detail_level)
+    return os.path.join(workdir, f"chunk_{cp_idx}_{chunk_idx}_{lang}_{detail}.json")
 
 
 def _glean_chunk(client, rate_limiter, language, detail_level, title, author,
@@ -204,7 +227,7 @@ def _glean_chunk(client, rate_limiter, language, detail_level, title, author,
         language, detail_level, title, author, percent, chunk_text,
         _glean_names(extract_cleaned),
     )
-    glean = clean_response(client.generate(system, user).data)
+    glean = clean_response(client.generate(system, user).data, language)
     return _union_glean(extract_cleaned, glean)
 
 
@@ -220,7 +243,7 @@ def _fetch_and_persist(client, rate_limiter, workdir, cp_idx, chunk_idx, languag
         )
     if workdir:
         os.makedirs(workdir, exist_ok=True)
-        final_path = _chunk_path(workdir, cp_idx, chunk_idx)
+        final_path = _chunk_path(workdir, cp_idx, chunk_idx, language, detail_level)
         tmp_path = final_path + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(cleaned, f)
@@ -267,7 +290,7 @@ def _enrich_checkpoint(client, rate_limiter, language, detail_level, title, auth
         prior_names=prior_names, mode="enrich",
     )
     result = client.generate(system, user)
-    cleaned = clean_response(result.data)
+    cleaned = clean_response(result.data, language)
 
     by_lower_name = {c["name"].lower(): c for c in frozen_characters if c.get("name")}
     for updated in cleaned.get("characters") or []:
@@ -324,10 +347,17 @@ def generate_xray(book: BookText, client, language, detail_level,
         for chunk_idx, chunk_text in enumerate(chunk_list):
             cached = None
             if workdir:
-                path = _chunk_path(workdir, cp_idx, chunk_idx)
+                path = _chunk_path(workdir, cp_idx, chunk_idx, language, detail_level)
                 if os.path.exists(path):
                     with open(path, "r", encoding="utf-8") as f:
-                        cached = json.load(f)
+                        # Re-clean on load: a workdir written by an older build
+                        # carries whatever clean_response guaranteed back then,
+                        # and merge_segment trusts its input. clean_response is
+                        # idempotent on its own output (every field it emits is
+                        # the canonical head of its own fallback chain), so this
+                        # costs nothing and stops a stale cache from reviving a
+                        # fixed bug on resume.
+                        cached = clean_response(json.load(f), language)
             if cached is not None:
                 results[(cp_idx, chunk_idx)] = cached
                 done += 1

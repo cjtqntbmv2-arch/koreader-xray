@@ -166,19 +166,34 @@ def _fake_client():
             "timeline": [{"chapter": "Old Debts", "event": "The origin of the Ledgerbind is revealed."}],
         })),
         ("COVEMARK", _ok({
-            "characters": [{
-                "name": "Corvin Hale", "role": "rival",
-                "description": "A rival cartographer with a flawed hidden-cove chart.",
-                "gender": "male", "occupation": "cartographer",
-            }],
+            "characters": [
+                {
+                    "name": "Corvin Hale", "role": "rival",
+                    "description": "A rival cartographer with a flawed hidden-cove chart.",
+                    "gender": "male", "occupation": "cartographer",
+                },
+                # Task 6: Miriam's EARLIEST snapshot (role = innkeeper). A later
+                # chapter upgrades the role to "spymaster" (role = newest
+                # non-empty wins, task 4). Appended after Corvin so Corvin keeps
+                # its first_seq -- only entities first stamped at LATER
+                # checkpoints renumber. This checkpoint is her early,
+                # no-future-knowledge snapshot: it shows innkeeper, never
+                # spymaster (D4).
+                {"name": "Miriam", "role": "innkeeper"},
+            ],
             "timeline": [{"chapter": "The Hidden Cove", "event": "Corvin Hale's chart errors are exposed."}],
         })),
         ("STORMARK", _ok({
-            "characters": [{
-                "name": "Dahlia Rees", "role": "supporting",
-                "description": "The lighthouse keeper who watches over Shadow Pass.",
-                "gender": "female", "occupation": "lighthouse keeper",
-            }],
+            "characters": [
+                {
+                    "name": "Dahlia Rees", "role": "supporting",
+                    "description": "The lighthouse keeper who watches over Shadow Pass.",
+                    "gender": "female", "occupation": "lighthouse keeper",
+                },
+                # Task 6: Miriam's role upgrade innkeeper -> spymaster. Merge
+                # takes the newest non-empty role, so this overwrites innkeeper.
+                {"name": "Miriam", "role": "spymaster"},
+            ],
             "locations": [{
                 "name": "Shadow Pass",
                 "description": "A treacherous strait where storms sink ships.",
@@ -187,12 +202,31 @@ def _fake_client():
             "timeline": [{"chapter": "Storm Warning", "event": "Dahlia Rees warns of a storm over Shadow Pass."}],
         })),
         ("ENDMARK", _ok({
-            "characters": [{
-                "name": "Emeric Thale", "role": "antagonist",
-                "description": "A stranger who claims the Ledgerbind at the story's end.",
-                "gender": "male", "occupation": "unknown",
-            }],
-            "timeline": [{"chapter": "The Last Reckoning", "event": "Emeric Thale claims the Ledgerbind."}],
+            "characters": [
+                {
+                    "name": "Emeric Thale", "role": "antagonist",
+                    "description": "A stranger who claims the Ledgerbind at the story's end.",
+                    "gender": "male", "occupation": "unknown",
+                },
+                # Task 6: Miriam once more, now WITHOUT a role but WITH a new
+                # description. The missing role must NOT erase the known
+                # "spymaster" (task 4: role = newest NON-EMPTY wins).
+                {"name": "Miriam", "description": "The harbor innkeeper who kept a second, quieter ledger."},
+                # Task 6: a nameless character -> localized placeholder name
+                # "Unnamed Character" (language="en") via clean_response (task 3).
+                # Appended after Emeric so Emeric keeps the lower first_seq.
+                {"description": "eine Gestalt im Regen"},
+            ],
+            # Task 6: a location supplied only through the `place`/`desc`
+            # alternative keys -> name/description fallback chains (task 2).
+            "locations": [{"place": "Harborside", "desc": "the old docks"}],
+            "timeline": [
+                {"chapter": "The Last Reckoning", "event": "Emeric Thale claims the Ledgerbind."},
+                # Task 6: empty chapter -> is_non_narrative("") is True -> the
+                # event is dropped by the timeline filter (task 1). It must
+                # never reach the golden.
+                {"chapter": "", "event": "sollte verschwinden"},
+            ],
         })),
     ])
 
@@ -352,3 +386,38 @@ def test_snippet_anchors_unique_in_full_text(fixture_result):
             f"snippet_anchor at checkpoint {cp['percent']}% occurs {count} times "
             f"in full_text (must be exactly 1): {anchor!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Fixture exercises the four Lua-parity fixes (tasks 1-4). These assert the
+# BEHAVIOUR directly, not just golden equality: a golden diff says "something
+# changed", these say "the right thing happened", so a typo in any fallback
+# chain fails here even if the golden were regenerated to match the typo.
+# ---------------------------------------------------------------------------
+
+
+def test_fixture_exercises_name_placeholder(fixture_result):
+    _, doc = fixture_result
+    last = doc["checkpoints"][-1]["snapshot"]
+    assert "Unnamed Character" in {c["name"] for c in last["characters"]}
+
+
+def test_fixture_exercises_location_place_key(fixture_result):
+    _, doc = fixture_result
+    locs = {loc["name"]: loc for loc in doc["checkpoints"][-1]["snapshot"]["locations"]}
+    assert "Harborside" in locs
+    assert locs["Harborside"]["description"] == "the old docks"
+
+
+def test_fixture_exercises_role_newest_wins_and_omission(fixture_result):
+    _, doc = fixture_result
+    cps = doc["checkpoints"]
+    early = next(c for cp in cps for c in cp["snapshot"]["characters"] if c["name"] == "Miriam")
+    last = next(c for c in cps[-1]["snapshot"]["characters"] if c["name"] == "Miriam")
+    assert early["role"] == "innkeeper"   # frueher Snapshot: kein Zukunftswissen
+    assert last["role"] == "spymaster"    # newest-non-empty gewinnt, Auslass loescht nicht
+
+
+def test_fixture_drops_timeline_event_without_chapter(fixture_result):
+    _, doc = fixture_result
+    assert "sollte verschwinden" not in {ev["event"] for ev in doc["timeline"]}

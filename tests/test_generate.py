@@ -1,6 +1,7 @@
 """Tests for the generation orchestrator (Task 7): parallel extraction,
 ordered-merge D4 barrier, sequential enrichment, quota handling, resume.
 """
+import json
 import os
 import time
 
@@ -9,7 +10,7 @@ import pytest
 from xray_core.checkpoints import plan_checkpoints
 from xray_core.epub import BookText, TocEntry
 from xray_core.gemini import GenResult, QuotaError
-from xray_core.generate import generate_xray
+from xray_core.generate import _chunk_path, generate_xray
 from xray_core.schema import validate
 
 
@@ -413,8 +414,8 @@ def test_resume_skips_fetched_chunks(tmp_path):
     client1 = FailAt20Client()
     doc1 = generate_xray(book, client1, "en", "normal", workdir=workdir, max_workers=1)
     assert doc1["complete"] is False
-    assert os.path.exists(os.path.join(workdir, "chunk_0_0.json"))
-    assert not os.path.exists(os.path.join(workdir, "chunk_1_0.json"))
+    assert os.path.exists(os.path.join(workdir, "chunk_0_0_en_normal.json"))
+    assert not os.path.exists(os.path.join(workdir, "chunk_1_0_en_normal.json"))
 
     client2 = FakeClient()
     doc2 = generate_xray(book, client2, "en", "normal", workdir=workdir, max_workers=1)
@@ -422,6 +423,123 @@ def test_resume_skips_fetched_chunks(tmp_path):
     assert doc2["complete"] is True
     assert not any("Reading Progress: 10%" in c for c in client2.calls)  # loaded from cache
     assert any("Reading Progress: 20%" in c for c in client2.calls)  # re-fetched (had failed)
+
+
+def test_resume_with_language_change_refetches_and_drops_stale_language(tmp_path):
+    """A cached chunk is the OUTPUT of clean_response() -- already bound to
+    one specific language. Resuming under a different language must miss
+    the cache entirely rather than mix stale-language prose into a doc
+    whose top-level `language` field now claims something else."""
+    book = _filler_book()
+    workdir = str(tmp_path / "work")
+
+    # glean=False isolates the cache-key behavior under test: with the default
+    # glean pass on, each chunk makes two client calls (extract + glean), which
+    # would double the count below without changing what this test proves.
+    client_de = FakeClient([
+        ("", _ok({"characters": [{"name": "Alice", "description": "Deutsche Beschreibung"}]})),
+    ])
+    doc_de = generate_xray(book, client_de, "de", "normal", workdir=workdir, max_workers=1, glean=False)
+    assert doc_de["complete"] is True
+
+    client_en = FakeClient([
+        ("", _ok({"characters": [{"name": "Alice", "description": "English description"}]})),
+    ])
+    doc_en = generate_xray(book, client_en, "en", "normal", workdir=workdir, max_workers=1, glean=False)
+
+    assert doc_en["complete"] is True
+    # Every chunk missed the "de" cache -- proves a full refetch, not reuse.
+    assert len(client_en.calls) == len(doc_en["checkpoints"])
+    descriptions = [
+        c.get("description", "")
+        for cp in doc_en["checkpoints"]
+        for c in cp["snapshot"]["characters"]
+    ]
+    assert not any("Deutsche Beschreibung" in d for d in descriptions)
+    assert any("English description" in d for d in descriptions)
+
+
+def test_resume_with_detail_level_change_refetches(tmp_path):
+    """Same cache-busting contract as language, for detail_level: the cached
+    response was fetched under a prompt bound to the OLD detail_level's
+    character caps (xray_core/prompts.py), so it's invalid content once
+    detail_level changes."""
+    book = _filler_book()
+    workdir = str(tmp_path / "work")
+
+    client_normal = FakeClient()
+    doc_normal = generate_xray(book, client_normal, "en", "normal", workdir=workdir, max_workers=1)
+    assert doc_normal["complete"] is True
+
+    client_detailed = FakeClient()
+    doc_detailed = generate_xray(
+        book, client_detailed, "en", "detailed", workdir=workdir, enrich=False, max_workers=1
+    )
+
+    assert doc_detailed["complete"] is True
+    # Every chunk missed the "normal" cache -- proves a full refetch, not reuse.
+    assert len(client_detailed.calls) == len(doc_detailed["checkpoints"])
+
+
+def test_chunk_path_sanitizes_malicious_language(tmp_path):
+    """language is free-form argparse text (no `choices=`, unlike
+    detail_level) and lands directly in a cache filename -- a path-traversal
+    payload must not be able to escape workdir."""
+    workdir = str(tmp_path / "work")
+
+    path = _chunk_path(workdir, 0, 0, "../../evil", "normal")
+
+    workdir_abs = os.path.abspath(workdir)
+    path_abs = os.path.abspath(path)
+    assert os.path.commonpath([workdir_abs, path_abs]) == workdir_abs
+    assert os.path.dirname(path_abs) == workdir_abs  # stays a direct child, no subdirs
+    assert ".." not in os.path.basename(path)
+
+
+def test_chunk_path_caps_a_pathological_language(tmp_path):
+    """A 5000-char --language would push the filename past the OS limit and
+    make _fetch_and_persist's open() raise OSError mid-run. The component is
+    capped, and the resulting path must actually be writable."""
+    workdir = str(tmp_path / "work")
+    os.makedirs(workdir)
+
+    path = _chunk_path(workdir, 0, 0, "a" * 5000, "normal")
+
+    assert len(os.path.basename(path)) < 255  # every mainstream fs allows 255
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("{}")
+    assert os.path.exists(path)
+
+
+def test_resume_recleans_a_stale_cache_written_by_an_older_build(tmp_path):
+    """merge_segment trusts its input. A workdir written before a
+    clean_response fix still holds whatever that older build allowed -- here
+    a whitespace-only description, which _merge's newest_wins guard would
+    treat as real content and use to overwrite the real one."""
+    book = _two_chapter_book(
+        "Alice appears in the CH1MARKER village at dawn today, greeting everyone. " * 5,
+        "Alice returns to the CH2MARKER harbor as the evening tide turns again. " * 5,
+    )
+    workdir = str(tmp_path / "work")
+    os.makedirs(workdir)
+
+    cps = plan_checkpoints(book)
+    poisoned = {
+        "characters": [{"name": "Alice", "description": "   ", "role": "\t"}],
+        "locations": [], "historical_figures": [], "terms": [], "timeline": [],
+        "book_type": "fiction",
+    }
+    for cp_idx in range(len(cps)):
+        with open(_chunk_path(workdir, cp_idx, 0, "en", "normal"), "w", encoding="utf-8") as f:
+            json.dump(poisoned, f)
+
+    client = FakeClient([])  # every chunk is cached; no fetch may happen
+    doc = generate_xray(book, client, "en", "normal", workdir=workdir)
+
+    assert client.calls == []
+    alice = doc["checkpoints"][-1]["snapshot"]["characters"][0]
+    assert alice["description"] == ""  # not "   "
+    assert alice["role"] == ""  # not "\t"
 
 
 # ---------------------------------------------------------------------------
@@ -557,3 +675,24 @@ def test_enrich_does_not_leak_future_entities():
     assert "LateCharacter" in last_names  # sanity: fixture actually introduces it
 
     assert validate(doc) == []
+
+
+def test_generated_snapshots_carry_localized_name_placeholders():
+    ch1 = "Alice walks through the CH1MARKER village at dawn, greeting everyone she meets today. " * 5
+    ch2 = "Bob arrives at the CH2MARKER harbor just as the tide turns for the evening light. " * 5
+    book = _two_chapter_book(ch1, ch2)
+
+    client = FakeClient([
+        ("CH1MARKER", _ok({"characters": [{"description": "eine namenlose Gestalt"}]})),
+        ("CH2MARKER", _ok({"characters": [{"name": "Bob"}]})),
+    ])
+
+    doc = generate_xray(book, client, "de", "normal")
+
+    assert validate(doc) == []
+    names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
+    assert "Unbenannter Charakter" in names
+    # Regression: the glean pass must clean under the book language too, or a
+    # nameless gleaned entity gets the English default placeholder and survives
+    # as a phantom duplicate card (merge_segment keys by name, so it won't dedup).
+    assert "Unnamed Character" not in names

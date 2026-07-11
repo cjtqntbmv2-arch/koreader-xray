@@ -75,12 +75,15 @@ def assemble(epub_path, workdir, out_dir):
     detail = manifest["detail_level"]
     _precheck(workdir, manifest)
 
-    # raw.json -> clean_response -> chunk_<cp>_<idx>.json (the resume cache shape)
+    # raw.json -> clean_response -> the resume cache. _chunk_path keys the cache
+    # by (language, detail) as well, so the write key MUST match generate_xray's
+    # read key below (book.language, detail) or every chunk misses and refetches.
     for ch in manifest["chunks"]:
         with open(os.path.join(workdir, ch["raw_file"]), encoding="utf-8") as f:
             raw = json.load(f)
-        cleaned = clean_response(raw)
-        with open(_chunk_path(workdir, ch["cp_idx"], ch["chunk_idx"]), "w", encoding="utf-8") as f:
+        cleaned = clean_response(raw, book.language)
+        cache_path = _chunk_path(workdir, ch["cp_idx"], ch["chunk_idx"], book.language, detail)
+        with open(cache_path, "w", encoding="utf-8") as f:
             json.dump(cleaned, f)
 
     # enrich=False is MANDATORY: Phase C would call client.generate even with a

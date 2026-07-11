@@ -224,6 +224,16 @@
             "aliases": [],
             "first_pct": 51,
             "first_seq": 4
+          },
+          {
+            "name": "Miriam",
+            "role": "innkeeper",
+            "description": "",
+            "gender": "",
+            "occupation": "",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 5
           }
         ],
         "locations": [
@@ -296,6 +306,16 @@
             "first_seq": 4
           },
           {
+            "name": "Miriam",
+            "role": "spymaster",
+            "description": "",
+            "gender": "",
+            "occupation": "",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 5
+          },
+          {
             "name": "Dahlia Rees",
             "role": "supporting",
             "description": "The lighthouse keeper who watches over Shadow Pass.",
@@ -303,7 +323,7 @@
             "occupation": "lighthouse keeper",
             "aliases": [],
             "first_pct": 63,
-            "first_seq": 5
+            "first_seq": 6
           }
         ],
         "locations": [
@@ -321,7 +341,7 @@
             "importance": "recurring hazard",
             "aliases": [],
             "first_pct": 63,
-            "first_seq": 6
+            "first_seq": 7
           }
         ],
         "terms": [
@@ -381,6 +401,16 @@
             "first_seq": 4
           },
           {
+            "name": "Miriam",
+            "role": "spymaster",
+            "description": "",
+            "gender": "",
+            "occupation": "",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 5
+          },
+          {
             "name": "Dahlia Rees",
             "role": "supporting",
             "description": "The lighthouse keeper who watches over Shadow Pass.",
@@ -388,7 +418,7 @@
             "occupation": "lighthouse keeper",
             "aliases": [],
             "first_pct": 63,
-            "first_seq": 5
+            "first_seq": 6
           }
         ],
         "locations": [
@@ -406,7 +436,7 @@
             "importance": "recurring hazard",
             "aliases": [],
             "first_pct": 63,
-            "first_seq": 6
+            "first_seq": 7
           }
         ],
         "terms": [
@@ -466,6 +496,16 @@
             "first_seq": 4
           },
           {
+            "name": "Miriam",
+            "role": "spymaster",
+            "description": "",
+            "gender": "",
+            "occupation": "",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 5
+          },
+          {
             "name": "Dahlia Rees",
             "role": "supporting",
             "description": "The lighthouse keeper who watches over Shadow Pass.",
@@ -473,7 +513,7 @@
             "occupation": "lighthouse keeper",
             "aliases": [],
             "first_pct": 63,
-            "first_seq": 5
+            "first_seq": 6
           }
         ],
         "locations": [
@@ -491,7 +531,7 @@
             "importance": "recurring hazard",
             "aliases": [],
             "first_pct": 63,
-            "first_seq": 6
+            "first_seq": 7
           }
         ],
         "terms": [
@@ -554,6 +594,16 @@
             "first_seq": 4
           },
           {
+            "name": "Miriam",
+            "role": "spymaster",
+            "description": "The harbor innkeeper who kept a second, quieter ledger.",
+            "gender": "",
+            "occupation": "",
+            "aliases": [],
+            "first_pct": 51,
+            "first_seq": 5
+          },
+          {
             "name": "Dahlia Rees",
             "role": "supporting",
             "description": "The lighthouse keeper who watches over Shadow Pass.",
@@ -561,7 +611,7 @@
             "occupation": "lighthouse keeper",
             "aliases": [],
             "first_pct": 63,
-            "first_seq": 5
+            "first_seq": 6
           },
           {
             "name": "Emeric Thale",
@@ -571,7 +621,17 @@
             "occupation": "unknown",
             "aliases": [],
             "first_pct": 100,
-            "first_seq": 7
+            "first_seq": 8
+          },
+          {
+            "name": "Unnamed Character",
+            "role": "",
+            "description": "eine Gestalt im Regen",
+            "gender": "",
+            "occupation": "",
+            "aliases": [],
+            "first_pct": 100,
+            "first_seq": 9
           }
         ],
         "locations": [
@@ -589,7 +649,15 @@
             "importance": "recurring hazard",
             "aliases": [],
             "first_pct": 63,
-            "first_seq": 6
+            "first_seq": 7
+          },
+          {
+            "name": "Harborside",
+            "description": "the old docks",
+            "importance": "",
+            "aliases": [],
+            "first_pct": 100,
+            "first_seq": 10
           }
         ],
         "terms": [

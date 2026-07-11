@@ -16,15 +16,48 @@ package's own files, so `calibre_plugins.xray_generator.xray_core` DOES
 exist and import correctly (calibre explicitly documents that nested
 packages under the plugin root work like normal Python packages).
 
-So: alias that already-real package to the bare name `xray_core` in
-sys.modules before anything else can import it. Registering a package in
-sys.modules before/during its own parent's init is standard Python
-self-import behavior (every package does this for `from . import sibling`),
-so this works regardless of calibre's internal zip-loading details.
+So: install a meta_path finder that maps the whole bare `xray_core` prefix
+onto the already-real `calibre_plugins.xray_generator.xray_core` package,
+then alias the top-level package too. Aliasing only the top package is not
+enough -- calibre's importer resolves only `calibre_plugins.*` names, so
+`from xray_core.checkpoints import ...` (in xray_core's own modules and in
+ui.py) would otherwise raise ModuleNotFoundError for every submodule.
 """
+import importlib
+import importlib.abc
+import importlib.util
 import sys
 
+
+class _XrayCoreRedirect:
+    """meta_path finder: bare `xray_core[.sub]` -> the bundled real package."""
+
+    _PREFIX = "xray_core"
+    _REAL = "calibre_plugins.xray_generator.xray_core"
+
+    def find_spec(self, name, path=None, target=None):
+        if name != self._PREFIX and not name.startswith(self._PREFIX + "."):
+            return None
+        real = importlib.import_module(self._REAL + name[len(self._PREFIX):])
+        sys.modules[name] = real
+        return importlib.util.spec_from_loader(name, _AlreadyLoaded(real))
+
+
+class _AlreadyLoaded(importlib.abc.Loader):
+    """Loader that hands back an already-imported module unchanged."""
+
+    def __init__(self, module):
+        self._module = module
+
+    def create_module(self, spec):
+        return self._module
+
+    def exec_module(self, module):
+        pass
+
+
 if "xray_core" not in sys.modules:
+    sys.meta_path.insert(0, _XrayCoreRedirect())
     from . import xray_core
     sys.modules["xray_core"] = xray_core
 

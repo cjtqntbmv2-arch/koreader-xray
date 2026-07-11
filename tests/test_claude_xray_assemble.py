@@ -122,3 +122,25 @@ def test_assemble_detects_text_hash_drift(tmp_path):
     with pytest.raises(SystemExit) as ei:
         assemble(epub, workdir, str(tmp_path / "out_hash_drift"))
     assert "hash" in str(ei.value).lower()
+
+
+def test_assemble_localizes_nameless_placeholder_by_book_language(tmp_path):
+    # A nameless entity in a non-English book must get the book-language
+    # placeholder, not the English default -- the assembler must forward
+    # book.language to clean_response. The resume re-clean cannot repair this
+    # later (it only localizes a name that is STILL empty).
+    body = "<p>" + " ".join(f"Wort{i}" for i in range(40000)) + "</p>"
+    epub = build_epub(tmp_path, chapters=[("Kapitel", body)], language="de")
+    workdir = str(tmp_path / "work")
+    manifest = json.load(open(write_plan(epub, "detailed", workdir), encoding="utf-8"))
+    for ch in manifest["chunks"]:
+        raw = {"book_type": "fiction",
+               "characters": [{"description": "eine namenlose Gestalt"}],  # no name key
+               "locations": [], "historical_figures": [], "terms": [], "timeline": []}
+        with open(os.path.join(workdir, ch["raw_file"]), "w", encoding="utf-8") as f:
+            json.dump(raw, f)
+
+    doc = assemble(epub, workdir, str(tmp_path / "out_de"))
+    names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
+    assert "Unbenannter Charakter" in names
+    assert "Unnamed Character" not in names

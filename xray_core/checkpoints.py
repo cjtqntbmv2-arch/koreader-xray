@@ -29,7 +29,18 @@ _NON_NARRATIVE_RE = [re.compile(p) for p in NON_NARRATIVE]
 
 
 def is_non_narrative(title) -> bool:
+    """Port of `isNonNarrativeChapter` (`xray_data.lua:327-335`).
+
+    A missing or blank title counts as non-narrative -- Lua's
+    `if not title then return true end` plus `if lower == "" then return
+    true end`. Both callers share that rule on the device too: chapter-
+    boundary selection (`xray_prefetch.lua:46`) and the timeline filter
+    (`xray_fetch.lua:534`), which is why the guard lives here and not in
+    either caller.
+    """
     t = (title or "").lower().strip()
+    if not t:
+        return True
     return any(p.match(t) for p in _NON_NARRATIVE_RE)
 
 
@@ -98,7 +109,14 @@ def plan_checkpoints(book: BookText) -> list[Checkpoint]:
 
     cps = []
     for i, p in enumerate(ends):
-        pct = 100 if i == len(ends) - 1 else p * 100 // total
+        # Floor to 1, not 0: a chapter boundary below 1% of the book (two tiny
+        # front chapters is enough) would otherwise yield percent=0, which
+        # schema.validate() rejects -- and generate_xray only validates after
+        # the whole API budget is spent. The device treats pct=0 as page 1
+        # anyway (`pctToPage` in the KOReader importer clamps `p < 1` up),
+        # so 1 is what it would show regardless. Any duplicate this creates
+        # is absorbed by the coalescing pass below.
+        pct = 100 if i == len(ends) - 1 else max(1, p * 100 // total)
         a = anchors.get(p)
         cps.append(Checkpoint(
             offset=p,

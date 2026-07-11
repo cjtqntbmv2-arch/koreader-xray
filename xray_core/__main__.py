@@ -54,10 +54,10 @@ def _build_parser():
         prog="xray_core", description="Generate xray.json for an EPUB (Gemini-backed)."
     )
     parser.add_argument("book", help="path to the EPUB file")
-    parser.add_argument(
-        "--api-key", default=os.environ.get("GEMINI_API_KEY"),
-        help="Gemini API key (defaults to the GEMINI_API_KEY env var)",
-    )
+    # Env default so the key never has to appear in argv (visible to `ps`) or
+    # in shell history. --api-key still wins when given explicitly.
+    parser.add_argument("--api-key", default=os.environ.get("GEMINI_API_KEY"),
+                        help="Gemini API key (default: $GEMINI_API_KEY)")
     parser.add_argument("--model", default="gemini-3.5-flash")
     parser.add_argument("--language", default="en")
     parser.add_argument("--detail", choices=["normal", "detailed"], default="normal")
@@ -72,11 +72,10 @@ def _build_parser():
 
 
 def main(argv=None) -> int:
-    args = _build_parser().parse_args(argv)
-
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     if not args.api_key:
-        print("error: no API key (pass --api-key or set GEMINI_API_KEY)", file=sys.stderr)
-        return 2
+        parser.error("no API key: pass --api-key or set GEMINI_API_KEY")
 
     book = read_epub(args.book)
     transport = _fixture_transport(args.transport_fixture) if args.transport_fixture else None

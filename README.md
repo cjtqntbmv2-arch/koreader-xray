@@ -14,7 +14,7 @@ Design: `docs/2026-07-09-calibre-xray-desktop-generation-design.md`
 
 - `xray_core/` — reine Python-Lib: EPUB-Textextraktion, Checkpoint-Planung,
   Gemini-Client, Merge/Staging, Schema (testbar ohne calibre)
-- `calibre_plugin/` — calibre-Glue: InterfaceAction, Config, Background-Job, Embed-Hook
+- `calibre_plugin/` — calibre-Glue: InterfaceAction, Config, Background-Job (bettet am Job-Ende ein)
 - `schema/xray.schema.json` — Austauschformat-Vertrag (Single Source of Truth)
 - `tests/` — pytest (Record/Replay-Gemini, Golden-Files)
 - `tools/build_plugin.py` — baut das installierbare Plugin-Zip
@@ -22,7 +22,11 @@ Design: `docs/2026-07-09-calibre-xray-desktop-generation-design.md`
 ## Dev-Loop
 
 ```bash
-calibre-customize -b calibre_plugin   # Plugin aus dem Verzeichnis laden
-calibre-debug -g                      # calibre mit Konsole starten
-python3 -m pytest tests/
+python3 -m pytest tests/                                     # Tests (ohne Netz, ohne calibre)
+python3 tools/build_plugin.py                                # dist/xray-generator-<VERSION>.zip bauen
+calibre-customize -a dist/xray-generator-$(cat VERSION).zip  # Plugin installieren
+calibre-debug -g                                             # calibre mit Konsole starten
 ```
+
+Immer über das Zip installieren: `calibre-customize -b calibre_plugin` schlägt fehl, weil
+das Verzeichnis weder `xray_core/` noch `VERSION` enthält — die bündelt erst `build_plugin.py`.

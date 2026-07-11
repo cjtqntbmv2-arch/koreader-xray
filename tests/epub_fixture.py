@@ -71,7 +71,8 @@ _AUTHORS = ("Jane Author",)
 _LANGUAGE = "en"
 
 
-def build_epub(tmp_path, chapters, toc=True, epub3=True, encryption_uri=None, opf_attrs=False):
+def build_epub(tmp_path, chapters, toc=True, epub3=True, encryption_uri=None, opf_attrs=False,
+               language=_LANGUAGE):
     """Write a minimal valid EPUB under `tmp_path` and return its Path.
 
     chapters: list of (title, html_body) tuples -> one xhtml spine item each.
@@ -120,7 +121,7 @@ def build_epub(tmp_path, chapters, toc=True, epub3=True, encryption_uri=None, op
   <metadata{metadata_ns}>
     <dc:title>{_TITLE}</dc:title>
     {creators}
-    <dc:language>{_LANGUAGE}</dc:language>
+    <dc:language>{language}</dc:language>
     <dc:identifier id="bookid"{identifier_attrs}>urn:uuid:00000000-0000-0000-0000-000000000000</dc:identifier>
   </metadata>
   <manifest>

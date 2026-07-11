@@ -3,10 +3,14 @@
 Ports `xray_data.lua`'s dedup/promote/stamp/sort logic (`deduplicateByName`
 ~223-289, `isMoreCompleteName` ~184-198, `stampFirstAppearance` ~176-182,
 `sortByFirstAppearance`/`sortByName`/`sortDataByFrequency` ~130-172), the
-per-field defaulting from `AIHelper:validateAndCleanData`
-(`xray_aihelper.lua:2002-2060`), and the checkpoint-merge field rules from
-`xray_fetch.lua` (description/definition = newest non-empty, terms union
-aliases instead of overwriting).
+per-field defaulting from `AIHelper:validateAndCleanData` in
+`xray_aihelper.lua` (function starts ca. line 2008), and the
+checkpoint-merge field rules from `xray_fetch.lua` (description/definition
+= newest non-empty, terms union aliases instead of overwriting).
+
+Lua line numbers in this module are approximate ("ca.") and anchored to
+KOReader-repo commit `42074d9` -- they drift as that repo moves, so prefer
+the named function/file over the number when hunting for the source.
 
 Stdlib-only on purpose (see xray_core/epub.py).
 """
@@ -16,41 +20,139 @@ import re
 
 from xray_core.checkpoints import is_non_narrative
 
-_NAME_FALLBACKS = ("name", "full_formal_name", "full_name", "formal_name", "Name")
+# Alternative keys the model sometimes emits, verbatim from the fallback
+# chains inside `AIHelper:validateAndCleanData` (`xray_aihelper.lua`, ca.
+# lines 2021-2054). Only `c.Name` is dead code there: a pure case-duplicate
+# of `c.name`, already handled once `AIHelper:parseAIResponse` (ca. line
+# 2003) lower-cases keys via `validateAndCleanData(normalizeKeys(data))`
+# before this runs -- so it's dropped here without a Python equivalent.
+# `l.Lugar` is different: a genuine third alternative key (Spanish for
+# "place"), not a duplicate of anything else in its chain -- it lives on
+# below as `"lugar"` in `_LOC_NAME_KEYS`. We rely on the same lower-casing
+# precondition -- see clean_response's docstring.
+_CHAR_NAME_KEYS = ("name", "full_formal_name", "full_name", "formal_name")
+_CHAR_DESC_KEYS = ("description", "bio", "history", "desc")
+_CHAR_OCCUPATION_KEYS = ("occupation", "job")
+_LOC_NAME_KEYS = ("name", "place", "lugar")
+_LOC_DESC_KEYS = ("description", "desc", "short_desc")
+_LOC_IMPORTANCE_KEYS = ("importance", "significance")
+_HIST_NAME_KEYS = ("name",)
+_HIST_BIO_KEYS = ("biography", "bio", "description")
+_HIST_ROLE_KEYS = ("role", "historical_role")
+_HIST_IMPORTANCE_KEYS = ("importance_in_book", "significance")
+_HIST_CONTEXT_KEYS = ("context_in_book", "context")
+
+# `unnamed_character` / `unnamed_person` verbatim from the fallback-strings
+# table in `prompts/en.lua` (ca. line 323) / `prompts/de.lua` (ca. line 362).
+# `unknown_place` is NOT in that table -- `AIHelper:validateAndCleanData`
+# hardcodes the English literal directly (ca. line 2052) even for German
+# books; the German wording here is ours.
+#
+# Deliberate divergence: `validateAndCleanData` also defaults role,
+# description, biography, importance_in_book and context_in_book to
+# localized (or, for the latter two, hardcoded-English) placeholders. We
+# leave those empty instead -- the device's card renderer in `xray_ui.lua`
+# (e.g. ca. line 190) skips empty fields entirely, so a placeholder would
+# only add visible noise to every card the model knew nothing about, and a
+# non-empty value would block a later segment from filling the gap.
+_FALLBACKS = {
+    "en": {
+        "unnamed_character": "Unnamed Character",
+        "unnamed_person": "Unnamed Person",
+        "unknown_place": "Unknown Place",
+    },
+    "de": {
+        "unnamed_character": "Unbenannter Charakter",
+        "unnamed_person": "Unbenannte Person",
+        "unknown_place": "Unbekannter Ort",
+    },
+}
+
+
+def fallback_strings(language: str) -> dict:
+    """Localized placeholder names; unknown languages fall back to English."""
+    return _FALLBACKS.get(language, _FALLBACKS["en"])
 
 
 def _str(d: dict, key: str, default: str = "") -> str:
+    """Deliberate divergence from Lua's `ensureString` (`xray_aihelper.lua:
+    2014`: `(type(v) == "string" and #v > 0) and v or d or ""`), which only
+    checks length and never strips: we also strip whitespace and treat a
+    value that's empty afterwards as missing. Without this, `bool("   ")`
+    being True in Python let a whitespace-only model value pass every
+    truthy check downstream -- including `BookState._merge`'s `newest_wins`
+    overwrite -- as if it were real content.
+    """
     v = d.get(key)
-    return v if isinstance(v, str) and v else default
+    v = v.strip() if isinstance(v, str) else ""
+    return v or default
 
 
 def _first_nonempty(d: dict, keys, default: str) -> str:
+    """Return the first present-and-non-empty string value among `keys`.
+
+    Deliberate divergence from Lua: `ensureString(c.description or c.bio or
+    c.history or c.desc, default)` uses Lua's `or`, where the empty string
+    is truthy (only `nil` and `false` are falsy in Lua) -- so that chain
+    stops at the first key that merely *exists*, even if its value is `""`,
+    and `ensureString` then returns the default for it. E.g. for
+    `{"name": "A", "description": "", "bio": "echter Text"}`, Lua yields the
+    placeholder even though "echter Text" is sitting right there in `bio`.
+    Python treats "present but empty" as "missing" and keeps walking the
+    chain instead, on purpose: an empty value from one key must not block a
+    real value the model supplied under a later, alternative key.
+
+    "Empty" includes whitespace-only, checked after stripping -- same
+    divergence as `_str` and same reason (Lua's `ensureString` checks only
+    `#v > 0` and never strips).
+    """
     for key in keys:
         v = d.get(key)
-        if isinstance(v, str) and v:
+        v = v.strip() if isinstance(v, str) else ""
+        if v:
             return v
     return default
 
 
 def _aliases(d: dict) -> list:
+    # ponytail: filters only the exact empty string, not whitespace-only
+    # (same root cause as _str/_first_nonempty above) -- left out of this
+    # fix on purpose. Aliases union rather than overwrite (xray_data.lua
+    # dedup), so a whitespace-only alias is cosmetic list noise, not the
+    # data-loss overwrite this fix targets. Give it the same `.strip()`
+    # treatment here if that noise ever turns out to matter.
     v = d.get("aliases")
     return [a for a in v if isinstance(a, str) and a] if isinstance(v, list) else []
 
 
-def clean_response(raw: dict) -> dict:
+def clean_response(raw: dict, language: str = "en") -> dict:
     """Port of `validateAndCleanData`'s per-field defaulting (essentials).
 
-    Nameless characters/locations are KEPT with a placeholder name
-    (`xray_aihelper.lua:2015`) -- never dropped, so a character or place the
-    AI described but couldn't name never silently disappears.
+    PRECONDITION: `raw`'s keys are already lower-cased by
+    `gemini.normalize_keys` (`gemini.py:192`), exactly as Lua couples the
+    two in `AIHelper:parseAIResponse` (`xray_aihelper.lua`, ca. line 2003:
+    `validateAndCleanData(normalizeKeys(data))`). Calling this with raw
+    model output that skipped that step will silently miss upper-case keys.
+
+    Nameless characters/locations are KEPT with a placeholder name (the
+    `name` fallback chains inside `AIHelper:validateAndCleanData`,
+    `xray_aihelper.lua`, ca. lines 2021 and 2052) -- never dropped, so a
+    character or place the AI described but couldn't name never silently
+    disappears.
     """
+    strings = fallback_strings(language)
     characters = [
         {
-            "name": _first_nonempty(c, _NAME_FALLBACKS, "Unnamed character"),
-            "role": _str(c, "role")[:40],
-            "description": _str(c, "description"),
+            "name": _first_nonempty(c, _CHAR_NAME_KEYS, strings["unnamed_character"]),
+            # rstrip AFTER the cut: a 40-char slice can end mid-space, and a
+            # second pass over this output would strip that space away. Without
+            # it clean_response is not a fixpoint -- generate.py re-cleans
+            # cached chunks on resume, so a resumed run would differ from a
+            # fresh one by exactly that trailing byte.
+            "role": _str(c, "role")[:40].rstrip(),
+            "description": _first_nonempty(c, _CHAR_DESC_KEYS, ""),
             "gender": _str(c, "gender"),
-            "occupation": _str(c, "occupation"),
+            "occupation": _first_nonempty(c, _CHAR_OCCUPATION_KEYS, ""),
             "aliases": _aliases(c),
         }
         for c in raw.get("characters") or []
@@ -59,9 +161,9 @@ def clean_response(raw: dict) -> dict:
 
     locations = [
         {
-            "name": _first_nonempty(loc, _NAME_FALLBACKS, "Unnamed location"),
-            "description": _str(loc, "description"),
-            "importance": _str(loc, "importance"),
+            "name": _first_nonempty(loc, _LOC_NAME_KEYS, strings["unknown_place"]),
+            "description": _first_nonempty(loc, _LOC_DESC_KEYS, ""),
+            "importance": _first_nonempty(loc, _LOC_IMPORTANCE_KEYS, ""),
             "aliases": _aliases(loc),
         }
         for loc in raw.get("locations") or []
@@ -70,11 +172,11 @@ def clean_response(raw: dict) -> dict:
 
     historical_figures = [
         {
-            "name": _first_nonempty(h, ("name", "Name"), "Unnamed historical figure"),
-            "biography": _str(h, "biography"),
-            "role": _str(h, "role")[:40],
-            "importance_in_book": _str(h, "importance_in_book"),
-            "context_in_book": _str(h, "context_in_book"),
+            "name": _first_nonempty(h, _HIST_NAME_KEYS, strings["unnamed_person"]),
+            "biography": _first_nonempty(h, _HIST_BIO_KEYS, ""),
+            "role": _first_nonempty(h, _HIST_ROLE_KEYS, "")[:40].rstrip(),  # fixpoint, see above
+            "importance_in_book": _first_nonempty(h, _HIST_IMPORTANCE_KEYS, ""),
+            "context_in_book": _first_nonempty(h, _HIST_CONTEXT_KEYS, ""),
         }
         for h in raw.get("historical_figures") or []
         if isinstance(h, dict)
@@ -240,7 +342,11 @@ class BookState:
     def merge_segment(self, cleaned: dict, checkpoint_pct: int) -> None:
         self._merge(
             self.characters, cleaned.get("characters") or [],
-            newest_wins=("description",), fill_if_empty=("role", "gender", "occupation"),
+            # `role` newest-wins per xray_fetch.lua:587. Divergence: Lua
+            # overwrites unconditionally; since we no longer default `role`
+            # to a placeholder, an unconditional overwrite would let a
+            # segment that never mentions the role erase a known one.
+            newest_wins=("description", "role"), fill_if_empty=("gender", "occupation"),
             stamp=True, checkpoint_pct=checkpoint_pct,
         )
         self._merge(
@@ -258,8 +364,12 @@ class BookState:
         )
         self._merge(
             self.historical_figures, cleaned.get("historical_figures") or [],
-            newest_wins=("biography",),
-            fill_if_empty=("role", "importance_in_book", "context_in_book"),
+            # xray_fetch.lua:660. Same non-empty guard -- and here Lua really
+            # can blank a role: it defaults hist `role` to "" (AIHelper:
+            # validateAndCleanData, xray_aihelper.lua, ca. line 2039) and
+            # overwrites regardless. We keep the known value instead.
+            newest_wins=("biography", "role"),
+            fill_if_empty=("importance_in_book", "context_in_book"),
             stamp=False, checkpoint_pct=checkpoint_pct,
         )
 
