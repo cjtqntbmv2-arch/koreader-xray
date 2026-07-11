@@ -537,6 +537,29 @@ function M:_readEmbeddedXray(book_path)
     return doc
 end
 
+-- Companion file next to the book: `<book_path>.xray.json` (append-form,
+-- case-proof, format-agnostic; the cross-repo contract with calibre-xray).
+-- Same document the desktop would embed, but without touching the EPUB, so
+-- KOReader's reading statistics (keyed by the file's partial digest) survive.
+-- Plain file read -- no unzip, no BusyBox hazard. Does NOT gate; the caller does.
+function M:_readCompanionXray(book_path)
+    if not book_path then return nil end
+    local fh = io.open(book_path .. ".xray.json", "r")
+    if not fh then return nil end
+    local raw = fh:read("*a")
+    fh:close()
+    if not raw or raw == "" then return nil end
+
+    local ok_json, json = pcall(require, "json")
+    if not ok_json or type(json) ~= "table" or not json.decode then return nil end
+    local ok, doc = pcall(json.decode, raw)
+    if not ok or type(doc) ~= "table" then
+        self:log("XRayPlugin: companion xray.json is not valid JSON")
+        return nil
+    end
+    return doc
+end
+
 -- Cheap guards first, then the zip probe, then the gate.
 function M:maybeImportEmbeddedXray()
     if self.prefetch_active or self.bg_fetch_active then return end

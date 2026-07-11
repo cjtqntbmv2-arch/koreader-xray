@@ -1182,4 +1182,40 @@ describe("xray_import", function()
             assert.is_true(mkdir_idx < unzip_idx)
         end)
     end)
+
+    describe("companion xray import", function()
+        local orig_json
+        before_each(function() orig_json = package.loaded["json"] end)
+        after_each(function() package.loaded["json"] = orig_json end)
+
+        it("reads a valid companion file next to the book", function()
+            package.loaded["json"] = { decode = function() return { schema_version = 1, checkpoints = {{}} } end }
+            local path = os.tmpname()
+            local companion = path .. ".xray.json"
+            local fh = io.open(companion, "w"); fh:write("{...}"); fh:close()
+
+            local p = mock_plugin()
+            local doc = p:_readCompanionXray(path)
+            os.remove(companion)
+
+            assert.is_not_nil(doc)
+            assert.are.equal(1, doc.schema_version)
+        end)
+
+        it("returns nil when no companion file exists", function()
+            local p = mock_plugin()
+            assert.is_nil(p:_readCompanionXray("/no/such/book.epub"))
+        end)
+
+        it("returns nil for a malformed companion (decode errors)", function()
+            package.loaded["json"] = { decode = function() error("bad json") end }
+            local path = os.tmpname()
+            local companion = path .. ".xray.json"
+            local fh = io.open(companion, "w"); fh:write("not json {"); fh:close()
+            local p = mock_plugin()
+            local doc = p:_readCompanionXray(path)
+            os.remove(companion)
+            assert.is_nil(doc)
+        end)
+    end)
 end)
