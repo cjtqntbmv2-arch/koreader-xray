@@ -489,7 +489,10 @@ end
 -- 26.7.6 failure class (BusyBox lacking a flag we assumed), so we fall back to
 -- the whole-archive form xray_updater.lua:375-382 actually ships and trusts.
 -- Extraction goes into the book's own .sdr dir (always writable, unlike /tmp on
--- some firmwares); BusyBox unzip creates the -d directory recursively.
+-- some firmwares). BusyBox unzip (v1.31.1 on Kobo, and Kindle) does NOT create
+-- the -d directory itself -- unlike Info-ZIP unzip -- so mkdir -p it first, or
+-- the extraction silently yields nothing and the import reports "no calibre
+-- data" on a book that genuinely carries it.
 function M:_readEmbeddedXray(book_path)
     if not M._zipHasEntry(book_path, DATA_PATH) then return nil end
 
@@ -505,6 +508,7 @@ function M:_readEmbeddedXray(book_path)
         os.execute("rm -rf " .. shellQuote(tmp_dir))
     end
 
+    os.execute("mkdir -p " .. shellQuote(tmp_dir))
     os.execute(string.format("unzip -o -q %s %s -d %s 2>/dev/null",
         shellQuote(book_path), shellQuote(DATA_PATH), shellQuote(tmp_dir)))
     local fh = io.open(extracted, "r")

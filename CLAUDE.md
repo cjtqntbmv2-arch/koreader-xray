@@ -49,25 +49,35 @@ Versions are CalVer-ish `YY.M.PATCH` (see `version` in `xray.koplugin/_meta.lua`
 
 Release-notes tone rules live in `.agents/rules/release_notes.md` (no emoji, human, end-user friendly).
 
-## Architecture: one plugin object, many mixins
+## Architecture: one plugin object, six mixins
 
-`main.lua` defines `XRayPlugin` (a KOReader `WidgetContainer`). Every other `xray_*.lua` module returns a plain table of methods that `safeRequireMixin()` merges onto `XRayPlugin` (main.lua:29-48). Consequences:
+`main.lua` defines `XRayPlugin` (a KOReader `WidgetContainer`). Exactly six modules are merged onto it by `safeRequireMixin()` (main.lua:41-46) — `xray_data`, `xray_ui`, `xray_fetch`, `xray_mentions`, `xray_prefetch`, `xray_import`. Consequences:
 
-- All modules share one `self` — a method in `xray_fetch.lua` calls UI code as `self:showSomething()` even though that lives in `xray_ui.lua`. To find a method's definition, grep across all modules.
-- Method names must be unique across all mixin files; a collision silently overwrites.
-- Adding functionality = adding a method to the topically right module file, not a new class.
+- Those six share one `self` — a method in `xray_fetch.lua` calls UI code as `self:showSomething()` even though that lives in `xray_ui.lua`. To find a method's definition, grep across the six.
+- Method names must be unique across the six mixin files; a collision silently overwrites.
+- Adding functionality = adding a method to the topically right mixin file, not a new class.
+
+The remaining modules are **not** mixins and are reached through `self`:
+
+- Instantiated per plugin (`Foo:new()`): `xray_lookupmanager` → `self.lookup_manager`, `xray_seriesmanager` → `self.series_manager`; `xray_cachemanager` / `xray_chapteranalyzer` are lazily `:new()`'d inside `xray_fetch.lua` as `self.cache_manager` / `self.chapter_analyzer`.
+- Module singletons: `xray_aihelper` → `self.ai_helper`, `localization_xray` → `self.loc`, `xray_logger` (module-level, gated by `XRayLogger.enabled`).
+- Plain function tables `require`d at use site: `xray_utils`, `xray_updater`.
+
+**Settings live on `self.ai_helper.settings`, not on `self`** — an in-memory table backed by `settings.json` (written via `AIHelper:saveSettings()`). Distinct from `xray_config.lua`, the tracked, user-hand-edited API-key file that ships with empty keys.
 
 Module map (by responsibility, not exhaustive):
 
 - `main.lua` — lifecycle and KOReader integration: menu registration, Dispatcher gesture actions, event handlers (`onReaderReady`, `onPageUpdate` for auto-fetch on chapter change, `onNetworkConnected`, `onDictButtonsReady` which injects the X-Ray button into dictionary/selection popups).
 - `xray_ui.lua` (~4600 lines, the bulk) — all menus, dialogs, entry views.
 - `xray_aihelper.lua` — builds/parses provider-specific requests (Gemini `generationConfig`/thinking, OpenAI `response_format`/reasoning effort, Claude thinking blocks, custom endpoints with format auto-detection). Provider quirks live here.
-- `xray_fetch.lua` — fetch orchestration and networking; `xray_chapteranalyzer.lua` — which entities appear in the current chapter/page; `xray_data.lua` — data processing; `xray_mentions.lua` — mention scanning; `xray_lookupmanager.lua` — text-selection lookups; `xray_seriesmanager.lua` — standalone series-recap logic.
+- `xray_fetch.lua` — fetch orchestration and networking; `xray_chapteranalyzer.lua` — which entities appear in the current chapter/page; `xray_data.lua` — data processing; `xray_mentions.lua` — mention scanning; `xray_lookupmanager.lua` — text-selection lookups; `xray_seriesmanager.lua` — standalone series-recap logic; `xray_prefetch.lua` — the checkpoint prefetch loop (see the data-model section below).
 - `xray_cachemanager.lua` — persistence: per-book X-Ray data is stored in the book's `.sdr` sidecar dir (`DocSettings:getSidecarDir`). Offline-first: fetch once, read from cache after.
 - `xray_updater.lua` — OTA plugin updates; deliberately preserves the user-edited `xray_config.lua` (API keys). Don't rename `xray_config.lua` keys — user configs in the wild depend on them.
 - `xray_import.lua` — one-time adoption of a calibre-generated `xray/xray.json` embedded in the EPUB (companion project `calibre-xray`). Writes exactly what a completed on-device prefetch would leave behind: main cache + `xray_snapshot_NN.lua` per checkpoint. Anchors resolve TOC → unique text snippet (`findAllText`, **not** `findText`) → percent; the strict-ascent drop rule keeps D4 intact when device pages collide. Runs on `onReaderReady` only when no cache exists. `xray_data.lua`'s non-narrative title list must stay identical to the calibre repo's — the TOC anchor depends on it.
 - `localization_xray.lua` — runtime `.po` loader; strings are used as `self.loc:t("key")`.
-- `prompts/<lang>.lua` — AI prompt templates per language; `languages/<lang>.po` — UI translations.
+- `xray_logger.lua` — file logger, **off by default** (every line is a flash open/append/close on e-ink hardware). Enabled only when the `debug_logging` key is set in `xray_config.lua` or `settings.json`; don't add unconditional logging.
+- `xray_utils.lua` — `isLowPowerDevice()` (PW1/Touch/PocketBook/old Kobo gating) and `getFriendlyError()` (maps HTTP status text to localized error keys).
+- `prompts/<lang>.lua` — AI prompt templates per language; `languages/<lang>.po` — UI translations. Only `en` and `de` remain (deliberately slimmed from 16 in 26.7.10).
 
 ## X-Ray data model: complete, offline-first, spoiler-staged
 
@@ -81,7 +91,7 @@ The character / location / glossary lists are meant to be a **complete, one-time
 - **Intent: distant content deserves fuller reminders than recently-read content** (you forget the old). Today this is partly emergent — the per-checkpoint merge re-enriches long-running entities' descriptions. An explicit distance-scaled length rule is a deferred refinement (see the spec's §10); don't assume it exists.
 - **Completeness applies to all three lists** (characters, locations, terms) — not just characters. Any per-segment "extract every X" instruction must name all three.
 
-Implementation detail for the current push lives in `docs/superpowers/specs/2026-07-09-xray-full-text-entity-coverage-design.md`.
+Implementation detail for the current push lives in `docs/superpowers/specs/2026-07-09-xray-full-text-entity-coverage-design.md` — note `docs/superpowers/` is **gitignored**, so this and the other plans/specs exist only in the author's working copy. Treat the bullets above as the durable record; if the file is missing, it is not lost work.
 
 ## Localization workflow (mandatory)
 
@@ -91,10 +101,17 @@ Implementation detail for the current push lives in `docs/superpowers/specs/2026
 
 ## Testing conventions
 
-`spec/spec_helper.lua` fakes the whole KOReader environment via `package.loaded[...]` (device, uimanager, widgets, docsettings, lfs, logger) and records widgets in `_G.ui_tracker` (`shown`, `last_shown`, `closed`) so specs can assert UI behavior. Mock book/series data lives under `spec/mocks/`. Specs are written in busted syntax, but the custom runner only implements the subset of `assert.*` defined in `tools/spec_runner.lua` — stick to those matchers.
+`spec/spec_helper.lua` fakes the whole KOReader environment via `package.loaded[...]` (device, uimanager, widgets, docsettings, lfs, logger) and records widgets in `_G.ui_tracker` (`shown`, `last_shown`, `closed`) so specs can assert UI behavior. Mock book/series data lives under `spec/mocks/`.
+
+Specs are written in busted syntax, but the custom runner replaces the global `assert` outright, so bare `assert(cond)` does **not** work. Only these matchers exist: `assert.is_true/is_false/is_nil/is_not_nil/is_table/is_string/is_number/is_boolean/truthy/falsy`, `assert.are.equal`, `assert.are.same`, `assert.are_not.equal`, plus the aliases `assert.equals` and `assert.same`.
 
 ## Repo conventions
 
-- `.agents/rules/` holds pre-existing agent rules (general, localization, release notes); the important content is folded into this file.
+- `.agents/rules/` holds pre-existing agent rules (general, localization, planning, release notes, GEMINI); the important content is folded into this file.
 - Don't change the menu structure or core behavior unless the task asks for it; match the existing Lua style.
 - New features and logic changes need specs in `spec/` (registered in the runner's list) and a full test run before claiming done.
+
+## Device shell-out gotchas
+
+- **`unzip -d <dir>` does NOT create `<dir>` on BusyBox** (Kobo `unzip` is BusyBox v1.31.1; Kindle is BusyBox too). Info-ZIP creates it, BusyBox does not — the extraction just silently yields nothing. Always `mkdir -p <dir>` before any `unzip … -d <dir>`. This exact bug silently broke calibre-import (`xray_import.lua:_readEmbeddedXray`, target `<book>.sdr/xray_import_tmp` didn't pre-exist): the importer reported "no calibre X-Ray data found" on a book that carried valid, extractable data. `xray_updater.lua:_unzip` uses the same pattern but is safe only because its target (`plugins/`) always pre-exists.
+- **The `unzip` extraction has no off-device test** — pytest/busted run with Info-ZIP, which masks the BusyBox difference. Anything touching `os.execute("unzip …")` must be verified on a real Kobo/Kindle. Debugging aid: `self:log` (→ `XRayLogger`) is gated off by default, so failures in this path are silent; enable `debug_logging` or instrument with a direct `io.open(...,"a")`/`os.execute("… >> /mnt/onboard/…")` to a file, and remember KOReader caches plugin code — a full KOReader restart is required to load edited `.lua`.

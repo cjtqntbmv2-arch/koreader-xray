@@ -1146,4 +1146,40 @@ describe("xray_import", function()
             assert.is_true(called)
         end)
     end)
+
+    describe("_readEmbeddedXray", function()
+        it("creates the -d dir with mkdir -p before unzip (BusyBox unzip does not)", function()
+            -- Regression guard: BusyBox unzip (Kobo/Kindle) does NOT create a
+            -- missing -d target dir, so extraction silently yields nothing and
+            -- the import reports "no calibre data" on a book that carries valid
+            -- data. The tmp dir must be created before the unzip runs. os.execute
+            -- is mocked to record command order; the real zip probe and the json
+            -- decoder are stubbed so we never touch the filesystem.
+            local p = mock_plugin()
+            p.log = function() end
+            local calls = {}
+            local orig_execute = os.execute
+            local orig_zip = importer._zipHasEntry
+            local orig_json = package.loaded["json"]
+            os.execute = function(cmd) calls[#calls + 1] = cmd; return 0 end
+            importer._zipHasEntry = function() return true end
+            package.loaded["json"] = { decode = function() return nil end }
+
+            p:_readEmbeddedXray("/tmp/regress.epub")
+
+            -- restore globals before asserting, so a failure cannot leak them
+            os.execute = orig_execute
+            importer._zipHasEntry = orig_zip
+            package.loaded["json"] = orig_json
+
+            local mkdir_idx, unzip_idx
+            for i = 1, #calls do
+                if not mkdir_idx and calls[i]:match("mkdir %-p") then mkdir_idx = i end
+                if not unzip_idx and calls[i]:match("unzip") then unzip_idx = i end
+            end
+            assert.is_not_nil(mkdir_idx)
+            assert.is_not_nil(unzip_idx)
+            assert.is_true(mkdir_idx < unzip_idx)
+        end)
+    end)
 end)
