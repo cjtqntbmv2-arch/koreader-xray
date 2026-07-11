@@ -560,6 +560,28 @@ function M:_readCompanionXray(book_path)
     return doc
 end
 
+-- Ordered source selection: companion first, then embedded, gating each and
+-- falling through on failure (a parseable-but-mismatched companion must never
+-- shadow a valid embedded doc). Returns (doc|nil, reason|nil, had_source).
+function M:_selectXraySource(book_path, props)
+    local companion = self:_readCompanionXray(book_path)
+    local companion_reason
+    if companion then
+        companion_reason = self:_gateImport(companion, props)
+        if not companion_reason then return companion, nil, true end
+    end
+
+    local embedded = self:_readEmbeddedXray(book_path)
+    if embedded then
+        local reason = self:_gateImport(embedded, props)
+        if not reason then return embedded, nil, true end
+        return nil, reason, true
+    end
+
+    if companion then return nil, companion_reason, true end
+    return nil, nil, false
+end
+
 -- Cheap guards first, then the zip probe, then the gate.
 function M:maybeImportEmbeddedXray()
     if self.prefetch_active or self.bg_fetch_active then return end

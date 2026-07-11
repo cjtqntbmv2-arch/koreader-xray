@@ -13,6 +13,12 @@ local function mock_plugin()
     return p
 end
 
+local function newPlugin(overrides)
+    local p = mock_plugin()
+    for k, v in pairs(overrides or {}) do p[k] = v end
+    return p
+end
+
 describe("xray_import", function()
 
     describe("_normTitle", function()
@@ -1216,6 +1222,60 @@ describe("xray_import", function()
             local doc = p:_readCompanionXray(path)
             os.remove(companion)
             assert.is_nil(doc)
+        end)
+    end)
+
+    describe("xray source selection", function()
+        local GOOD = { schema_version = 1, checkpoints = {{}}, book_fingerprint = { title = "T" } }
+        local BADGATE = { schema_version = 1, checkpoints = {} }  -- 0 checkpoints -> gate rejects
+
+        it("prefers a valid companion over embedded", function()
+            local p = newPlugin{
+                _readCompanionXray = function() return GOOD end,
+                _readEmbeddedXray  = function() error("embedded must not be read") end,
+                _gateImport        = function() return nil end,
+            }
+            local doc, reason, had = p:_selectXraySource("/b.epub", {})
+            assert.are.equal(GOOD, doc)
+            assert.is_nil(reason)
+            assert.is_true(had)
+        end)
+
+        it("falls through to embedded when the companion fails the gate", function()
+            local p = newPlugin{
+                _readCompanionXray = function() return BADGATE end,
+                _readEmbeddedXray  = function() return GOOD end,
+                _gateImport = function(self, doc)
+                    if doc == BADGATE then return "no checkpoints" end
+                    return nil
+                end,
+            }
+            local doc, reason, had = p:_selectXraySource("/b.epub", {})
+            assert.are.equal(GOOD, doc)     -- embedded adopted, not aborted
+            assert.is_nil(reason)
+            assert.is_true(had)
+        end)
+
+        it("reports no source when neither exists", function()
+            local p = newPlugin{
+                _readCompanionXray = function() return nil end,
+                _readEmbeddedXray  = function() return nil end,
+            }
+            local doc, reason, had = p:_selectXraySource("/b.epub", {})
+            assert.is_nil(doc)
+            assert.is_false(had)
+        end)
+
+        it("returns a reason when the only source fails the gate", function()
+            local p = newPlugin{
+                _readCompanionXray = function() return nil end,
+                _readEmbeddedXray  = function() return BADGATE end,
+                _gateImport = function() return "no checkpoints" end,
+            }
+            local doc, reason, had = p:_selectXraySource("/b.epub", {})
+            assert.is_nil(doc)
+            assert.are.equal("no checkpoints", reason)
+            assert.is_true(had)
         end)
     end)
 end)
