@@ -1,0 +1,100 @@
+"""Assembler for the Claude-backed X-Ray extraction skill.
+
+Reads subagent-produced chunk_<cp>_<idx>.raw.json, cleans them into the
+generate_xray resume cache, then runs generate_xray with the network path
+disabled (enrich=False, glean=False, stub client) and writes deliverables.
+Stdlib + xray_core only.
+"""
+import argparse
+import json
+import os
+
+from xray_core.embed import embed_xray
+from xray_core.epub import read_epub
+from xray_core.generate import _chunk_path, generate_xray
+from xray_core.merge import clean_response
+
+
+class _NoNetworkClient:
+    """A full cache means generate_xray never fetches. If a chunk is missing,
+    this raises a NON-QuotaError so the gap surfaces loudly instead of being
+    swallowed into a partial doc (only QuotaError yields a partial result)."""
+
+    def generate(self, *args, **kwargs):
+        raise RuntimeError(
+            "claude_xray_assemble: generate_xray tried to hit the network -- "
+            "a chunk cache entry is missing. This is a bug; run the planner + "
+            "all subagents first."
+        )
+
+
+def _load_manifest(workdir):
+    with open(os.path.join(workdir, "manifest.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _precheck(workdir, manifest):
+    """Every chunk's raw.json must exist AND parse. Fail loud listing offenders."""
+    problems = []
+    for ch in manifest["chunks"]:
+        path = os.path.join(workdir, ch["raw_file"])
+        key = f'({ch["cp_idx"]},{ch["chunk_idx"]})'
+        if not os.path.exists(path):
+            problems.append(f"{key} missing {ch['raw_file']}")
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                json.load(f)
+        except (ValueError, OSError) as e:
+            problems.append(f"{key} unparseable {ch['raw_file']}: {e}")
+    if problems:
+        raise SystemExit("assemble aborted -- incomplete/invalid chunk cache:\n  " +
+                         "\n  ".join(problems))
+
+
+def assemble(epub_path, workdir, out_dir):
+    book = read_epub(epub_path)
+    manifest = _load_manifest(workdir)
+    detail = manifest["detail_level"]
+    _precheck(workdir, manifest)
+
+    # raw.json -> clean_response -> chunk_<cp>_<idx>.json (the resume cache shape)
+    for ch in manifest["chunks"]:
+        with open(os.path.join(workdir, ch["raw_file"]), encoding="utf-8") as f:
+            raw = json.load(f)
+        cleaned = clean_response(raw)
+        with open(_chunk_path(workdir, ch["cp_idx"], ch["chunk_idx"]), "w", encoding="utf-8") as f:
+            json.dump(cleaned, f)
+
+    # enrich=False is MANDATORY: Phase C would call client.generate even with a
+    # full cache (it is not gated on to_submit) and crash the stub. glean=False
+    # is irrelevant with a full cache but set for clarity.
+    doc = generate_xray(book, _NoNetworkClient(), book.language, detail,
+                        workdir=workdir, enrich=False, glean=False)
+
+    os.makedirs(out_dir, exist_ok=True)
+    base = os.path.basename(epub_path)
+    raw_json = os.path.join(out_dir, "xray.json")
+    with open(raw_json, "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=2)
+    # companion: byte-identical to xray.json, append-form name (cross-repo contract)
+    companion = os.path.join(out_dir, base + ".xray.json")
+    with open(companion, "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=2)
+    # embedded copy: identical original filename, source untouched
+    embed_xray(epub_path, doc, os.path.join(out_dir, base))
+    return doc
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="claude_xray_assemble")
+    p.add_argument("book")
+    p.add_argument("--workdir", required=True)
+    p.add_argument("--out", required=True)
+    args = p.parse_args(argv)
+    assemble(args.book, args.workdir, args.out)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
