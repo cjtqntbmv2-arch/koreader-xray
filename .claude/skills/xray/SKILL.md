@@ -11,7 +11,7 @@ Given an EPUB path (and optional `--detail normal|detailed`, default `detailed`)
    `python3 -m tools.claude_xray_plan "<EPUB>" --workdir "<WORKDIR>" --detail <detail>`
    Read the printed `manifest.json`. It lists every chunk as `{cp_idx, chunk_idx, percent, prompt_file, raw_file}`.
 
-2. **Extract (one subagent per chunk, in parallel batches, no cap).** Dispatch with the **Agent/Task tool** (one subagent per chunk). Send them in waves of ~8–12 concurrent subagents (a realistic batch size — a 77-chunk book is ~7 waves), each processing one chunk. For each chunk whose `raw_file` does not yet exist in `<WORKDIR>` (resume-safe), the subagent is told to:
+2. **Extract (one subagent per chunk, in parallel batches, no cap).** Dispatch with the **Agent/Task tool** (one subagent per chunk), **model `sonnet`** — Opus is not worth it here: recall comes from the prompt + self-glean, not the model tier, and at ~37 chunks Opus can exhaust a MAX-plan quota mid-run (measured on a real book). Send them in waves of ~8–12 concurrent subagents (a realistic batch size — a 77-chunk book is ~7 waves), each processing one chunk. For each chunk whose `raw_file` does not yet exist in `<WORKDIR>` (resume-safe), the subagent is told to:
    - Read `<WORKDIR>/<prompt_file>` (it contains the full extraction instruction + that chunk's text).
    - Follow it exactly: extract EVERY character/location/term/historical-figure/timeline entry present in the chunk, then self-glean (re-scan for missed minor figures), using ONLY the provided text.
    - Write the resulting JSON object (only the JSON, matching the schema described in the prompt) to `<WORKDIR>/<raw_file>`.
