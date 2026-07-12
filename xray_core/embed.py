@@ -9,6 +9,7 @@ json, os.
 import json
 import os
 import re
+import shutil
 import zipfile
 from xml.etree import ElementTree as ET
 
@@ -52,10 +53,24 @@ def _add_manifest_item(opf_bytes: bytes, href: str) -> bytes:
     return opf_bytes[: match.start()] + item_xml + opf_bytes[match.start() :]
 
 
-def embed_xray(epub_path, doc: dict, out_path) -> None:
+def embed_xray(epub_path, doc: dict, out_path, append=False) -> None:
     """Rewrite the EPUB at `epub_path` into `out_path` with `doc` embedded at
     DATA_PATH and registered in the OPF manifest. Re-embed-safe: drops any
-    prior DATA_PATH entry and leaves the manifest item deduplicated."""
+    prior DATA_PATH entry and leaves the manifest item deduplicated.
+
+    With `append=True`, deliver `doc` by appending it to a byte-for-byte copy
+    of the source instead: no OPF edit, no re-compression, existing bytes
+    untouched. The xray is then NOT in the OPF manifest, so it does not survive
+    calibre's Convert Book -- but the source's leading bytes are preserved
+    exactly, which keeps KOReader's book identity stable. KOReader keys a
+    book's statistics and progress on a head-weighted `partialMD5` (12 x 1 KB
+    samples over the first ~1 MB); leaving the head untouched means replacing
+    the file on-device does NOT reset reading statistics. The device importer
+    reads DATA_PATH by name from the zip (not via the manifest), so it still
+    finds it. Needs a pristine source (no existing DATA_PATH)."""
+    if append:
+        _embed_append(epub_path, doc, out_path)
+        return
     payload = json.dumps(doc, ensure_ascii=False).encode("utf-8")
     with zipfile.ZipFile(epub_path) as zin:
         opf = _opf_path(zin)
@@ -74,6 +89,22 @@ def embed_xray(epub_path, doc: dict, out_path) -> None:
                     comp = item.compress_type  # preserve source choice
                 zout.writestr(item, data, comp)
             zout.writestr(DATA_PATH, payload, zipfile.ZIP_DEFLATED)
+
+
+def _embed_append(epub_path, doc: dict, out_path) -> None:
+    """Copy the source verbatim and append DATA_PATH as a new zip member,
+    touching no existing byte (see embed_xray's append=True docstring). The
+    md5-stability guarantee only holds for a pristine source, so refuse a
+    source that already carries an xray rather than leave a duplicate member."""
+    if read_embedded(epub_path) is not None:
+        raise ValueError(
+            "append mode needs a source EPUB without an existing xray/xray.json; "
+            "use embed_xray() (full mode) to re-embed, or start from the original."
+        )
+    payload = json.dumps(doc, ensure_ascii=False).encode("utf-8")
+    shutil.copyfile(epub_path, out_path)  # SameFileError if out_path == epub_path
+    with zipfile.ZipFile(out_path, "a", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(DATA_PATH, payload)
 
 
 def read_embedded(epub_path) -> dict | None:

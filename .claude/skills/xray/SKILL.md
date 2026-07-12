@@ -19,9 +19,14 @@ Given an EPUB path (and optional `--detail normal|detailed`, default `detailed`)
    Show progress (n/total). Because each result is a file, re-running skips finished chunks.
 
 3. **Assemble.** Run:
-   `python3 -m tools.claude_xray_assemble "<EPUB>" --workdir "<WORKDIR>" --out "<OUTDIR>"`
+   `python3 -m tools.claude_xray_assemble "<EPUB>" --workdir "<WORKDIR>" --out "<OUTDIR>" [--embed-mode full|append]`
    This cleans the raw outputs into the resume cache, runs the deterministic merge/validate, and writes `<OUTDIR>/<book>.epub.xray.json` (companion), `<OUTDIR>/<book>.epub` (embedded copy), and `<OUTDIR>/xray.json`.
+   - `--embed-mode full` (default): registers the xray in the OPF manifest, so it survives calibre's *Convert Book*.
+   - `--embed-mode append`: leaves the source bytes untouched and only appends the xray. Use this when the book has **already been read on the device** and you want to replace the file (e.g. via calibre wireless) *without* resetting KOReader reading statistics — see below.
 
-4. **Report** the three output paths and tell the user: use the companion `.xray.json` (drop next to the book on the device) to preserve reading statistics on already-read books; use the embedded copy for new books before first read. The original EPUB is never modified.
+4. **Report** the three output paths. Guidance on which to use:
+   - **Embedded copy is fine even for already-read books.** KOReader keys a book's statistics/progress on a *head-weighted* `partialMD5` (12×1 KB samples over the first ~1 MB), so embedding the xray does **not** change the book's identity and does **not** reset statistics — verified on a real multi-MB book. `--embed-mode append` **guarantees** this (source head bytes are byte-identical); the default `full` mode also preserved it in testing but isn't guaranteed for unusually small books.
+   - **Companion `.xray.json`** is the zero-risk option (the book file is never touched at all), but calibre wireless sends only book formats, not sidecar files — you'd copy it next to the book on the device manually.
+   - When replacing a read book and relying on stats preservation, also disable calibre's *"Update metadata in book files when sending to device"* so calibre doesn't rewrite the head on send. The original source EPUB is never modified by this tool.
 
 Constraints: never modify the source EPUB; if the assembler aborts listing missing/invalid chunks, re-dispatch subagents for exactly those `(cp,idx)` and re-run the assembler. `--out`/`OUTDIR` must be a directory other than the source EPUB's own directory, or the embedded copy would overwrite (and truncate) the source.

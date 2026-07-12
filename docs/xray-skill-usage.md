@@ -17,11 +17,29 @@ EPUB path; it drives three steps:
 
 ## Which output to use
 
-- **Already read this book on your device?** Copy the companion
-  `<book>.epub.xray.json` next to the existing EPUB — this preserves your
-  reading statistics/progress instead of replacing the file.
-- **Haven't started the book yet?** Use the embedded `<book>.epub` copy from
-  `<OUTDIR>` instead of the original.
+Replacing an already-read book with an embedded copy does **not** reset your
+KOReader reading statistics. KOReader keys a book's identity (statistics +
+progress) on a *head-weighted* `partialMD5` — 12 samples of 1 KB at offsets
+`1024·4^i` (i=−1…10), i.e. only over the first ~1 MB. Embedding the xray adds
+data past those sample windows, so the identity is unchanged (verified on a
+real multi-MB book: original, embedded and append-only all share the same
+`partialMD5`).
+
+- **Embedded `<book>.epub` copy** — the normal choice, for read and unread
+  books alike. Two modes (`--embed-mode`):
+  - `full` (default): the xray is registered in the OPF manifest, so it
+    survives calibre's *Convert Book*.
+  - `append`: the source bytes are left untouched and the xray is only
+    appended — this **guarantees** the `partialMD5` (and thus your stats) is
+    preserved. Use it when replacing a read book via calibre wireless. It does
+    not survive *Convert Book* (no manifest entry), which the on-device
+    importer doesn't need anyway (it reads the member by name).
+- **Companion `<book>.epub.xray.json`** — the zero-risk fallback (the book file
+  is never touched at all). But calibre wireless sends only book formats, not
+  sidecar files, so you'd copy it next to the book on the device by hand.
+- When relying on stats preservation, also turn off calibre's *"Update metadata
+  in book files when sending to device"* so calibre doesn't rewrite the OPF/head
+  on send.
 - The original source EPUB is never modified by this process.
 - `--out`/`OUTDIR` must be a directory other than the source EPUB's own
   directory, or the embedded copy would overwrite (and truncate) the source.

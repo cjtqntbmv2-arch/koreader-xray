@@ -52,7 +52,7 @@ def _precheck(workdir, manifest):
                          "\n  ".join(problems))
 
 
-def assemble(epub_path, workdir, out_dir):
+def assemble(epub_path, workdir, out_dir, embed_append=False):
     base = os.path.basename(epub_path)
     final_path = os.path.join(out_dir, base)
     if os.path.realpath(final_path) == os.path.realpath(epub_path):
@@ -100,8 +100,11 @@ def assemble(epub_path, workdir, out_dir):
     companion = os.path.join(out_dir, base + ".xray.json")
     with open(companion, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
-    # embedded copy: identical original filename, source untouched
-    embed_xray(epub_path, doc, final_path)
+    # embedded copy: identical original filename, source untouched. append=True
+    # leaves the source's head bytes intact so KOReader's partialMD5 (its
+    # statistics/progress key) survives replacing the file on-device -- at the
+    # cost of OPF-manifest registration (does not survive calibre Convert Book).
+    embed_xray(epub_path, doc, final_path, append=embed_append)
     return doc
 
 
@@ -110,8 +113,14 @@ def main(argv=None):
     p.add_argument("book")
     p.add_argument("--workdir", required=True)
     p.add_argument("--out", required=True)
+    p.add_argument(
+        "--embed-mode", choices=["full", "append"], default="full",
+        help="full (default): register xray in the OPF, survives calibre Convert Book. "
+             "append: leave the source bytes untouched so KOReader reading statistics "
+             "survive replacing the file on-device (does not survive Convert Book).",
+    )
     args = p.parse_args(argv)
-    assemble(args.book, args.workdir, args.out)
+    assemble(args.book, args.workdir, args.out, embed_append=args.embed_mode == "append")
     return 0
 
 

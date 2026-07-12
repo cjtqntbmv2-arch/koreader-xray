@@ -1,9 +1,12 @@
 import json
 import os
+import zipfile
 
 import pytest
 
 from epub_fixture import build_epub  # NOT tests.epub_fixture
+from xray_core.embed import DATA_PATH, read_embedded
+from xray_core.epub import _find_opf_path
 from xray_core.schema import validate
 from tools.claude_xray_plan import write_plan
 from tools.claude_xray_assemble import assemble
@@ -144,3 +147,23 @@ def test_assemble_localizes_nameless_placeholder_by_book_language(tmp_path):
     names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
     assert "Unbenannter Charakter" in names
     assert "Unnamed Character" not in names
+
+
+def test_assemble_embed_mode_append_leaves_opf_and_source_intact(tmp_path):
+    # --embed-mode append must route to the byte-preserving embed: the xray is
+    # readable by name but NOT registered in the OPF manifest (that edit is what
+    # would move head bytes and reset KOReader stats), and the source is untouched.
+    epub, workdir = _prepare(tmp_path)
+    src_before = open(epub, "rb").read()
+    out = str(tmp_path / "out_append")
+
+    doc = assemble(epub, workdir, out, embed_append=True)
+
+    embedded = os.path.join(out, os.path.basename(epub))
+    assert read_embedded(embedded) == doc                     # device-readable by name
+    with zipfile.ZipFile(epub) as z:
+        src_opf = z.read(_find_opf_path(z))
+    with zipfile.ZipFile(embedded) as z:
+        assert z.read(_find_opf_path(z)) == src_opf           # OPF byte-identical (no manifest edit)
+        assert DATA_PATH in z.namelist()
+    assert open(epub, "rb").read() == src_before              # source untouched

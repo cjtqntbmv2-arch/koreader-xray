@@ -2,13 +2,31 @@
 member copying (not filename-based -- duplicate-named entries would otherwise
 silently corrupt on read), compress_type preservation, and re-embed idempotency.
 """
+import hashlib
 import warnings
 import zipfile
 from xml.etree import ElementTree as ET
 
+import pytest
+
 from epub_fixture import build_epub
 
 from xray_core.embed import DATA_PATH, embed_xray, read_embedded
+
+
+def _koreader_partial_md5(path):
+    """Exact port of KOReader util.partialMD5: 12 x 1024-byte samples at the
+    head-weighted offsets 1024*4^i, i=-1..10. This is the book identity its
+    statistics/progress are keyed on."""
+    m = hashlib.md5()
+    with open(path, "rb") as f:
+        for i in range(-1, 11):
+            f.seek(int(1024 * 4.0 ** i))
+            sample = f.read(1024)
+            if not sample:
+                break
+            m.update(sample)
+    return m.hexdigest()
 
 _OPF_NS = "http://www.idpf.org/2007/opf"
 _DC_NS = "http://purl.org/dc/elements/1.1/"
@@ -150,3 +168,53 @@ def test_duplicate_named_entry_not_corrupted(tmp_path, minimal_doc):
 def test_read_embedded_returns_none_when_absent(tmp_path):
     book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
     assert read_embedded(book) is None
+
+
+def test_embed_append_preserves_koreader_partial_md5(tmp_path, minimal_doc):
+    """append=True must leave the sampled head bytes untouched so a file
+    replaced on-device keeps its KOReader statistics/progress (keyed on the
+    head-weighted partialMD5)."""
+    book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
+    # Pad to a realistic novel size (stored, so deterministic) -- a real EPUB is
+    # MBs, so its zip central directory sits far past every partialMD5 sample
+    # offset (256 B .. 256 KB for a file this size). The guarantee only holds
+    # when the source's content precedes the samples; a few-KB toy EPUB would
+    # have its central dir before offset 1024 and append could shift a sample.
+    with zipfile.ZipFile(book, "a") as zf:
+        zf.writestr(zipfile.ZipInfo("OEBPS/bulk.bin"), b"A" * 400_000, zipfile.ZIP_STORED)
+    before = _koreader_partial_md5(book)
+    out = tmp_path / "out.epub"
+
+    embed_xray(book, minimal_doc, out, append=True)
+
+    assert _koreader_partial_md5(out) == before      # book identity preserved
+    assert read_embedded(out) == minimal_doc          # still device-readable by name
+    assert _koreader_partial_md5(book) == before      # source untouched
+
+
+def test_embed_append_leaves_opf_unmodified(tmp_path, minimal_doc):
+    """append mode does NOT register the xray in the OPF manifest -- that edit
+    is exactly what moves head bytes. The importer reads DATA_PATH by name."""
+    book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
+    with zipfile.ZipFile(book) as zf:
+        src_opf = zf.read(_OPF_PATH)
+    out = tmp_path / "out.epub"
+
+    embed_xray(book, minimal_doc, out, append=True)
+
+    with zipfile.ZipFile(out) as zf:
+        assert zf.read(_OPF_PATH) == src_opf          # byte-identical OPF
+        assert DATA_PATH in zf.namelist()
+        assert not [i for i in _manifest_items(zf.read(_OPF_PATH))
+                    if i.get("href") == "../xray/xray.json"]
+
+
+def test_embed_append_rejects_already_embedded_source(tmp_path, minimal_doc):
+    """Appending onto an already-embedded EPUB would leave a duplicate member
+    and void the md5 guarantee -- refuse loudly, point at full mode."""
+    book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
+    full = tmp_path / "full.epub"
+    embed_xray(book, minimal_doc, full)               # full embed first
+
+    with pytest.raises(ValueError):
+        embed_xray(full, minimal_doc, tmp_path / "again.epub", append=True)
