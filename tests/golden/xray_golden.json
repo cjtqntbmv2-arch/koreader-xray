@@ -632,6 +632,16 @@
             "aliases": [],
             "first_pct": 100,
             "first_seq": 9
+          },
+          {
+            "name": "Unnamed Character",
+            "role": "",
+            "description": "eine Gestalt im Regen",
+            "gender": "",
+            "occupation": "",
+            "aliases": [],
+            "first_pct": 100,
+            "first_seq": 10
           }
         ],
         "locations": [
@@ -657,7 +667,7 @@
             "importance": "",
             "aliases": [],
             "first_pct": 100,
-            "first_seq": 10
+            "first_seq": 11
           }
         ],
         "terms": [

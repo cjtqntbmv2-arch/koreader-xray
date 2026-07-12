@@ -404,7 +404,7 @@ def generate_xray(book: BookText, client, language, detail_level,
 
     # Phase B: ordered-merge barrier -- strictly sequential, (checkpoint,
     # chunk) index order, regardless of fetch-completion order.
-    state = BookState()
+    state = BookState(language)
     checkpoints_out = []
     for cp_idx in range(complete_count):
         cp = cps[cp_idx]

@@ -10,6 +10,8 @@ for humans/tooling and is kept in sync with this module by hand.
 
 from typing import TypeGuard
 
+from xray_core.merge import _PLACEHOLDER_NAMES
+
 SCHEMA_VERSION = 1
 
 # Top-level required keys and their expected Python type.
@@ -168,12 +170,17 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
             # against a future _merge regression or any other producer of this
             # format. Nameless entries (e.g. an unnamed term) are exempt --
             # merge.py never collides those either, so we don't invent a
-            # stricter rule than the pipeline itself relies on.
+            # stricter rule than the pipeline itself relies on. Placeholder
+            # names (Unnamed Character, ...) are exempt for the same reason:
+            # two distinct nameless entities legitimately share one placeholder
+            # and merge.py keeps them separate rather than drop a description.
             seen_names = set()
             for j, entry in enumerate(entries):
                 if not isinstance(entry, dict):
                     continue
                 key = (entry.get("name") or "").strip().lower()
+                if key in _PLACEHOLDER_NAMES:
+                    key = ""
                 if key and key in seen_names:
                     problems.append(
                         f"{label}.snapshot.{list_name}[{j}] duplicate name: {entry['name']!r}"

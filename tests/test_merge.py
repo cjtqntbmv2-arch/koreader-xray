@@ -539,3 +539,178 @@ def test_clean_response_is_a_fixpoint_even_when_role_truncation_lands_on_a_space
     assert once == twice
     assert once["characters"][0]["role"] == "x" * 39
     assert once["historical_figures"][0]["role"] == "y" * 39
+
+
+# --- cross-form name-variant dedup: honorifics + ordinals -------------------
+
+
+def test_leading_honorific_variant_merges_into_stripped_canonical():
+    """"Ser Jaime Lennister" and "Jaime Lennister" are one person; the
+    honorific-stripped form is the display name, the title survives as alias."""
+    state = BookState()
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Ser Jaime Lennister"}]}), checkpoint_pct=10
+    )
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Jaime Lennister"}]}), checkpoint_pct=40
+    )
+
+    assert len(state.characters) == 1
+    assert state.characters[0]["name"] == "Jaime Lennister"
+    assert "Ser Jaime Lennister" in state.characters[0]["aliases"]
+    assert state.characters[0]["first_pct"] == 10  # no restamp on merge
+
+
+def test_honorific_merge_is_order_independent():
+    """Plain form first, titled form second -> same canonical + alias."""
+    state = BookState()
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Jaime Lennister"}]}), checkpoint_pct=10
+    )
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Ser Jaime Lennister"}]}), checkpoint_pct=40
+    )
+
+    assert len(state.characters) == 1
+    assert state.characters[0]["name"] == "Jaime Lennister"
+    assert "Ser Jaime Lennister" in state.characters[0]["aliases"]
+
+
+def test_honorific_stripping_does_not_merge_different_surnames():
+    """The delicate part: stripping "Ser" must NOT collapse two people who
+    share a first name but differ by surname."""
+    state = BookState()
+    state.merge_segment(
+        clean_response(
+            {"characters": [{"name": "Ser Robert Baratheon"}, {"name": "Robert Arryn"}]}
+        ),
+        checkpoint_pct=10,
+    )
+
+    assert len(state.characters) == 2
+    assert {c["name"] for c in state.characters} == {"Ser Robert Baratheon", "Robert Arryn"}
+
+
+def test_bare_first_name_never_merges_into_a_full_name():
+    """A lone "Robert" is ambiguous; it must not be swallowed by a specific
+    full name (dynasty books reuse first names)."""
+    state = BookState()
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Robert Baratheon"}]}), checkpoint_pct=10
+    )
+    state.merge_segment(clean_response({"characters": [{"name": "Robert"}]}), checkpoint_pct=40)
+
+    assert len(state.characters) == 2
+
+
+def test_lone_honorific_name_is_not_stripped_without_a_partner():
+    """No collision -> keep the name exactly as the model gave it."""
+    state = BookState()
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Ser Barristan Selmy"}]}), checkpoint_pct=10
+    )
+
+    assert state.characters[0]["name"] == "Ser Barristan Selmy"
+
+
+def test_german_honorific_variant_merges():
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Maester Luwin"}]}, "de"), checkpoint_pct=10
+    )
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Luwin"}]}, "de"), checkpoint_pct=40
+    )
+
+    assert len(state.characters) == 1
+    assert state.characters[0]["name"] == "Luwin"
+    assert "Maester Luwin" in state.characters[0]["aliases"]
+
+
+def test_ordinal_variant_merges():
+    """"Aerys II. Targaryen" and "Aerys Targaryen" are the same person."""
+    state = BookState()
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Aerys II. Targaryen"}]}), checkpoint_pct=10
+    )
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Aerys Targaryen"}]}), checkpoint_pct=40
+    )
+
+    assert len(state.characters) == 1
+    assert state.characters[0]["first_pct"] == 10
+
+
+def test_ordinal_stripping_does_not_collapse_regnal_names():
+    """Two kings who differ ONLY by ordinal must stay separate -- stripping
+    the ordinal here would leave a bare first name and false-merge them."""
+    state = BookState()
+    state.merge_segment(
+        clean_response(
+            {"characters": [{"name": "Heinrich IV."}, {"name": "Heinrich VIII."}]}
+        ),
+        checkpoint_pct=10,
+    )
+
+    assert len(state.characters) == 2
+
+
+def test_middle_initial_names_stay_separate():
+    """A single-letter middle token is a valid Roman numeral (L, M, ...); it
+    must NOT be treated as an ordinal or two different people collapse."""
+    state = BookState()
+    state.merge_segment(
+        clean_response({"characters": [{"name": "David L. Roth"}, {"name": "David M. Roth"}]}),
+        checkpoint_pct=10,
+    )
+
+    assert len(state.characters) == 2
+
+
+def test_is_more_complete_name_strips_leading_honorifics():
+    assert not is_more_complete_name("Ser Jaime Lennister", "Jaime Lennister")
+    assert is_more_complete_name("Jaime Lennister", "Ser Jaime")
+
+
+def test_two_distinct_nameless_characters_both_survive():
+    # Two GENUINELY DISTINCT nameless characters in one segment share the
+    # localized placeholder name -- they must not collide on it and drop a
+    # description via newest_wins. Nameless entities are un-dedupable by name;
+    # like truly-empty names (xray_data.lua:232-234) they never collide.
+    state = BookState()
+    state.merge_segment(
+        clean_response(
+            {
+                "characters": [
+                    {"description": "EXTRACT_DESC"},
+                    {"description": "GLEAN_DESC_distinct"},
+                ]
+            }
+        ),
+        checkpoint_pct=10,
+    )
+
+    assert len(state.characters) == 2
+    assert sorted(c["description"] for c in state.characters) == [
+        "EXTRACT_DESC",
+        "GLEAN_DESC_distinct",
+    ]
+
+
+def test_two_distinct_nameless_locations_both_survive():
+    # Same collision on the "Unknown Place" placeholder for locations.
+    state = BookState()
+    state.merge_segment(
+        clean_response(
+            {
+                "locations": [
+                    {"description": "a cave"},
+                    {"description": "a tower"},
+                ]
+            }
+        ),
+        checkpoint_pct=10,
+    )
+
+    assert len(state.locations) == 2
+    assert sorted(l["description"] for l in state.locations) == ["a cave", "a tower"]

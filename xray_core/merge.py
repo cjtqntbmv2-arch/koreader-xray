@@ -74,6 +74,106 @@ def fallback_strings(language: str) -> dict:
     return _FALLBACKS.get(language, _FALLBACKS["en"])
 
 
+# Every placeholder name across every language, lower-cased. clean_response
+# stamps nameless entities with one of these (per-language), so at merge time
+# two GENUINELY DISTINCT nameless entities would otherwise collide on the
+# identical placeholder key and drop one via newest_wins. A nameless entity is
+# un-dedupable by name, so -- like a truly-empty name (xray_data.lua:232-234) --
+# a placeholder name must never collide. Built across all languages because a
+# resumed workdir can carry chunks cleaned under a different language.
+_PLACEHOLDER_NAMES = {v.lower() for lang in _FALLBACKS.values() for v in lang.values()}
+
+
+# Leading title tokens that name one entity across surface forms ("Ser Jaime
+# Lennister" == "Jaime Lennister"). Keyed by language like `fallback_strings`;
+# unknown languages fall back to English. Extend by adding to a set. Lua has no
+# equivalent (its `deduplicateByName` keys on the raw name), so this is a
+# deliberate desktop-side extension of the NAME DISAMBIGUATION rules.
+_HONORIFICS = {
+    "en": {"ser", "lord", "lady", "king", "queen", "prince", "maester",
+           "septa", "khal", "magister"},
+    "de": {"ser", "lord", "lady", "könig", "königin", "prinz", "prinzessin",
+           "maester", "septa", "septon", "khal", "magister", "meister"},
+}
+
+# Canonical Roman-numeral matcher (case-insensitive), used to spot regnal
+# ordinals like "II"/"IV." in a name.
+_ROMAN_RE = re.compile(r"m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})", re.I)
+
+
+def _honorifics(language: str) -> set:
+    return _HONORIFICS.get(language, _HONORIFICS["en"])
+
+
+def _is_ordinal(token: str) -> bool:
+    """A regnal ordinal ("II", "IV.") -- a Roman numeral of length >= 2, with
+    an optional trailing dot. The length floor is the safety line: a lone
+    "L."/"M." middle initial is a valid Roman numeral too, and stripping it
+    would collapse "David L. Roth" and "David M. Roth" into one person.
+    """
+    t = token.rstrip(".")
+    return len(t) >= 2 and _ROMAN_RE.fullmatch(t) is not None
+
+
+def _strip_leading_honorifics(name: str, language: str) -> str:
+    """Drop leading title tokens (Ser/Lord/König/...), preserving the case of
+    the rest. Never strips to empty: a name that is *only* a title keeps it."""
+    hon = _honorifics(language)
+    toks = (name or "").split()
+    i = 0
+    while i < len(toks) - 1 and toks[i].rstrip(".").lower() in hon:
+        i += 1
+    return " ".join(toks[i:]) if toks else (name or "")
+
+
+def _has_leading_honorific(name: str, language: str) -> bool:
+    toks = (name or "").split()
+    return len(toks) > 1 and toks[0].rstrip(".").lower() in _honorifics(language)
+
+
+def _dedup_key(name: str, language: str) -> str:
+    """Collision key for entity dedup: leading honorifics dropped and regnal
+    ordinals removed, lower-cased, whitespace-collapsed. Cross-form variants
+    of one entity ("Ser Jaime Lennister"/"Jaime Lennister", "Aerys II.
+    Targaryen"/"Aerys Targaryen") map to the same key -- while a bare first
+    name ("Robert") never collides with a full name ("Robert Baratheon") and
+    two people differing only by ordinal ("Heinrich IV."/"Heinrich VIII.")
+    keep distinct keys. The ordinal is only removed when >= 2 non-ordinal
+    tokens remain, so a name distinguished *solely* by its ordinal is never
+    reduced to a shared bare first name.
+
+    Placeholder names ("Unnamed Character", ...) collapse to the EMPTY key so
+    two genuinely distinct nameless entities never collide -- they are
+    un-dedupable by name, exactly like a truly-empty name (xray_data.lua:
+    232-234).
+    """
+    if (name or "").strip().lower() in _PLACEHOLDER_NAMES:
+        return ""
+    toks = _strip_leading_honorifics(name, language).lower().split()
+    non_ord = [t for t in toks if not _is_ordinal(t)]
+    if len(non_ord) >= 2:
+        toks = non_ord
+    return " ".join(toks)
+
+
+def _pick_canonical(existing: str, incoming: str, language: str) -> str:
+    """Display name to keep when two surface forms collide. Prefer the form
+    WITHOUT a leading title ("Jaime Lennister" beats "Ser Jaime Lennister");
+    among forms of equal title-status, keep the existing name unless the
+    incoming one is strictly more complete."""
+    if not incoming:
+        return existing
+    if not existing:
+        return incoming
+    ex_h = _has_leading_honorific(existing, language)
+    in_h = _has_leading_honorific(incoming, language)
+    if ex_h and not in_h:
+        return incoming
+    if in_h and not ex_h:
+        return existing
+    return incoming if is_more_complete_name(incoming, existing, language) else existing
+
+
 def _str(d: dict, key: str, default: str = "") -> str:
     """Deliberate divergence from Lua's `ensureString` (`xray_aihelper.lua:
     2014`: `(type(v) == "string" and #v > 0) and v or d or ""`), which only
@@ -214,13 +314,19 @@ def clean_response(raw: dict, language: str = "en") -> dict:
     }
 
 
-def is_more_complete_name(new, old) -> bool:
+def is_more_complete_name(new, old, language: str = "en") -> bool:
     """Port of `isMoreCompleteName` (`xray_data.lua:184-198`).
 
     Deliberate divergence: uses Python's Unicode-aware `\\w` rather than
     Lua's ASCII-only `%f[%w]` frontier pattern, so a German name bounded by
     an umlaut is still classified correctly.
+
+    Second divergence (companion to the honorific-aware dedup key): leading
+    title tokens are stripped from both sides first, so "Jaime Lennister" is
+    not judged "more complete" than "Ser Jaime Lennister" merely by length.
     """
+    new = _strip_leading_honorifics(new or "", language)
+    old = _strip_leading_honorifics(old or "", language)
     if not new or not old or len(new) <= len(old):
         return False
     nl, ol = new.lower(), old.lower()
@@ -229,14 +335,23 @@ def is_more_complete_name(new, old) -> bool:
     return nl.startswith(ol) or nl.endswith(ol)
 
 
-def _promote_name(entity: dict, new_name: str, alias_map: dict) -> None:
-    """Port of `promoteName` (`xray_data.lua:200-221`): old name -> aliases."""
-    old_name = entity.get("name") or ""
-    aliases = entity.setdefault("aliases", [])
-    if not any(a.lower() == old_name.lower() for a in aliases):
-        aliases.append(old_name)
-    entity["name"] = new_name
-    alias_map[old_name.lower()] = entity
+def _add_alias(entity: dict, alias: str, alias_map: dict, language: str) -> None:
+    """Record `alias` as an alternative surface form of `entity`.
+
+    Generalizes `promoteName` (`xray_data.lua:200-221`, "old name -> aliases"):
+    used both to demote a superseded display name and to keep a stripped
+    title/ordinal variant a user might want shown. No-op on the display name or
+    a literal duplicate; `alias_map` is keyed by `_dedup_key` so the variant
+    still routes future segments to this entity.
+    """
+    if not alias:
+        return
+    al = alias.lower()
+    if al != (entity.get("name") or "").lower():
+        aliases = entity.setdefault("aliases", [])
+        if not any((a or "").lower() == al for a in aliases):
+            aliases.append(alias)
+    alias_map[_dedup_key(alias, language)] = entity
 
 
 _ROLE_WEIGHT_RULES = (
@@ -273,7 +388,10 @@ def sort_entity_list(lst: list, kind: str) -> list:
 class BookState:
     """Accumulates cleaned segments across checkpoints into staged snapshots."""
 
-    def __init__(self):
+    def __init__(self, language: str = "en"):
+        # language selects the honorific set for cross-form name dedup
+        # (_dedup_key); it must match the language clean_response ran under.
+        self.language: str = language
         self.characters: list = []
         self.locations: list = []
         self.terms: list = []
@@ -288,18 +406,19 @@ class BookState:
         `existing` in place; `incoming` items become the stored objects for
         whichever names are brand new this call.
         """
+        lang = self.language
         seen, alias_map = {}, {}
         for item in existing:
-            k = (item.get("name") or "").lower()
+            k = _dedup_key(item.get("name") or "", lang)
             if not k:
                 continue  # nameless entries never collide (xray_data.lua:232-234)
             seen[k] = item
             for alias in item.get("aliases") or []:
                 if alias:
-                    alias_map[alias.lower()] = item
+                    alias_map[_dedup_key(alias, lang)] = item
 
         for item in incoming:
-            k = (item.get("name") or "").lower()
+            k = _dedup_key(item.get("name") or "", lang)
             match = seen.get(k) if k else None
             if match is None and k:
                 match = alias_map.get(k)
@@ -310,17 +429,26 @@ class BookState:
                     seen[k] = item
                     for alias in item.get("aliases") or []:
                         if alias:
-                            alias_map[alias.lower()] = item
+                            alias_map[_dedup_key(alias, lang)] = item
                 if stamp and item.get("first_pct") is None:
                     self._seq += 1
                     item["first_pct"] = checkpoint_pct
                     item["first_seq"] = self._seq
                 continue
 
+            # Same entity, different surface form. Choose the display name --
+            # _pick_canonical prefers the honorific-stripped form -- and keep
+            # every other form as an alias so a title/ordinal a user might want
+            # shown is never silently dropped.
             new_name = item.get("name") or ""
-            if new_name and is_more_complete_name(new_name, match.get("name") or ""):
-                _promote_name(match, new_name, alias_map)
-                seen[new_name.lower()] = match
+            old_name = match.get("name") or ""
+            canonical = _pick_canonical(old_name, new_name, lang)
+            if canonical.lower() != old_name.lower():
+                match["name"] = canonical  # set first: _add_alias skips the display name
+                seen[_dedup_key(canonical, lang)] = match
+                _add_alias(match, old_name, alias_map, lang)
+            if new_name and new_name.lower() != canonical.lower():
+                _add_alias(match, new_name, alias_map, lang)
 
             own_lower = (match.get("name") or "").lower()
             alias_lower_set = {a.lower() for a in match.get("aliases") or []}
@@ -330,7 +458,7 @@ class BookState:
                     continue
                 match.setdefault("aliases", []).append(alias)
                 alias_lower_set.add(al)
-                alias_map[al] = match
+                alias_map[_dedup_key(alias, lang)] = match
 
             for field in newest_wins:
                 if item.get(field):
