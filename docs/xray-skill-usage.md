@@ -28,3 +28,21 @@ EPUB path; it drives three steps:
 
 If assembly aborts listing missing or invalid chunks, re-dispatch subagents
 only for those `(cp,idx)` pairs and re-run the assembler.
+
+## Notes & known limits (from the first real e2e run)
+
+- **Model:** dispatch the extraction subagents on **Sonnet**, not Opus. Recall
+  comes from the prompt + self-glean, not the model tier, and at ~37 chunks Opus
+  can exhaust a MAX-plan quota mid-run.
+- **Detail level:** `detailed` (default) is comprehensive but heavy — a half-novel
+  produced ~226 characters / ~120 terms and a ~1.7 MB `xray.json`. Use `normal`
+  for a leaner document.
+- **Duplicate cards from titles/forms:** name dedup does not (yet) strip leading
+  honorifics, so "Ser Jaime Lennister" and "Jaime Lennister" survive as two cards
+  (and ordinal/epithet variants like "Aerys II. Targaryen" vs "Aerys Targaryen").
+  This is being addressed in `xray_core/merge.py`; until then expect some inflated
+  character counts. Deliberate counter-rule: bare shared first names ("Robert")
+  are never fuzzy-merged (dynasty books reuse first names).
+- **Chapter headings across chunks:** when a chapter continues into a later chunk
+  without its heading, that chunk's timeline events for the headless portion can be
+  under-emitted. Minor; affects only the top-level `timeline`, not the snapshots.
