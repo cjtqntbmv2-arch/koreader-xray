@@ -62,6 +62,31 @@ _DC_TITLE_RE = re.compile(
 )
 
 
+_DC_NS = "http://purl.org/dc/elements/1.1/"
+_METADATA_CLOSE_RE = re.compile(rb"</\s*(?:[\w.-]+:)?metadata\s*>", re.IGNORECASE)
+
+
+def _add_dc_subject(opf_bytes: bytes, value: str = "X-Ray") -> bytes:
+    """Append <dc:subject>value</dc:subject> before </metadata> unless a subject
+    with that (case-insensitive) text already exists -- idempotent, and existing
+    subjects are left untouched. calibre maps dc:subject onto Tags, so this marks
+    the book as X-Ray-capable and filterable in the library. Byte-splice, never
+    reserialize (same reasoning as _add_manifest_item)."""
+    root = ET.fromstring(opf_bytes)  # read-only: existence check only
+    metadata = root.find(f"{{{_OPF_NS}}}metadata")
+    if metadata is not None:
+        want = value.strip().lower()
+        for subj in metadata.findall(f"{{{_DC_NS}}}subject"):
+            if (subj.text or "").strip().lower() == want:
+                return opf_bytes
+    match = _METADATA_CLOSE_RE.search(opf_bytes)
+    if not match:
+        raise ValueError("OPF has no </metadata> closing tag to insert dc:subject into")
+    escaped = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    item = f"<dc:subject>{escaped}</dc:subject>".encode("utf-8")
+    return opf_bytes[: match.start()] + item + opf_bytes[match.start() :]
+
+
 def _set_dc_title(opf_bytes: bytes, title: str) -> bytes:
     """Replace the inner text of the first <dc:title> with `title` (XML-escaped).
 
@@ -106,6 +131,7 @@ def embed_xray(epub_path, doc: dict, out_path, append=False, title=None) -> None
                 data = zin.read(item)  # by ZipInfo, not filename -- see module docstring
                 if item.filename == opf:
                     data = _add_manifest_item(data, href)
+                    data = _add_dc_subject(data)  # calibre-visible "X-Ray" tag
                     if title:
                         data = _set_dc_title(data, title)
                     comp = zipfile.ZIP_DEFLATED

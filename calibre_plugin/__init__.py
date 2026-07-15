@@ -69,7 +69,7 @@ class XRayGeneratorPlugin(InterfaceActionBase):
     description = "Generate spoiler-staged X-Ray data via Gemini and embed it into the EPUB"
     supported_platforms = ["windows", "osx", "linux"]
     author = "Daniel Niehof"
-    version = (0, 1, 1)
+    version = (0, 2, 0)
     minimum_calibre_version = (6, 0, 0)
     # NB: brief said "calibre_plugin.ui:...", but calibre's real multi-file
     # plugin namespace (confirmed against calibre's own plugin dev manual)

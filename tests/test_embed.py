@@ -38,6 +38,11 @@ def _manifest_items(opf_bytes):
     return root.findall(f"{{{_OPF_NS}}}manifest/{{{_OPF_NS}}}item")
 
 
+def _subjects(opf_bytes):
+    root = ET.fromstring(opf_bytes)
+    return [e.text for e in root.findall(f"{{{_OPF_NS}}}metadata/{{{_DC_NS}}}subject")]
+
+
 def test_embed_roundtrip(tmp_path, minimal_doc):
     book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
     out = tmp_path / "out.epub"
@@ -218,3 +223,44 @@ def test_embed_append_rejects_already_embedded_source(tmp_path, minimal_doc):
 
     with pytest.raises(ValueError):
         embed_xray(full, minimal_doc, tmp_path / "again.epub", append=True)
+
+
+def test_embed_adds_xray_subject_tag(tmp_path, minimal_doc):
+    """Full embed stamps a calibre-visible marker: dc:subject 'X-Ray' maps to a
+    calibre Tag on read, so xray-capable books are visible and filterable."""
+    book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
+    out = tmp_path / "out.epub"
+
+    embed_xray(book, minimal_doc, out)
+
+    with zipfile.ZipFile(out) as zf:
+        assert _subjects(zf.read(_OPF_PATH)) == ["X-Ray"]
+
+
+def test_embed_xray_subject_idempotent(tmp_path, minimal_doc):
+    """Re-embedding an already-marked EPUB must not add a duplicate subject."""
+    book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
+    once = tmp_path / "once.epub"
+    twice = tmp_path / "twice.epub"
+
+    embed_xray(book, minimal_doc, once)
+    embed_xray(once, minimal_doc, twice)              # re-embed from marked copy
+
+    with zipfile.ZipFile(twice) as zf:
+        assert _subjects(zf.read(_OPF_PATH)) == ["X-Ray"]
+
+
+def test_add_dc_subject_preserves_existing_and_dedups():
+    """The helper appends the marker without disturbing existing subjects, and
+    is idempotent case-insensitively (a re-run must not duplicate)."""
+    from xray_core.embed import _add_dc_subject
+
+    opf = (b'<package xmlns="http://www.idpf.org/2007/opf">'
+           b'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">'
+           b"<dc:title>T</dc:title><dc:subject>Fantasy</dc:subject>"
+           b"</metadata></package>")
+
+    once = _add_dc_subject(opf, "X-Ray")
+    assert _subjects(once) == ["Fantasy", "X-Ray"]    # existing kept, new appended
+    assert _subjects(_add_dc_subject(once, "X-Ray")) == ["Fantasy", "X-Ray"]
+    assert _subjects(_add_dc_subject(once, "x-ray")) == ["Fantasy", "X-Ray"]  # ci dedup
