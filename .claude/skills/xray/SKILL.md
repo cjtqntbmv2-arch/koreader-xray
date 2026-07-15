@@ -19,8 +19,9 @@ Given an EPUB path (and optional `--detail normal|detailed`, default `detailed`)
    Show progress (n/total). Because each result is a file, re-running skips finished chunks.
 
 3. **Assemble.** Run:
-   `python3 -m tools.claude_xray_assemble "<EPUB>" --workdir "<WORKDIR>" --out "<OUTDIR>" [--embed-mode full|append]`
+   `python3 -m tools.claude_xray_assemble "<EPUB>" --workdir "<WORKDIR>" --out "<OUTDIR>" [--embed-mode full|append] [--title "<calibre library title>"]`
    This cleans the raw outputs into the resume cache, runs the deterministic merge/validate, and writes `<OUTDIR>/<book>.epub.xray.json` (companion), `<OUTDIR>/<book>.epub` (embedded copy), and `<OUTDIR>/xray.json`.
+   - `--title "<calibre library title>"`: **pass this whenever the book comes from a calibre library and will be sent to the device via calibre.** The KOReader importer gates on the title (`book_fingerprint.title` vs the OPF title of the book as it lands on-device), and calibre rewrites the OPF to its *library* title on send — which often differs from the EPUB's own OPF title (e.g. a German EPUB whose OPF says "Feuer und Blut" under a calibre library entry titled "Fire and Blood"). `--title` aligns **both** the fingerprint **and** the embedded EPUB's own `<dc:title>` to the value you pass, so all three (fingerprint / embedded OPF / calibre-on-send OPF) agree and the import is accepted. Without it the data is silently rejected as *"does not match this book."* Get the exact title from `select title from books where ...` in `<library>/metadata.db`, or from the calibre GUI. (Full embed mode only — `append` mode leaves source bytes untouched, so calibre's OPF-title-on-send does the aligning there.)
    - `--embed-mode full` (default): registers the xray in the OPF manifest, so it survives calibre's *Convert Book*.
    - `--embed-mode append`: leaves the source bytes untouched and only appends the xray. Use this when the book has **already been read on the device** and you want to replace the file (e.g. via calibre wireless) *without* resetting KOReader reading statistics — see below.
 

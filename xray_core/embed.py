@@ -53,7 +53,28 @@ def _add_manifest_item(opf_bytes: bytes, href: str) -> bytes:
     return opf_bytes[: match.start()] + item_xml + opf_bytes[match.start() :]
 
 
-def embed_xray(epub_path, doc: dict, out_path, append=False) -> None:
+# First <dc:title> (or prefixed <opf:title>-style) element, capturing its inner
+# text so we can replace just the content -- byte-splice, same reasoning as
+# _add_manifest_item (never reserialize a calibre OPF through ElementTree).
+_DC_TITLE_RE = re.compile(
+    rb"(<\s*(?:[\w.-]+:)?title\b[^>]*>)(.*?)(</\s*(?:[\w.-]+:)?title\s*>)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _set_dc_title(opf_bytes: bytes, title: str) -> bytes:
+    """Replace the inner text of the first <dc:title> with `title` (XML-escaped).
+
+    The KOReader importer gates on title: it compares book_fingerprint.title
+    against the OPF <dc:title> of the book as it lands on-device. Aligning the
+    OPF here keeps the two in agreement regardless of whether calibre rewrites
+    the OPF on send. No-op if the OPF has no title element."""
+    escaped = (title.replace("&", "&amp;").replace("<", "&lt;")
+               .replace(">", "&gt;")).encode("utf-8")
+    return _DC_TITLE_RE.sub(lambda m: m.group(1) + escaped + m.group(3), opf_bytes, count=1)
+
+
+def embed_xray(epub_path, doc: dict, out_path, append=False, title=None) -> None:
     """Rewrite the EPUB at `epub_path` into `out_path` with `doc` embedded at
     DATA_PATH and registered in the OPF manifest. Re-embed-safe: drops any
     prior DATA_PATH entry and leaves the manifest item deduplicated.
@@ -69,6 +90,9 @@ def embed_xray(epub_path, doc: dict, out_path, append=False) -> None:
     reads DATA_PATH by name from the zip (not via the manifest), so it still
     finds it. Needs a pristine source (no existing DATA_PATH)."""
     if append:
+        # append keeps every source byte intact (the partialMD5 guarantee), so
+        # it cannot also rewrite the OPF title. title alignment therefore needs
+        # full mode; for append, calibre's OPF-title-on-send does the aligning.
         _embed_append(epub_path, doc, out_path)
         return
     payload = json.dumps(doc, ensure_ascii=False).encode("utf-8")
@@ -82,6 +106,8 @@ def embed_xray(epub_path, doc: dict, out_path, append=False) -> None:
                 data = zin.read(item)  # by ZipInfo, not filename -- see module docstring
                 if item.filename == opf:
                     data = _add_manifest_item(data, href)
+                    if title:
+                        data = _set_dc_title(data, title)
                     comp = zipfile.ZIP_DEFLATED
                 elif item.filename == "mimetype":
                     comp = zipfile.ZIP_STORED

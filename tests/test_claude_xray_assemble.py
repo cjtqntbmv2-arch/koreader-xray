@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import zipfile
 
 import pytest
@@ -46,6 +47,28 @@ def test_assemble_produces_valid_doc_and_deliverables(tmp_path):
     # companion == raw doc bytes
     assert open(os.path.join(out, base + ".xray.json"), encoding="utf-8").read() == \
            open(os.path.join(out, "xray.json"), encoding="utf-8").read()
+
+
+def test_assemble_title_override(tmp_path):
+    epub, workdir = _prepare(tmp_path)
+    default = assemble(epub, workdir, str(tmp_path / "def"))
+    opf_title = default["book_fingerprint"]["title"]  # the EPUB's own OPF title
+
+    doc = assemble(epub, workdir, str(tmp_path / "ovr"), title="Calibre Library Title")
+    assert doc["book_fingerprint"]["title"] == "Calibre Library Title"
+    assert opf_title != "Calibre Library Title"  # override actually changed it
+    assert validate(doc) == []
+    # override reaches the embedded copy too (that is what the importer reads)
+    out_epub = os.path.join(tmp_path, "ovr", os.path.basename(epub))
+    embedded = read_embedded(out_epub)
+    assert embedded is not None
+    assert embedded["book_fingerprint"]["title"] == "Calibre Library Title"
+    # ...and the EPUB's OWN OPF <dc:title> is aligned to it -- the importer gates
+    # on the OPF title, so fingerprint and OPF must agree or import is rejected.
+    with zipfile.ZipFile(out_epub) as zf:
+        opf = zf.read(_find_opf_path(zf)).decode("utf-8")
+    m = re.search(r"<dc:title[^>]*>(.*?)</dc:title>", opf, re.S)
+    assert m and m.group(1).strip() == "Calibre Library Title"
 
 
 def test_assemble_fails_loud_on_missing_chunk(tmp_path):
