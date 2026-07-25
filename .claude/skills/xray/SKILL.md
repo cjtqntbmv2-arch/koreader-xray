@@ -1,34 +1,113 @@
 ---
 name: xray
-description: Generate KOReader X-Ray data (xray.json) from an EPUB using Claude subagents as the extraction backend (no Gemini API). Use when the user gives an EPUB and wants embedded/companion X-Ray output.
+description: Generate KOReader X-Ray data (xray.json) from an EPUB — characters, locations, terms, historical figures and a timeline, staged per checkpoint so nothing past the reader's position leaks. Extraction runs on Claude subagents, one per chunk; there is no API key and no Gemini. Use this whenever the user points at an EPUB and wants X-Ray, wants to prepare a book for their e-reader, or asks for "the thing that tells me who this character is while I read" — including bare requests like "xray for <book>" or "generate the data for Fire and Blood". Do not use it for reading, converting or editing EPUBs generally.
 ---
 
 # xray — Claude-backed X-Ray generation
 
-Given an EPUB path (and optional `--detail normal|detailed`, default `detailed`):
+Produces one JSON document per book. Delivery to the device is a separate,
+deliberate step: the calibre plugin embeds the document into the book, and
+calibre's own wireless connection carries it. This skill never touches the
+source EPUB.
 
-1. **Plan.** Run:
-   `python3 -m tools.claude_xray_plan "<EPUB>" --workdir "<WORKDIR>" --detail <detail>`
-   Read the printed `manifest.json`. It lists every chunk as `{cp_idx, chunk_idx, percent, prompt_file, raw_file}`.
-   **Before launching the extraction, tell the user the chunk count as a rough cost signal** — extraction is the expensive part (one subagent per chunk). A full novel is ~30–40 chunks; a whole series is far more. Because each `raw_file` is written independently, hitting a usage/quota limit mid-run only costs the *unfinished* chunks (rerun resumes).
+Run the commands from the repository root (they import `xray_core`).
 
-2. **Extract (one subagent per chunk, in parallel batches, no cap).** Dispatch with the **Agent/Task tool** (one subagent per chunk), **model `sonnet`** — Opus is not worth it here: recall comes from the prompt + self-glean, not the model tier, and at ~37 chunks Opus can exhaust a MAX-plan quota mid-run (measured on a real book). Send them in waves of ~8–12 concurrent subagents (a realistic batch size — a 77-chunk book is ~7 waves), each processing one chunk. For each chunk whose `raw_file` does not yet exist in `<WORKDIR>` (resume-safe), the subagent is told to:
-   - Read `<WORKDIR>/<prompt_file>` (it contains the full extraction instruction + that chunk's text).
-   - Follow it exactly: extract EVERY character/location/term/historical-figure/timeline entry present in the chunk, then self-glean (re-scan for missed minor figures), using ONLY the provided text.
-   - Write the resulting JSON object (only the JSON, matching the schema described in the prompt) to `<WORKDIR>/<raw_file>` — write the JSON **directly**, and leave no helper scripts (`build_*.py`, `gen_*.py`) behind in the workdir.
-   Show progress (n/total). Because each result is a file, re-running skips finished chunks.
+## 1. Plan
 
-3. **Assemble.** Run:
-   `python3 -m tools.claude_xray_assemble "<EPUB>" --workdir "<WORKDIR>" --out "<OUTDIR>" [--embed-mode full|append] [--title "<calibre library title>"]`
-   This cleans the raw outputs into the resume cache, runs the deterministic merge/validate, and writes `<OUTDIR>/<book>.epub.xray.json` (companion), `<OUTDIR>/<book>.epub` (embedded copy), and `<OUTDIR>/xray.json`.
-   - `--title "<calibre library title>"`: **pass this whenever the book comes from a calibre library and will be sent to the device via calibre.** The KOReader importer gates on the title (`book_fingerprint.title` vs the OPF title of the book as it lands on-device), and calibre rewrites the OPF to its *library* title on send — which often differs from the EPUB's own OPF title (e.g. a German EPUB whose OPF says "Feuer und Blut" under a calibre library entry titled "Fire and Blood"). `--title` aligns **both** the fingerprint **and** the embedded EPUB's own `<dc:title>` to the value you pass, so all three (fingerprint / embedded OPF / calibre-on-send OPF) agree and the import is accepted. Without it the data is silently rejected as *"does not match this book."* Get the exact title from `select title from books where ...` in `<library>/metadata.db`, or from the calibre GUI. (Full embed mode only — `append` mode leaves source bytes untouched, so calibre's OPF-title-on-send does the aligning there.)
-   - `--embed-mode full` (default): registers the xray in the OPF manifest, so it survives calibre's *Convert Book*.
-   - `--embed-mode append`: leaves the source bytes untouched and only appends the xray. Use this when the book has **already been read on the device** and you want to replace the file (e.g. via calibre wireless) *without* resetting KOReader reading statistics — see below.
+```
+python3 -m tools.claude_xray_plan "<EPUB>" --workdir "<WORKDIR>" --detail <normal|detailed>
+```
 
-4. **Report** the three output paths. Guidance on which to use:
-   - **Embedded copy is fine even for already-read books.** KOReader keys a book's statistics/progress on a *head-weighted* `partialMD5` (12×1 KB samples over the first ~1 MB), so embedding the xray does **not** change the book's identity and does **not** reset statistics — verified on a real multi-MB book. `--embed-mode append` **guarantees** this (source head bytes are byte-identical); the default `full` mode also preserved it in testing but isn't guaranteed for unusually small books.
-   - **Companion `.xray.json`** is the zero-risk option (the book file is never touched at all), but calibre wireless sends only book formats, not sidecar files — you'd copy it next to the book on the device manually.
-   - When replacing a read book and relying on stats preservation, also disable calibre's *"Update metadata in book files when sending to device"* so calibre doesn't rewrite the head on send. The original source EPUB is never modified by this tool.
-   - **Calibre "X-Ray" tag:** full mode also stamps `<dc:subject>X-Ray</dc:subject>` into the OPF, which calibre maps to a filterable **Tag** "X-Ray". calibre only reads this when it *reads* the OPF — reliably on **add-as-new** (not on plain format-replace, where calibre keeps its library metadata). Append mode does not add it (it touches no bytes). This is a visibility aid only; it does not affect the device.
+`--detail` defaults to `detailed`. The command prints the path of a
+`manifest.json` listing every chunk as `{cp_idx, chunk_idx, percent,
+prompt_file, raw_file}`.
 
-Constraints: never modify the source EPUB; if the assembler aborts listing missing/invalid chunks, re-dispatch subagents for exactly those `(cp,idx)` and re-run the assembler. `--out`/`OUTDIR` must be a directory other than the source EPUB's own directory, or the embedded copy would overwrite (and truncate) the source.
+**Tell the user the chunk count before you start extracting.** Extraction is
+the expensive part — one subagent per chunk — and a whole series can be several
+hundred. A full novel is roughly 30–40. Giving them the number first lets them
+stop you; discovering the cost afterwards does not.
+
+## 2. Extract
+
+Dispatch one subagent per chunk with the Agent/Task tool, **model `sonnet`**, in
+waves of about 8–12 concurrent agents.
+
+Sonnet rather than Opus is a measured decision, not thrift: recall here comes
+from the prompt and the self-glean step, not the model tier, and on a real
+37-chunk book Opus exhausted a MAX-plan quota partway through. Reserve Opus for
+a book that demonstrably comes out badly.
+
+Skip any chunk whose `raw_file` already exists — that is what makes a
+interrupted run cheap to resume. For each remaining chunk, instruct the
+subagent to:
+
+- Read `<WORKDIR>/<prompt_file>`. It already contains the extraction
+  instruction and that chunk's text; nothing needs to be added to it.
+- Follow it exactly: every character, location, term, historical figure and
+  timeline entry present in the chunk, then the self-glean re-scan for minor
+  figures that the first pass missed — using **only** the provided text.
+- Write the resulting JSON object, and nothing else, to `<WORKDIR>/<raw_file>`.
+  Write it **directly** rather than generating a script that writes it;
+  subagents that build `build_*.py` helpers leave them behind in the workdir
+  and cost a round of cleanup for no benefit.
+
+Report progress as n/total while the waves run.
+
+## 3. Assemble
+
+```
+python3 -m tools.claude_xray_assemble "<EPUB>" --workdir "<WORKDIR>" --out "<OUTDIR>"
+```
+
+This cleans each raw extraction, merges them in book order, validates the
+result against the schema, and writes two files with identical content:
+
+- `<OUTDIR>/xray.json` — the file you hand to calibre.
+- `<OUTDIR>/<book>.epub.xray.json` — the same document under the name the
+  device plugin looks for next to a book, for delivery over USB.
+
+If the assembler aborts listing missing or unparseable chunks, re-dispatch
+subagents for exactly those `(cp_idx, chunk_idx)` pairs and run it again. It is
+deliberately strict: a document that silently covered less of the book than it
+claims would stage spoilers wrongly.
+
+`--out` may be the book's own directory. Nothing here writes an EPUB, so
+nothing can overwrite the source.
+
+## 4. Report and hand over
+
+Give the user both paths and the route that fits them:
+
+**Via calibre (the normal way).** In calibre: select the book → *Embed X-Ray* →
+pick `xray.json`. The plugin verifies the file belongs to this book
+(`text_hash`), validates it, appends it to the EPUB without touching existing
+bytes, and checks KOReader's `partialMD5` before and after so an already-read
+book does not lose its reading statistics. It refuses rather than guesses. Then
+send the book to the device as usual.
+
+**Via USB (for testing).** Copy `<book>.epub.xray.json` next to the book on the
+device. The plugin prefers a companion file over embedded data, which makes it
+the fastest way to iterate without re-sending the book.
+
+## What the document contains
+
+`schema_version: 2`. One snapshot per checkpoint, each cumulative and frozen at
+that point in the book, plus a document-level timeline whose entries carry the
+percent at which they become visible. The device picks the highest checkpoint
+its reading position has passed.
+
+Two consequences worth knowing when something looks wrong:
+
+- **A device plugin older than schema v2 rejects these documents.** If the
+  reader says there is no X-Ray data for a freshly generated book, check the
+  plugin version before suspecting the data.
+- **Descriptions are staged, not final.** A character's description at 25 % is
+  built only from text up to 25 %, so it is thinner than the same character's
+  entry at 90 %. That is the point, not a defect.
+
+## Constraints
+
+Never modify the source EPUB. Never invent entities from knowledge of the book
+outside the provided chunk text — the staging guarantee is only as good as that
+rule. If a run is interrupted, resume it; do not start a fresh workdir, since
+the finished chunks are the expensive part.

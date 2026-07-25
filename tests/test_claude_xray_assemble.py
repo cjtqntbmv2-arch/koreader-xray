@@ -1,13 +1,9 @@
 import json
 import os
-import re
-import zipfile
 
 import pytest
 
 from epub_fixture import build_epub  # NOT tests.epub_fixture
-from xray_core.embed import DATA_PATH, read_embedded
-from xray_core.epub import _find_opf_path
 from xray_core.schema import validate
 from tools.claude_xray_plan import write_plan
 from tools.claude_xray_assemble import assemble
@@ -39,36 +35,31 @@ def test_assemble_produces_valid_doc_and_deliverables(tmp_path):
     assert validate(doc) == []
     assert any(c["name"] == "Alice" for c in doc["checkpoints"][-1]["snapshot"]["characters"])
     base = os.path.basename(epub)
-    assert os.path.exists(os.path.join(out, base + ".xray.json"))   # companion (append-form)
-    assert os.path.exists(os.path.join(out, base))                  # embedded copy (same name)
-    assert os.path.exists(os.path.join(out, "xray.json"))           # raw
+    assert os.path.exists(os.path.join(out, base + ".xray.json"))   # companion (device-side name)
+    assert os.path.exists(os.path.join(out, "xray.json"))           # what calibre gets
+    # No EPUB is written any more: embedding is the calibre plugin's job, and
+    # it is the only path with the partial_md5/text_hash checks.
+    assert not os.path.exists(os.path.join(out, base))
     # source EPUB untouched
     assert open(epub, "rb").read() == src_before
-    # companion == raw doc bytes
+    # both deliverables are the same bytes
     assert open(os.path.join(out, base + ".xray.json"), encoding="utf-8").read() == \
            open(os.path.join(out, "xray.json"), encoding="utf-8").read()
 
 
-def test_assemble_title_override(tmp_path):
+def test_assemble_may_write_beside_the_source_book(tmp_path):
+    """Writing --out into the book's own directory used to truncate the source
+    (the embedded copy shared its name). With only JSON deliverables left, it
+    is safe -- and it is how you deliver the companion file over USB."""
     epub, workdir = _prepare(tmp_path)
-    default = assemble(epub, workdir, str(tmp_path / "def"))
-    opf_title = default["book_fingerprint"]["title"]  # the EPUB's own OPF title
+    src_before = open(epub, "rb").read()
+    beside = os.path.dirname(epub)
 
-    doc = assemble(epub, workdir, str(tmp_path / "ovr"), title="Calibre Library Title")
-    assert doc["book_fingerprint"]["title"] == "Calibre Library Title"
-    assert opf_title != "Calibre Library Title"  # override actually changed it
+    doc = assemble(epub, workdir, beside)
+
     assert validate(doc) == []
-    # override reaches the embedded copy too (that is what the importer reads)
-    out_epub = os.path.join(tmp_path, "ovr", os.path.basename(epub))
-    embedded = read_embedded(out_epub)
-    assert embedded is not None
-    assert embedded["book_fingerprint"]["title"] == "Calibre Library Title"
-    # ...and the EPUB's OWN OPF <dc:title> is aligned to it -- the importer gates
-    # on the OPF title, so fingerprint and OPF must agree or import is rejected.
-    with zipfile.ZipFile(out_epub) as zf:
-        opf = zf.read(_find_opf_path(zf)).decode("utf-8")
-    m = re.search(r"<dc:title[^>]*>(.*?)</dc:title>", opf, re.S)
-    assert m and m.group(1).strip() == "Calibre Library Title"
+    assert open(epub, "rb").read() == src_before
+    assert os.path.exists(os.path.join(beside, os.path.basename(epub) + ".xray.json"))
 
 
 def test_assemble_fails_loud_on_missing_chunk(tmp_path):
@@ -96,42 +87,6 @@ def test_assemble_is_reproducible(tmp_path):
     d2 = assemble(epub, workdir, str(tmp_path / "b"))
     assert json.dumps(d1, sort_keys=True) == json.dumps(d2, sort_keys=True)
     assert open(tmp_path / "a" / "xray.json").read() == open(tmp_path / "b" / "xray.json").read()
-
-
-def test_assemble_refuses_out_dir_matching_source_epub_dir(tmp_path):
-    # --out resolving to the source EPUB's own directory would make the
-    # embedded-copy write path collide with the source path, truncating it
-    # (embed_xray opens epub_path for reading and out_path for writing --
-    # same file means the write side clobbers the read side mid-copy).
-    epub, workdir = _prepare(tmp_path)
-    src_before = open(epub, "rb").read()
-    out_dir = os.path.dirname(epub)  # same directory the source EPUB lives in
-
-    with pytest.raises(SystemExit):
-        assemble(epub, workdir, out_dir)
-
-    assert open(epub, "rb").read() == src_before
-
-
-def test_assemble_refuses_out_dir_symlinked_to_source_epub_dir(tmp_path):
-    # Same collision as the direct-path test above, but reached through a
-    # symlink: os.path.abspath normalizes . / .. / trailing slashes but does
-    # NOT resolve symlinks. On macOS /tmp -> /private/tmp, so a real-world
-    # relative --out from cwd /tmp slips past an abspath-only guard even
-    # though it is the same file. os.path.realpath resolves symlinks and
-    # closes this gap.
-    epub, workdir = _prepare(tmp_path)
-    src_before = open(epub, "rb").read()
-    link = tmp_path / "link"
-    try:
-        os.symlink(os.path.dirname(epub), link)
-    except (OSError, NotImplementedError):
-        pytest.skip("symlinks not supported on this platform")
-
-    with pytest.raises(SystemExit):
-        assemble(epub, workdir, str(link))
-
-    assert open(epub, "rb").read() == src_before
 
 
 def test_assemble_detects_text_hash_drift(tmp_path):
@@ -172,21 +127,14 @@ def test_assemble_localizes_nameless_placeholder_by_book_language(tmp_path):
     assert "Unnamed Character" not in names
 
 
-def test_assemble_embed_mode_append_leaves_opf_and_source_intact(tmp_path):
-    # --embed-mode append must route to the byte-preserving embed: the xray is
-    # readable by name but NOT registered in the OPF manifest (that edit is what
-    # would move head bytes and reset KOReader stats), and the source is untouched.
+def test_assemble_never_writes_an_epub(tmp_path):
+    """The embed modes moved to the calibre plugin, which checks partial_md5 and
+    text_hash before it replaces anything. If an EPUB ever reappeared here, that
+    unchecked second path would be back."""
     epub, workdir = _prepare(tmp_path)
-    src_before = open(epub, "rb").read()
-    out = str(tmp_path / "out_append")
+    out = str(tmp_path / "out_noepub")
 
-    doc = assemble(epub, workdir, out, embed_append=True)
+    assemble(epub, workdir, out)
 
-    embedded = os.path.join(out, os.path.basename(epub))
-    assert read_embedded(embedded) == doc                     # device-readable by name
-    with zipfile.ZipFile(epub) as z:
-        src_opf = z.read(_find_opf_path(z))
-    with zipfile.ZipFile(embedded) as z:
-        assert z.read(_find_opf_path(z)) == src_opf           # OPF byte-identical (no manifest edit)
-        assert DATA_PATH in z.namelist()
-    assert open(epub, "rb").read() == src_before              # source untouched
+    assert sorted(os.listdir(out)) == sorted(
+        ["xray.json", os.path.basename(epub) + ".xray.json"])

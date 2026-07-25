@@ -1,14 +1,21 @@
 """Assembler for the Claude-backed X-Ray extraction skill.
 
-Reads subagent-produced chunk_<cp>_<idx>.raw.json, cleans them into the
-chunk cache generate_xray reads, then merges and writes the deliverables.
+Reads subagent-produced chunk_<cp>_<idx>.raw.json, cleans them into the chunk
+cache generate_xray reads, then merges and writes the document.
+
+It deliberately does NOT embed the result into an EPUB any more. Embedding is
+the calibre plugin's job, and the plugin does it with four checks the plain
+call here never had (text_hash against the book, schema validation, zip
+integrity plus byte round-trip, and partial_md5 before/after so a book never
+silently loses its reading statistics). Two embedding paths for one job meant
+the unchecked one was always a step away.
+
 Stdlib + xray_core only.
 """
 import argparse
 import json
 import os
 
-from xray_core.embed import embed_xray
 from xray_core.epub import read_epub
 from xray_core.generate import _chunk_path, generate_xray
 from xray_core.merge import clean_response
@@ -38,17 +45,8 @@ def _precheck(workdir, manifest):
                          "\n  ".join(problems))
 
 
-def assemble(epub_path, workdir, out_dir, embed_append=False, title=None):
+def assemble(epub_path, workdir, out_dir):
     base = os.path.basename(epub_path)
-    final_path = os.path.join(out_dir, base)
-    if os.path.realpath(final_path) == os.path.realpath(epub_path):
-        raise SystemExit(
-            "assemble aborted -- --out resolves to the source EPUB's own "
-            f"directory ({os.path.abspath(epub_path)!r}). The embedded copy "
-            "would overwrite (and truncate) the source EPUB while it is "
-            "still being read. Pass a different --out directory."
-        )
-
     book = read_epub(epub_path)
     manifest = _load_manifest(workdir)
     if book.text_hash != manifest["book"]["text_hash"]:
@@ -74,26 +72,15 @@ def assemble(epub_path, workdir, out_dir, embed_append=False, title=None):
 
     doc = generate_xray(book, book.language, detail, workdir)
 
-    # The KOReader importer gates on title (book_fingerprint.title vs the OPF
-    # title of the book as it lands on-device). calibre rewrites the OPF title
-    # to its LIBRARY title on send, which can differ from the raw EPUB OPF title
-    # generate_xray read -- so allow overriding it with calibre's library title.
-    if title:
-        doc["book_fingerprint"]["title"] = title
-
     os.makedirs(out_dir, exist_ok=True)
-    raw_json = os.path.join(out_dir, "xray.json")
-    with open(raw_json, "w", encoding="utf-8") as f:
-        json.dump(doc, f, ensure_ascii=False, indent=2)
-    # companion: byte-identical to xray.json, append-form name (cross-repo contract)
-    companion = os.path.join(out_dir, base + ".xray.json")
-    with open(companion, "w", encoding="utf-8") as f:
-        json.dump(doc, f, ensure_ascii=False, indent=2)
-    # embedded copy: identical original filename, source untouched. append=True
-    # leaves the source's head bytes intact so KOReader's partialMD5 (its
-    # statistics/progress key) survives replacing the file on-device -- at the
-    # cost of OPF-manifest registration (does not survive calibre Convert Book).
-    embed_xray(epub_path, doc, final_path, append=embed_append, title=title)
+    # Two names, same bytes. xray.json is what you hand to the calibre plugin;
+    # "<book>.epub.xray.json" is the name the device plugin looks for beside a
+    # book, so writing --out into the book's own directory is a valid (and
+    # useful) way to deliver over USB. Nothing here can overwrite the source.
+    payload = json.dumps(doc, ensure_ascii=False, indent=2)
+    for name in ("xray.json", base + ".xray.json"):
+        with open(os.path.join(out_dir, name), "w", encoding="utf-8") as f:
+            f.write(payload)
     return doc
 
 
@@ -102,24 +89,8 @@ def main(argv=None):
     p.add_argument("book")
     p.add_argument("--workdir", required=True)
     p.add_argument("--out", required=True)
-    p.add_argument(
-        "--embed-mode", choices=["full", "append"], default="full",
-        help="full (default): register xray in the OPF, survives calibre Convert Book. "
-             "append: leave the source bytes untouched so KOReader reading statistics "
-             "survive replacing the file on-device (does not survive Convert Book).",
-    )
-    p.add_argument(
-        "--title",
-        help="Align BOTH book_fingerprint.title and the embedded EPUB's OPF "
-             "<dc:title> to this value (full embed mode). The importer gates on "
-             "title (fingerprint vs the on-device OPF title); calibre rewrites the "
-             "OPF to its LIBRARY title on send, which often differs from the EPUB's "
-             "own OPF title. Pass calibre's library title so all three agree and "
-             "the data is not rejected as 'does not match this book'.",
-    )
     args = p.parse_args(argv)
-    assemble(args.book, args.workdir, args.out,
-             embed_append=args.embed_mode == "append", title=args.title)
+    assemble(args.book, args.workdir, args.out)
     return 0
 
 
