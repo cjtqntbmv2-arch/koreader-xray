@@ -1,66 +1,52 @@
 # Using the `xray` skill
 
-The `xray` skill (`.claude/skills/xray/SKILL.md`) generates KOReader X-Ray data
-for an EPUB using Claude subagents instead of the Gemini API. Give Claude an
-EPUB path; it drives three steps:
+The procedure lives in `.claude/skills/xray/SKILL.md` and is not repeated here.
+Ask Claude for X-Ray data and point it at an EPUB; it plans the chunks, tells
+you how many there are before spending anything, dispatches one subagent per
+chunk, and assembles the result.
 
-1. **Plan** — `python3 -m tools.claude_xray_plan "<EPUB>" --workdir "<WORKDIR>" --detail <normal|detailed>`
-   writes one prompt file per text chunk plus `manifest.json` listing them.
-2. **Extract** — Claude dispatches one subagent per chunk (in waves of
-   ~8–12 concurrent), each reading its `<prompt_file>` and writing the
-   extracted JSON to `<raw_file>`. Already-written `raw_file`s are skipped, so
-   a rerun resumes instead of redoing finished chunks.
-3. **Assemble** — `python3 -m tools.claude_xray_assemble "<EPUB>" --workdir "<WORKDIR>" --out "<OUTDIR>"`
-   merges/validates the chunk outputs and writes `<book>.epub.xray.json`
-   (companion), `<book>.epub` (embedded copy), and `xray.json` (raw) to
-   `<OUTDIR>`.
+What you get is one JSON document, twice:
 
-## Which output to use
+- `xray.json` — hand this to calibre: select the book, *Embed X-Ray*, pick the
+  file. The plugin checks that the data belongs to this book, appends it
+  without disturbing existing bytes, and verifies KOReader's `partialMD5`
+  before and after so an already-read book keeps its reading statistics. Then
+  send the book to the device the usual way.
+- `<book>.epub.xray.json` — the same content under the name the device plugin
+  looks for beside a book. Copy it there over USB when you want to iterate
+  without re-sending the book.
 
-Replacing an already-read book with an embedded copy does **not** reset your
-KOReader reading statistics. KOReader keys a book's identity (statistics +
-progress) on a *head-weighted* `partialMD5` — 12 samples of 1 KB at offsets
-`1024·4^i` (i=−1…10), i.e. only over the first ~1 MB. Embedding the xray adds
-data past those sample windows, so the identity is unchanged (verified on a
-real multi-MB book: original, embedded and append-only all share the same
-`partialMD5`).
+This page exists for what the skill does not cover: what to expect from the
+output, and where it is still rough.
 
-- **Embedded `<book>.epub` copy** — the normal choice, for read and unread
-  books alike. Two modes (`--embed-mode`):
-  - `full` (default): the xray is registered in the OPF manifest, so it
-    survives calibre's *Convert Book*.
-  - `append`: the source bytes are left untouched and the xray is only
-    appended — this **guarantees** the `partialMD5` (and thus your stats) is
-    preserved. Use it when replacing a read book via calibre wireless. It does
-    not survive *Convert Book* (no manifest entry), which the on-device
-    importer doesn't need anyway (it reads the member by name).
-- **Companion `<book>.epub.xray.json`** — the zero-risk fallback (the book file
-  is never touched at all). But calibre wireless sends only book formats, not
-  sidecar files, so you'd copy it next to the book on the device by hand.
-- When relying on stats preservation, also turn off calibre's *"Update metadata
-  in book files when sending to device"* so calibre doesn't rewrite the OPF/head
-  on send.
-- The original source EPUB is never modified by this process.
-- `--out`/`OUTDIR` must be a directory other than the source EPUB's own
-  directory, or the embedded copy would overwrite (and truncate) the source.
+## Known limits
 
-If assembly aborts listing missing or invalid chunks, re-dispatch subagents
-only for those `(cp,idx)` pairs and re-run the assembler.
+From real runs, worth knowing before you blame the wrong thing:
 
-## Notes & known limits (from the first real e2e run)
+- **Detail level costs size.** `detailed` (the default) is comprehensive but
+  heavy — half a novel produced ~226 characters, ~120 terms and a ~1.7 MB
+  document. `normal` gives a leaner one. Size is not a device problem
+  (a 0.9 MB document parses in 0.042 s for +689 KB of heap, measured on a
+  Kobo), it just makes the lists long.
+- **Duplicate cards from name forms.** Dedup does not strip honorifics or
+  ordinals, so "Ser Jaime Lennister" and "Jaime Lennister" survive as two
+  cards, as do "Aerys II. Targaryen" and "Aerys Targaryen". Expect somewhat
+  inflated character counts on dynasty-heavy books. The deliberate
+  counter-rule: bare shared first names ("Robert") are never fuzzy-merged,
+  because those books reuse first names across generations on purpose.
+- **Chapter headings that fall between chunks.** When a chapter continues into
+  a later chunk without repeating its heading, that chunk can under-emit
+  timeline events for the headless part. It affects only the document-level
+  timeline, not the per-checkpoint snapshots.
+- **Descriptions are staged, not final.** An entry at 25 % is written from text
+  up to 25 % only, so it is thinner than the same entry at 90 %. That is the
+  spoiler guarantee doing its job.
 
-- **Model:** dispatch the extraction subagents on **Sonnet**, not Opus. Recall
-  comes from the prompt + self-glean, not the model tier, and at ~37 chunks Opus
-  can exhaust a MAX-plan quota mid-run.
-- **Detail level:** `detailed` (default) is comprehensive but heavy — a half-novel
-  produced ~226 characters / ~120 terms and a ~1.7 MB `xray.json`. Use `normal`
-  for a leaner document.
-- **Duplicate cards from titles/forms:** name dedup does not (yet) strip leading
-  honorifics, so "Ser Jaime Lennister" and "Jaime Lennister" survive as two cards
-  (and ordinal/epithet variants like "Aerys II. Targaryen" vs "Aerys Targaryen").
-  This is being addressed in `xray_core/merge.py`; until then expect some inflated
-  character counts. Deliberate counter-rule: bare shared first names ("Robert")
-  are never fuzzy-merged (dynasty books reuse first names).
-- **Chapter headings across chunks:** when a chapter continues into a later chunk
-  without its heading, that chunk's timeline events for the headless portion can be
-  under-emitted. Minor; affects only the top-level `timeline`, not the snapshots.
+## If something looks wrong on the device
+
+- **"No X-Ray data" for a freshly generated book** — check the plugin version
+  first. Documents are `schema_version: 2`; an older plugin rejects them
+  outright rather than misreading them.
+- **Nothing appears early in the book** — expected. Data becomes visible from
+  the first checkpoint onward, typically 10–15 % in; before that the plugin
+  says from which percentage it will have something.
