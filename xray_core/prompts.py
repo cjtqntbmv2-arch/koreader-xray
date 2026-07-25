@@ -37,37 +37,10 @@ DETAIL_CAPS = {
 _SEGMENT_PREFIX = "BOOK TEXT CONTEXT:\n"
 _INSTR_SEP = "\n\n---\n\n"
 
-# Native structured-output schema for the extract/glean response (Gemini
-# responseSchema = OpenAPI subset). Flat and all-optional so clean_response's
-# tolerant .get() handling stays correct and the same schema fits every call
-# type. Replaces the bulky in-prompt JSON example. Fields mirror
-# merge.clean_response (xray_core/merge.py).
-_STR = {"type": "string"}
-_STR_ARR = {"type": "array", "items": {"type": "string"}}
-
-
-def _obj(**props):
-    return {"type": "object", "properties": dict(props)}
-
-
-def _arr_of(**props):
-    return {"type": "array", "items": _obj(**props)}
-
-
-EXTRACT_RESPONSE_SCHEMA = _obj(
-    book_type={"type": "string", "enum": ["fiction", "non_fiction"]},
-    characters=_arr_of(
-        name=_STR, aliases=_STR_ARR, role=_STR, gender=_STR,
-        occupation=_STR, description=_STR,
-    ),
-    historical_figures=_arr_of(
-        name=_STR, role=_STR, biography=_STR,
-        importance_in_book=_STR, context_in_book=_STR,
-    ),
-    locations=_arr_of(name=_STR, description=_STR, importance=_STR, aliases=_STR_ARR),
-    terms=_arr_of(name=_STR, expanded=_STR, category=_STR, definition=_STR, aliases=_STR_ARR),
-    timeline=_arr_of(chapter=_STR, event=_STR),
-)
+# EXTRACT_RESPONSE_SCHEMA lived here until 2026-07-25: a Gemini
+# `responseSchema` (OpenAPI subset) that forced structured output. It went with
+# the Gemini client -- the Claude extraction path states the shape in the prompt
+# itself and clean_response (xray_core/merge.py) remains the actual contract.
 
 SYSTEM_INSTRUCTION_EN = (
     r"""You are an expert literary researcher. Your response must be ONLY in valid JSON format. Ensure data is highly accurate and pertains strictly to the provided context."""

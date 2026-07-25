@@ -2,7 +2,7 @@
 member copying (not filename-based -- duplicate-named entries would otherwise
 silently corrupt on read), compress_type preservation, and re-embed idempotency.
 """
-import hashlib
+import os
 import warnings
 import zipfile
 from xml.etree import ElementTree as ET
@@ -11,22 +11,12 @@ import pytest
 
 from epub_fixture import build_epub
 
-from xray_core.embed import DATA_PATH, embed_xray, read_embedded
+from xray_core.embed import DATA_PATH, embed_xray, partial_md5, read_embedded
 
-
-def _koreader_partial_md5(path):
-    """Exact port of KOReader util.partialMD5: 12 x 1024-byte samples at the
-    head-weighted offsets 1024*4^i, i=-1..10. This is the book identity its
-    statistics/progress are keyed on."""
-    m = hashlib.md5()
-    with open(path, "rb") as f:
-        for i in range(-1, 11):
-            f.seek(int(1024 * 4.0 ** i))
-            sample = f.read(1024)
-            if not sample:
-                break
-            m.update(sample)
-    return m.hexdigest()
+# The formula lives in xray_core.embed: the calibre plugin needs it as a guard
+# before replacing a library file, and a second copy here would be exactly the
+# drift these tests exist to catch.
+_koreader_partial_md5 = partial_md5
 
 _OPF_NS = "http://www.idpf.org/2007/opf"
 _DC_NS = "http://purl.org/dc/elements/1.1/"
@@ -195,6 +185,31 @@ def test_embed_append_preserves_koreader_partial_md5(tmp_path, minimal_doc):
     assert _koreader_partial_md5(out) == before      # book identity preserved
     assert read_embedded(out) == minimal_doc          # still device-readable by name
     assert _koreader_partial_md5(book) == before      # source untouched
+
+
+def test_append_across_a_sample_boundary_does_change_the_md5(tmp_path, minimal_doc):
+    """The counter-example to the test above, pinned so nobody promises more
+    than append can deliver: partialMD5 samples only exist once the file
+    reaches their offset. Growing a file from below 1 MiB to above it adds a
+    12th sample that previously sat past EOF -- the hash changes and the device
+    sees a new book. A caller that must preserve statistics has to COMPARE
+    partial_md5 before and after, not trust the mode it used."""
+    book = build_epub(tmp_path, [("One", "<p>Hello world.</p>")])
+    # Land 200 bytes short of 1 MiB: the 1048576-offset sample does not exist
+    # yet, and any appended member is bigger than that gap. (Padding the doc
+    # itself would not work -- the appended member is deflated, so even 20 kB
+    # of filler compresses away to nothing.)
+    pad = 1024 * 1024 - os.path.getsize(book) - 200
+    with zipfile.ZipFile(book, "a") as zf:
+        zf.writestr(zipfile.ZipInfo("OEBPS/bulk.bin"), b"A" * pad, zipfile.ZIP_STORED)
+    assert os.path.getsize(book) < 1024 * 1024
+    before = partial_md5(book)
+    out = tmp_path / "out.epub"
+
+    embed_xray(book, minimal_doc, out, append=True)
+
+    assert os.path.getsize(out) > 1024 * 1024
+    assert partial_md5(out) != before
 
 
 def test_embed_append_leaves_opf_unmodified(tmp_path, minimal_doc):

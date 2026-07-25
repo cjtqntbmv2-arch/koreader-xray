@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/calibre-xray/schema/xray.schema.json",
-  "title": "xray.json interchange format (v1)",
+  "title": "xray.json interchange format (v2)",
   "description": "Produced by the calibre-xray desktop generator, consumed by the KOReader xray plugin importer. This file documents the full intended shape by hand; xray_core/schema.py is the enforced, hand-rolled validator (stdlib only, no jsonschema) and only checks the subset noted per-field below as 'enforced'. Two rules cannot be expressed in plain JSON Schema and are enforced only in schema.py: checkpoints[].percent must strictly ascend across the array, and the last checkpoint's percent must equal last_percent.",
   "type": "object",
   "required": [
@@ -10,7 +10,7 @@
     "book_type", "timeline", "checkpoints"
   ],
   "properties": {
-    "schema_version": { "const": 1, "description": "enforced: must equal 1" },
+    "schema_version": { "const": 2, "description": "enforced: must equal 2. v2 dropped checkpoints[].snippet_anchor and .chapter_anchor." },
     "generator": { "type": "string" },
     "generator_version": { "type": "string" },
     "detail_level": { "type": "string", "description": "e.g. \"normal\", \"detailed\"" },
@@ -45,21 +45,12 @@
       "type": "array",
       "items": {
         "type": "object",
-        "description": "enforced: percent, snippet_anchor, snapshot",
-        "required": ["percent", "snippet_anchor", "snapshot"],
+        "description": "enforced: percent, snapshot",
+        "required": ["percent", "snapshot"],
         "properties": {
-          "percent": { "type": "integer", "minimum": 1, "maximum": 100 },
-          "snippet_anchor": {
-            "type": "string",
-            "description": "80-120 chars, sentence-cut, whitespace-normalized (by convention). May be an empty string for a textless zone (e.g. image-only front matter); the device falls back to chapter/percent anchors. Only the string type is enforced."
-          },
-          "chapter_anchor": {
-            "description": "may be null (densified/10%-fallback checkpoints); not enforced by schema.py",
-            "type": ["object", "null"],
-            "properties": {
-              "toc_title": { "type": "string" },
-              "spine_index": { "type": "integer" }
-            }
+          "percent": {
+            "type": "integer", "minimum": 1, "maximum": 100,
+            "description": "Rounded UP from the checkpoint's char offset, so it never claims less coverage than its snapshot actually has: the device compares its reading position straight against this value."
           },
           "snapshot": {
             "type": "object",

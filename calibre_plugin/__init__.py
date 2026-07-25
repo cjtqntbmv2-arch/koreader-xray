@@ -65,24 +65,22 @@ from calibre.customize import InterfaceActionBase
 
 
 class XRayGeneratorPlugin(InterfaceActionBase):
+    # `name` is calibre's plugin identity (upgrade/uninstall key), so it keeps
+    # the historic "Generator" wording even though generation now happens
+    # outside calibre. The user-visible label lives in ui.py's action_spec.
     name = "X-Ray Generator"
-    description = "Generate spoiler-staged X-Ray data via Gemini and embed it into the EPUB"
+    description = "Embed generated X-Ray data into an EPUB so it travels to the reader"
     supported_platforms = ["windows", "osx", "linux"]
     author = "Daniel Niehof"
-    version = (0, 2, 0)
+    version = (26, 7, 18)  # gestempelt von tools/release.py aus VERSION
     minimum_calibre_version = (6, 0, 0)
-    # NB: brief said "calibre_plugin.ui:...", but calibre's real multi-file
-    # plugin namespace (confirmed against calibre's own plugin dev manual)
-    # is calibre_plugins.<plugin-import-name>.<module> -- see
+    # NB: calibre's real multi-file plugin namespace (confirmed against
+    # calibre's own plugin dev manual) is
+    # calibre_plugins.<plugin-import-name>.<module> -- see
     # plugin-import-name-xray_generator.txt.
     actual_plugin = "calibre_plugins.xray_generator.ui:XRayGeneratorAction"
 
+    # Nothing left to configure: the API key, model, language and detail level
+    # all belonged to the Gemini path.
     def is_customizable(self):
-        return True
-
-    def config_widget(self):
-        from calibre_plugins.xray_generator.config import ConfigWidget
-        return ConfigWidget()
-
-    def save_settings(self, config_widget):
-        config_widget.save_settings()
+        return False

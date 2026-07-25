@@ -8,9 +8,8 @@ import argparse
 import json
 import os
 
-from xray_core.checkpoints import plan_checkpoints
 from xray_core.epub import read_epub
-from xray_core.generate import _chunk_segment
+from xray_core.generate import chunk_plan
 from xray_core.prompts import build_prompt
 
 SELF_GLEAN_LINE = (
@@ -22,17 +21,16 @@ SELF_GLEAN_LINE = (
 
 
 def plan_chunks(book):
-    cps = plan_checkpoints(book)
+    """Flatten generate_xray's own chunk plan into one entry per prompt file.
+    Both sides go through chunk_plan(), so the planner cannot drift from the
+    reader -- a drift would make every chunk miss its cache file."""
     chunks = []
-    prev = 0
-    for cp_idx, cp in enumerate(cps):
-        segment = book.full_text[prev:cp.offset]
-        for chunk_idx, text in enumerate(_chunk_segment(segment)):
+    for cp_idx, (cp, chunk_list) in enumerate(chunk_plan(book)):
+        for chunk_idx, text in enumerate(chunk_list):
             chunks.append({
                 "cp_idx": cp_idx, "chunk_idx": chunk_idx,
                 "percent": cp.percent, "text": text,
             })
-        prev = cp.offset
     return chunks
 
 

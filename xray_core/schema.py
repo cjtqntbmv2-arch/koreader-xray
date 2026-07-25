@@ -12,7 +12,10 @@ from typing import TypeGuard
 
 from xray_core.merge import _PLACEHOLDER_NAMES
 
-SCHEMA_VERSION = 1
+# v2 (2026-07-25): snippet_anchor/chapter_anchor dropped from checkpoints --
+# the device maps its reading position straight onto `percent` and needs no
+# per-checkpoint marker to search for.
+SCHEMA_VERSION = 2
 
 # Top-level required keys and their expected Python type.
 _TOP_LEVEL_TYPES = {
@@ -127,27 +130,6 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
                     f"(got {percent} after {prev_percent})"
                 )
             prev_percent = percent
-
-        if "snippet_anchor" not in cp:
-            problems.append(f"{label} missing required field: snippet_anchor")
-        elif not isinstance(cp["snippet_anchor"], str):
-            problems.append(f"{label}.snippet_anchor must be a string")
-        # Empty string is valid: make_snippet_anchor() legitimately returns ""
-        # for a textless zone (e.g. image-only front matter); the device
-        # falls back to chapter/percent anchors, still spoiler-safe.
-
-        anchor = cp.get("chapter_anchor")
-        if anchor is not None:
-            if not isinstance(anchor, dict):
-                problems.append(f"{label}.chapter_anchor must be an object or null")
-            else:
-                if not isinstance(anchor.get("toc_title"), str):
-                    problems.append(f"{label}.chapter_anchor.toc_title must be a string")
-                spine_index = anchor.get("spine_index")
-                if not (_is_strict_int(spine_index) and spine_index >= 0):
-                    problems.append(
-                        f"{label}.chapter_anchor.spine_index must be a non-negative int"
-                    )
 
         snapshot = cp.get("snapshot")
         if not isinstance(snapshot, dict):

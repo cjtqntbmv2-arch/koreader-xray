@@ -1,187 +1,179 @@
-"""The GUI InterfaceAction: wires a toolbar/menu action to a per-book
-background job that reads the EPUB, generates X-Ray data via Gemini, embeds
-it, validates the result, and (only if valid) replaces the library format.
+"""The GUI InterfaceAction: embeds an already-generated xray.json into the
+selected book's EPUB, so calibre's own wireless send carries it to the reader.
+
+Generation happens on the desktop with the Claude skill (see
+.claude/skills/xray/SKILL.md); calibre is only the delivery path. Appending
+takes milliseconds, so there is no background job, no progress dialog and no
+configuration page -- all of that belonged to the Gemini generator this
+replaced.
+
+Four things are checked before the library copy is replaced, each because it
+would otherwise go wrong silently:
+
+  1. Right book -- the document's text_hash against the EPUB's. The device no
+     longer gates on the title, so a mis-picked file in the dialog would show
+     another book's characters with nothing to warn you.
+  2. Right shape -- schema.validate() on the document.
+  3. Intact result -- zip integrity, byte-exact round-trip of the document,
+     and read_epub() still parses the result.
+  4. Same book to KOReader -- partial_md5 before and after. Appending usually
+     leaves it untouched, but not always (see xray_core.embed.partial_md5), and
+     a changed hash means the device treats the book as new and drops its
+     reading statistics and progress. Measured, not assumed.
 """
+import json
 import os
 import shutil
 import tempfile
 import zipfile
 
-from calibre.constants import cache_dir  # NB: calibre.utils.config has no cache_dir
-from calibre.gui2 import Dispatcher, error_dialog, info_dialog, warning_dialog
+from calibre.gui2 import choose_files, error_dialog, info_dialog, question_dialog
 from calibre.gui2.actions import InterfaceAction
-from calibre.gui2.threaded_jobs import ThreadedJob
 
-from calibre_plugins.xray_generator.config import prefs
-from xray_core.embed import embed_xray, read_embedded
+from xray_core.embed import embed_xray, partial_md5, read_embedded
 from xray_core.epub import DrmError, read_epub
-from xray_core.gemini import GeminiClient
-from xray_core.generate import generate_xray
-from xray_core.prompts import EXTRACT_RESPONSE_SCHEMA
+from xray_core.schema import validate
+
+TAG = "X-Ray"
 
 
-def _generate_and_embed(epub_path, calibre_uuid, workdir, api_key, model, language,
-                         detail_level, use_thinking, max_workers, *, log, abort, notifications):
-    """Runs on a background thread. ThreadedJob.start_work() calls
-    self.func(*self.args, **self.kwargs) where kwargs has been mutated by
-    ThreadedJob.__init__ to inject notifications/abort/log -- so those three
-    must be keyword-only (after the business params) or they collide with
-    the injected kwargs. No cooperative-cancellation check on `abort` --
-    generate_xray has no abort hook (yet); a killed job just keeps running
-    to completion in the background and its result is discarded by
-    _job_done never being wired up for it. ponytail: add an abort-aware hook
-    in xray_core if this matters."""
-    def progress_cb(done, total):
-        notifications.put((done / total if total else 0.0, f"{done}/{total} segments"))
+class XRayGeneratorAction(InterfaceAction):
+    name = "X-Ray Generator"
+    action_spec = (_("Embed X-Ray"), None,
+                   _("Embed generated X-Ray data into the selected book's EPUB"), None)
+    action_type = "current"
 
-    book = read_epub(epub_path)
-    client = GeminiClient(api_key, model=model, use_thinking=use_thinking,
-                          response_schema=EXTRACT_RESPONSE_SCHEMA)
-    doc = generate_xray(
-        book, client, language, detail_level,
-        calibre_uuid=calibre_uuid, progress_cb=progress_cb,
-        workdir=workdir, max_workers=max_workers,
-    )
+    def genesis(self):
+        self.qaction.triggered.connect(self.embed_selected)
 
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".epub")
-    os.close(tmp_fd)
-    embed_xray(epub_path, doc, tmp_path)
-    return tmp_path, doc
+    def embed_selected(self):
+        gui = self.gui
+        db = gui.current_db.new_api
+        book_ids = gui.library_view.get_selected_ids()
+
+        # One book per xray.json -- a multi-selection has no sane mapping from
+        # one chosen file to several books.
+        if len(book_ids) != 1:
+            return error_dialog(
+                gui, _("Select one book"),
+                _("Embedding takes one X-Ray file for one book. Select exactly "
+                  "one book."), show=True)
+        book_id = book_ids[0]
+        title = db.field_for("title", book_id) or str(book_id)
+        if "EPUB" not in (db.field_for("formats", book_id) or ()):
+            return error_dialog(gui, _("No EPUB format"),
+                                _('"{0}" has no EPUB format to embed into.').format(title),
+                                show=True)
+
+        paths = choose_files(
+            gui, "xray_embed_json", _("Select the X-Ray data file"),
+            filters=[(_("X-Ray data"), ["json"])], select_only_single_file=True)
+        if not paths:
+            return
+
+        try:
+            with open(paths[0], "r", encoding="utf-8") as f:
+                doc = json.load(f)
+        except (OSError, ValueError) as e:
+            return error_dialog(gui, _("Unreadable X-Ray file"), str(e), show=True)
+
+        problems = validate(doc)
+        if problems:
+            return error_dialog(
+                gui, _("Invalid X-Ray file"),
+                _("This file is not a valid X-Ray document."),
+                det_msg="\n".join(problems), show=True)
+
+        workdir = tempfile.mkdtemp(prefix="xray_embed_")
+        try:
+            self._embed(gui, db, book_id, title, doc, workdir)
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+    def _embed(self, gui, db, book_id, title, doc, workdir):
+        source = os.path.join(workdir, "source.epub")
+        # copy_format_to rather than format_abspath: handing a raw library path
+        # to later processing breaks calibre's threadsafe promise (a concurrent
+        # library operation could move or replace the file underneath us).
+        db.copy_format_to(book_id, "EPUB", source)
+
+        try:
+            book = read_epub(source)
+        except DrmError:
+            return error_dialog(gui, _("DRM-protected"),
+                                _('"{0}" is DRM-protected; its text cannot be read.')
+                                .format(title), show=True)
+
+        expected = (doc.get("book_fingerprint") or {}).get("text_hash")
+        if expected != book.text_hash:
+            return error_dialog(
+                gui, _("Wrong book"),
+                _('This X-Ray file was generated for a different text than "{0}". '
+                  "Pick the file that belongs to this book.").format(title),
+                det_msg="file: {0}\nbook: {1}".format(expected, book.text_hash),
+                show=True)
+
+        # Append mode leaves every existing byte alone. It refuses a source that
+        # already carries an X-Ray, so a re-embed has to go through full mode --
+        # which rewrites the head and can cost the reading statistics. That is
+        # the reader's call, not ours.
+        append = read_embedded(source) is None
+        if not append and not question_dialog(
+                gui, _("Replace existing X-Ray data?"),
+                _('"{0}" already contains X-Ray data. Replacing it rewrites the '
+                  "file rather than appending to it, which KOReader may see as a "
+                  "different book and start its reading statistics over. "
+                  "Continue?").format(title)):
+            return
+
+        out = os.path.join(workdir, "out.epub")
+        embed_xray(source, doc, out, append=append)
+
+        if not _result_is_sound(out, doc):
+            return error_dialog(
+                gui, _("Embedding failed"),
+                _('The result for "{0}" failed its integrity check; the library '
+                  "copy was left untouched.").format(title), show=True)
+
+        if partial_md5(out) != partial_md5(source) and append and not question_dialog(
+                gui, _("Reading statistics would reset"),
+                _("Adding the X-Ray data pushes this file across one of the size "
+                  "marks KOReader uses to recognise a book, so the reader would "
+                  "treat it as new and start its statistics and reading position "
+                  "over. Embed anyway?")):
+            return
+
+        db.add_format(book_id, "EPUB", out, replace=True)
+        _add_tag(db, book_id)
+        gui.library_view.model().refresh_ids([book_id])
+
+        info_dialog(
+            gui, _("X-Ray embedded"),
+            _('X-Ray data was embedded into "{0}". Send the book to your reader '
+              "as usual.").format(title),
+            show=True)
 
 
-def _validate_embedded_epub(tmp_path, doc):
-    """Before a generated EPUB is ever allowed to replace the library copy:
-    the zip must be structurally sound, the embedded doc must round-trip
-    byte-for-byte equal, and read_epub must still be able to parse it. A
-    bug in embed_xray must never turn into permanent data loss."""
+def _result_is_sound(path, doc):
+    """A bug in embedding must never turn into permanent data loss: the zip has
+    to be structurally sound, the document has to round-trip byte-for-byte, and
+    the EPUB has to still parse."""
     try:
-        with zipfile.ZipFile(tmp_path) as zf:
+        with zipfile.ZipFile(path) as zf:
             if zf.testzip() is not None:
                 return False
-        if read_embedded(tmp_path) != doc:
+        if read_embedded(path) != doc:
             return False
-        read_epub(tmp_path)
+        read_epub(path)
     except Exception:
         return False
     return True
 
 
-class XRayGeneratorAction(InterfaceAction):
-    name = "X-Ray Generator"
-    action_spec = ("X-Ray Generator", None,
-                   _("Generate spoiler-staged X-Ray data for the selected book(s)"), None)
-    action_type = "current"
-
-    def genesis(self):
-        self._running_jobs = {}  # ThreadedJob -> (book_id, title, workdir)
-        self._active_book_ids = set()
-        # _job_done drives Qt dialogs and the library view model, but
-        # ThreadedJob invokes its callback on the worker thread -- Dispatcher
-        # marshals the call back onto the GUI thread.
-        self._job_done_cb = Dispatcher(self._job_done)
-        self.qaction.triggered.connect(self.generate_selected)
-
-    def generate_selected(self):
-        gui = self.gui
-        db = gui.current_db.new_api
-        book_ids = gui.library_view.get_selected_ids()
-        if not book_ids:
-            return error_dialog(gui, _("No books selected"),
-                                 _("Select one or more books first."), show=True)
-
-        if not prefs["api_key"]:
-            return error_dialog(gui, _("No API key configured"),
-                                 _("Set a Gemini API key in the plugin's configuration first."),
-                                 show=True)
-
-        skipped = []
-        to_run = []
-        for book_id in book_ids:
-            title = db.field_for("title", book_id) or str(book_id)
-            if book_id in self._active_book_ids:
-                skipped.append(_("{0} (already running)").format(title))
-                continue
-            if "EPUB" not in (db.field_for("formats", book_id) or ()):
-                skipped.append(title)
-                continue
-            uuid = db.field_for("uuid", book_id) or f"book-{book_id}"
-            # format_abspath()'s own docstring warns that handing its raw
-            # library path to another thread "breaks the threadsafe
-            # promise" (a concurrent library op could move/replace the file
-            # before the worker gets to read it). copy_format_to gives us a
-            # private, stable copy instead, made here on the GUI thread.
-            workdir = os.path.join(cache_dir(), "xray_generator", uuid)
-            os.makedirs(workdir, exist_ok=True)
-            epub_path = os.path.join(workdir, "source.epub")
-            db.copy_format_to(book_id, "EPUB", epub_path)
-            to_run.append((book_id, title, epub_path, uuid, workdir))
-
-        if skipped:
-            info_dialog(
-                gui, _("Books skipped"),
-                _("{0} of {1} selected book(s) were skipped (no EPUB format, or already "
-                  "running):").format(len(skipped), len(book_ids)),
-                det_msg="\n".join(skipped), show=True)
-
-        for book_id, title, epub_path, uuid, workdir in to_run:
-            self._start_job(book_id, title, epub_path, uuid, workdir)
-
-    def _start_job(self, book_id, title, epub_path, calibre_uuid, workdir):
-        job = ThreadedJob(
-            "xray_generator",
-            _("Generate X-Ray: {0}").format(title),
-            _generate_and_embed,
-            (epub_path, calibre_uuid, workdir, prefs["api_key"], prefs["model"],
-             prefs["language"], prefs["detail_level"], prefs["use_thinking"],
-             prefs["max_workers"]),
-            {},
-            self._job_done_cb,
-            killable=False,  # ponytail: no abort hook to honor a kill request yet
-        )
-        self._running_jobs[job] = (book_id, title, workdir)
-        self._active_book_ids.add(book_id)
-        self.gui.job_manager.run_threaded_job(job)
-
-    def _job_done(self, job):
-        book_id, title, workdir = self._running_jobs.pop(job)
-        self._active_book_ids.discard(book_id)
-        gui = self.gui
-
-        if job.failed:
-            if isinstance(job.exception, DrmError):
-                msg = _('"{0}" is DRM-protected; its text cannot be read.').format(title)
-            else:
-                msg = _('Generating X-Ray for "{0}" failed.').format(title)
-            return error_dialog(gui, _("X-Ray generation failed"), msg,
-                                 det_msg=job.details, show=True)
-
-        tmp_path, doc = job.result
-        if not _validate_embedded_epub(tmp_path, doc):
-            _silently_remove(tmp_path)
-            return error_dialog(
-                gui, _("X-Ray generation failed"),
-                _('The generated file for "{0}" failed validation; the library copy was '
-                  "left untouched.").format(title),
-                show=True)
-
-        db = gui.current_db.new_api
-        db.add_format(book_id, "EPUB", tmp_path, replace=True)
-        _silently_remove(tmp_path)
-        gui.library_view.model().refresh_ids([book_id])
-
-        if doc.get("complete"):
-            shutil.rmtree(workdir, ignore_errors=True)
-        else:
-            warning_dialog(
-                gui, _("X-Ray partially generated"),
-                _('X-Ray data for "{0}" was prepared up to {1}% complete. Run "Generate '
-                  'X-Ray" again later to continue from where it left off.')
-                .format(title, doc.get("last_percent", 0)),
-                show=True)
-
-
-def _silently_remove(path):
-    try:
-        os.remove(path)
-    except OSError:
-        pass
+def _add_tag(db, book_id):
+    """Add the X-Ray tag, keeping the book's existing tags. set_field is a
+    setter, not a merger -- passing just the new tag would silently wipe every
+    other tag on the book."""
+    tags = tuple(db.field_for("tags", book_id) or ())
+    if TAG not in tags:
+        db.set_field("tags", {book_id: tags + (TAG,)})

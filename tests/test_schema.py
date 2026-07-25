@@ -5,17 +5,12 @@ def test_minimal_valid_doc(minimal_doc):
     assert validate(minimal_doc) == []
 
 
-def test_missing_snippet_anchor(minimal_doc):
-    del minimal_doc["checkpoints"][0]["snippet_anchor"]
-    assert any("snippet_anchor" in p for p in validate(minimal_doc))
-
-
-def test_empty_snippet_anchor_is_valid(minimal_doc):
-    """make_snippet_anchor() legitimately returns "" for a textless zone
-    (e.g. image-only front matter); the KEY must still be required (see
-    test_missing_snippet_anchor above), but an empty string is not an error
-    -- the device falls back to chapter/percent anchors."""
-    minimal_doc["checkpoints"][0]["snippet_anchor"] = ""
+def test_anchor_fields_are_ignored_not_rejected(minimal_doc):
+    """schema v2 dropped snippet_anchor/chapter_anchor. A leftover field from
+    a v1-era document is simply not looked at -- validate() rejects on the
+    declared schema_version, which is the check that actually matters."""
+    minimal_doc["checkpoints"][0]["snippet_anchor"] = "irgendein Resttext"
+    minimal_doc["checkpoints"][0]["chapter_anchor"] = {"toc_title": "K1", "spine_index": 0}
     assert validate(minimal_doc) == []
 
 
@@ -58,49 +53,6 @@ def test_timeline_pct_zero_is_rejected(minimal_doc):
 def test_authors_must_be_strings(minimal_doc):
     minimal_doc["book_fingerprint"]["authors"] = ["ok", 42]
     assert any("authors[1]" in p for p in validate(minimal_doc))
-
-
-def test_chapter_anchor_type_is_checked(minimal_doc):
-    minimal_doc["checkpoints"][0]["chapter_anchor"] = "Kapitel 12"
-    assert any("chapter_anchor" in p for p in validate(minimal_doc))
-
-    minimal_doc["checkpoints"][0]["chapter_anchor"] = None
-    assert validate(minimal_doc) == []  # null ist erlaubt
-
-
-def test_chapter_anchor_missing_toc_title_is_rejected(minimal_doc):
-    minimal_doc["checkpoints"][0]["chapter_anchor"] = {"spine_index": 5}
-    assert any("toc_title" in p for p in validate(minimal_doc))
-
-
-def test_chapter_anchor_toc_title_wrong_type_is_rejected(minimal_doc):
-    minimal_doc["checkpoints"][0]["chapter_anchor"] = {"toc_title": 42, "spine_index": 5}
-    assert any("toc_title" in p for p in validate(minimal_doc))
-
-
-def test_chapter_anchor_negative_spine_index_is_rejected(minimal_doc):
-    minimal_doc["checkpoints"][0]["chapter_anchor"] = {"toc_title": "K1", "spine_index": -1}
-    assert any("spine_index" in p for p in validate(minimal_doc))
-
-
-def test_chapter_anchor_bool_spine_index_is_rejected(minimal_doc):
-    """bool is a subclass of int in Python; spine_index=True must not slip
-    through as 1 -- _is_strict_int() exists to catch exactly this."""
-    minimal_doc["checkpoints"][0]["chapter_anchor"] = {"toc_title": "K1", "spine_index": True}
-    assert any("spine_index" in p for p in validate(minimal_doc))
-
-
-def test_chapter_anchor_missing_spine_index_is_rejected(minimal_doc):
-    minimal_doc["checkpoints"][0]["chapter_anchor"] = {"toc_title": "K1"}
-    assert any("spine_index" in p for p in validate(minimal_doc))
-
-
-def test_chapter_anchor_spine_index_zero_is_accepted(minimal_doc):
-    """spine_index is an index, not a percent -- 0 is a valid first spine
-    item and must validate cleanly (unlike timeline pct=0, see
-    test_timeline_pct_zero_is_rejected)."""
-    minimal_doc["checkpoints"][0]["chapter_anchor"] = {"toc_title": "K1", "spine_index": 0}
-    assert validate(minimal_doc) == []
 
 
 def test_negative_first_pct_and_seq_are_rejected(minimal_doc):

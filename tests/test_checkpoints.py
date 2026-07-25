@@ -3,11 +3,10 @@ from xray_core.checkpoints import (
     MAX_INTERVAL_PCT,
     Checkpoint,
     is_non_narrative,
-    make_snippet_anchor,
     plan_checkpoints,
     thin_to,
 )
-from xray_core.epub import BookText, TocEntry, normalize_text
+from xray_core.epub import BookText, TocEntry
 
 
 def _book(full_text, toc=()):
@@ -31,7 +30,7 @@ def test_thin_to_matches_lua():
     assert result[-1] == 20
 
 
-def test_chapter_end_anchors():
+def test_checkpoints_land_on_chapter_ends():
     titles = ["Chapter One", "Chapter Two", "Chapter Three", "Chapter Four", "Chapter Five"]
     chapter_texts = [
         f"{t} tells its own part of the story in reasonable detail here. " * 2 for t in titles
@@ -51,7 +50,6 @@ def test_chapter_end_anchors():
     expected_ends = offsets[1:] + [total]
     for end, title in zip(expected_ends, titles):
         assert end in by_offset, f"missing checkpoint at end of {title}"
-        assert by_offset[end].chapter_anchor == {"toc_title": title, "spine_index": titles.index(title)}
 
     assert cps[-1].offset == total
     assert cps[-1].percent == 100
@@ -96,12 +94,15 @@ def test_non_narrative_filtered():
     book = _book(full_text, toc)
 
     cps = plan_checkpoints(book)
-    anchored_titles = {cp.chapter_anchor["toc_title"] for cp in cps if cp.chapter_anchor}
+    # Without chapter_anchor (dropped in schema v2) the filter shows in the
+    # offsets: only narrative chapter ends become checkpoint boundaries, so
+    # the end of "Copyright" and the end of "Chapter Two"-into-"About the
+    # Author" must not appear.
+    offsets = {cp.offset for cp in cps}
 
-    assert "Copyright" not in anchored_titles
-    assert "About the Author" not in anchored_titles
-    assert "Chapter One" in anchored_titles
-    assert "Chapter Two" in anchored_titles
+    assert offset_ch2 in offsets, "end of Chapter One must be a boundary"
+    assert offset_ch1 not in offsets, "Copyright must not create a boundary"
+    assert offset_author not in offsets, "About the Author must not create a boundary"
 
 
 def test_no_toc_falls_back_to_10pct():
@@ -112,7 +113,6 @@ def test_no_toc_falls_back_to_10pct():
 
     assert len(cps) == 10
     assert [cp.percent for cp in cps] == list(range(10, 101, 10))
-    assert all(cp.chapter_anchor is None for cp in cps)
     assert cps[-1].offset == len(full_text)
 
 
@@ -220,92 +220,38 @@ def test_no_duplicate_percents_short_interior_chapter():
     assert cps[-1].offset == total_target
 
 
-def test_snippet_anchor_sentence_cut():
-    filler = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 5
-    ending = "The hero finally arrived home after a very long journey through the mountains."
-    text = filler + ending + " SPOILER TEXT THAT MUST NOT APPEAR IN THE SNIPPET."
-    end_offset = len(filler + ending)  # right after ending's final "."
+def test_percent_never_understates_coverage():
+    """percent is the ONLY thing the device compares the reading position
+    against, so it must never claim less coverage than the checkpoint's text
+    actually spans: a checkpoint covering 4.92% that reported 4 would be
+    activated by a reader at 4% and show them entities from unread text.
+    Rounding up is what guarantees it -- this asserts the property, not the
+    arithmetic."""
+    # Chapter ends deliberately land just past a percent boundary, where
+    # flooring loses almost a full point.
+    total = 10000
+    toc = [
+        TocEntry(title="Kapitel 1", spine_index=0, offset=0),
+        TocEntry(title="Kapitel 2", spine_index=1, offset=492),
+        TocEntry(title="Kapitel 3", spine_index=2, offset=1578),
+        TocEntry(title="Kapitel 4", spine_index=3, offset=4903),
+    ]
+    book = _book("x" * total, toc)
 
-    snippet = make_snippet_anchor(text, end_offset)
-
-    assert 80 <= len(snippet) <= 120
-    assert snippet.endswith(".")
-    assert snippet == normalize_text(snippet)
-    assert "SPOILER" not in snippet
-
-
-def test_snippet_anchor_skips_textless():
-    body = "Chapter text ends with a clean sentence right here."
-    gap = "\n\n\n   \n\n"  # whitespace run between chapters
-    text = body + gap + "Next chapter starts."
-    end_offset = len(body) + len(gap) - 2  # lands inside the whitespace run
-
-    snippet = make_snippet_anchor(text, end_offset)
-
-    assert snippet != ""
-    assert snippet.endswith(".")
-    assert "Next chapter" not in snippet
-
-
-def test_snippet_anchor_grows_until_unique():
-    tail = (
-        "the closing line of this passage repeats verbatim across two very "
-        "different scenes in the story without a single character changing here."
-    )
-    context_1 = "NORTHERNVILLAGEMARKER "
-    context_2 = "SOUTHERNCAVERNMARKER "
-    filler = "filler word here and there padding the middle section out nicely. " * 5
-    text = context_1 + tail + " " + filler + context_2 + tail
-    end_1 = len(context_1 + tail)
-    end_2 = len(text)
-
-    snippet_1 = make_snippet_anchor(text, end_1)
-    snippet_2 = make_snippet_anchor(text, end_2)
-
-    normalized_full = normalize_text(text)
-    assert snippet_1 != snippet_2
-    assert normalized_full.count(snippet_1) == 1
-    assert normalized_full.count(snippet_2) == 1
-    # both had to grow past the shared tail (which alone is not unique) to get here
-    assert len(snippet_1) > 120
-    assert len(snippet_2) > 120
-
-
-def test_snippet_anchor_empty_when_no_text():
-    text = " " * 20 + "Real content starts only after all this leading whitespace."
-    end_offset = 10  # still inside the leading whitespace run
-
-    assert make_snippet_anchor(text, end_offset) == ""
-
-
-def test_snippet_anchor_short_text_returned_as_is():
-    text = "Short book, tiny text, nothing much happens here at all."
-    assert len(text) < 80
-
-    snippet = make_snippet_anchor(text, len(text))
-
-    assert snippet != ""
-    assert snippet == normalize_text(text)
-
-
-def test_snippet_anchor_no_sentence_punctuation():
-    text = (
-        "the wind moved slowly across the empty field and nothing else stirred "
-        "that whole long afternoon while the old house waited quietly for someone"
-    )
-    assert not any(c in ".!?…" for c in text)
-
-    snippet = make_snippet_anchor(text, len(text))
-
-    assert snippet != ""
-    assert snippet in normalize_text(text)
+    for cp in plan_checkpoints(book):
+        covered_pct = cp.offset * 100 / total
+        assert cp.percent >= covered_pct, (
+            f"checkpoint at offset {cp.offset} covers {covered_pct:.2f}% "
+            f"but reports {cp.percent}%"
+        )
 
 
 def test_sub_one_percent_boundary_never_yields_percent_zero():
     """Two tiny front chapters put a boundary below 1% of the book. percent=0
-    fails schema.validate(), and generate_xray validates only after the whole
-    API budget is spent -- so the floor has to happen here, not there. The
-    coalescing pass absorbs the duplicate this can create."""
+    fails schema.validate(), and generate_xray validates only after a whole
+    extraction run is spent -- so it has to be impossible here, not caught
+    there. Rounding up gives that for free (any offset >= 1 rounds to >= 1);
+    the coalescing pass absorbs the duplicates it creates."""
     toc = [
         TocEntry(title="Kapitel 1", offset=200, spine_index=0),
         TocEntry(title="Kapitel 2", offset=500, spine_index=1),

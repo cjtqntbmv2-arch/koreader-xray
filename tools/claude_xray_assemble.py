@@ -1,8 +1,7 @@
 """Assembler for the Claude-backed X-Ray extraction skill.
 
 Reads subagent-produced chunk_<cp>_<idx>.raw.json, cleans them into the
-generate_xray resume cache, then runs generate_xray with the network path
-disabled (enrich=False, glean=False, stub client) and writes deliverables.
+chunk cache generate_xray reads, then merges and writes the deliverables.
 Stdlib + xray_core only.
 """
 import argparse
@@ -13,19 +12,6 @@ from xray_core.embed import embed_xray
 from xray_core.epub import read_epub
 from xray_core.generate import _chunk_path, generate_xray
 from xray_core.merge import clean_response
-
-
-class _NoNetworkClient:
-    """A full cache means generate_xray never fetches. If a chunk is missing,
-    this raises a NON-QuotaError so the gap surfaces loudly instead of being
-    swallowed into a partial doc (only QuotaError yields a partial result)."""
-
-    def generate(self, *args, **kwargs):
-        raise RuntimeError(
-            "claude_xray_assemble: generate_xray tried to hit the network -- "
-            "a chunk cache entry is missing. This is a bug; run the planner + "
-            "all subagents first."
-        )
 
 
 def _load_manifest(workdir):
@@ -86,11 +72,7 @@ def assemble(epub_path, workdir, out_dir, embed_append=False, title=None):
         with open(cache_path, "w", encoding="utf-8") as f:
             json.dump(cleaned, f)
 
-    # enrich=False is MANDATORY: Phase C would call client.generate even with a
-    # full cache (it is not gated on to_submit) and crash the stub. glean=False
-    # is irrelevant with a full cache but set for clarity.
-    doc = generate_xray(book, _NoNetworkClient(), book.language, detail,
-                        workdir=workdir, enrich=False, glean=False)
+    doc = generate_xray(book, book.language, detail, workdir)
 
     # The KOReader importer gates on title (book_fingerprint.title vs the OPF
     # title of the book as it lands on-device). calibre rewrites the OPF title

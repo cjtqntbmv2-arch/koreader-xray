@@ -1,15 +1,14 @@
-"""Task 10: end-to-end golden run + D4 invariant sweep.
+"""End-to-end golden run + D4 invariant sweep.
 
 Builds a 6-chapter fixture EPUB with entities pinned to known chapters (one
 deliberately introduced only in the very last chapter, so the D4 "no future
-leak" check is meaningfully exercised rather than vacuous), drives the real
-`generate_xray()` pipeline with a fake needle-keyed Gemini client (same
-FakeClient shape as tests/test_generate.py -- no network, no cassette
-files), and checks the result against a hand-reviewed golden file plus the
-D4/anchor invariants from the task-10 brief.
+leak" check is meaningfully exercised rather than vacuous), writes one canned
+extraction per planned chunk into a workdir, runs the real `generate_xray()`
+merge over them, and checks the result against a hand-reviewed golden file
+plus the D4 invariants.
 
 This is the whole-pipeline integration test: its output doc is also the real
-xray.json shape the future KOReader-side importer will consume.
+xray.json shape the KOReader-side plugin consumes.
 
 Regenerating the golden (deliberately, only when the pipeline changes --
 this test file itself never writes it):
@@ -29,10 +28,10 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import write_chunk_cache
 from epub_fixture import build_epub
 
-from xray_core.epub import normalize_text, read_epub
-from xray_core.gemini import GenResult
+from xray_core.epub import read_epub
 from xray_core.generate import generate_xray
 from xray_core.schema import validate
 
@@ -41,13 +40,6 @@ _CALIBRE_UUID = "e2e00000-1111-2222-3333-444455556666"
 
 _SNAPSHOT_LISTS = ("characters", "locations", "terms", "historical_figures")
 _CHRONOLOGY_LISTS = ("characters", "locations")
-
-
-@pytest.fixture(autouse=True)
-def _no_rate_limit_sleep(monkeypatch):
-    """Same fix as test_generate.py/test_cli.py: don't let the real
-    RateLimiter pace ~6s apart for a test that never touches the network."""
-    monkeypatch.setattr("xray_core.generate.RateLimiter.acquire", lambda self: None)
 
 
 # ---------------------------------------------------------------------------
@@ -103,32 +95,17 @@ _CHAPTERS = [
 
 
 def _ok(data):
-    return GenResult(data=data, truncated=False)
+    """Identity. These canned extractions used to be GenResult objects handed
+    to a fake Gemini client; the chunk cache stores the plain extraction dict.
+    Kept as a no-op so the fixture below reads exactly as it was reviewed."""
+    return data
 
 
-_EMPTY = {"characters": [], "locations": [], "historical_figures": [], "terms": [], "timeline": []}
-
-
-class FakeClient:
-    """Same shape as tests/test_generate.py's FakeClient: returns the first
-    canned response whose needle substring is found in the user prompt,
-    else the empty extraction (used by the densified filler sub-segments of
-    chapter 6 that don't happen to contain its marker)."""
-
-    def __init__(self, responses):
-        self.responses = list(responses)
-        self.calls = []
-
-    def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-        self.calls.append(user_prompt)
-        for needle, result in self.responses:
-            if needle in user_prompt:
-                return result
-        return _ok(dict(_EMPTY))
-
-
-def _fake_client():
-    return FakeClient([
+def _responses():
+    """(needle, extraction) pairs. write_chunk_cache picks the first pair whose
+    needle appears in a chunk's text; chunks matching none -- the densified
+    filler sub-segments of chapter 6 -- get an empty extraction."""
+    return [
         ("GULLMARK", _ok({
             "characters": [{
                 "name": "Alice Merrow", "role": "protagonist",
@@ -228,17 +205,20 @@ def _fake_client():
                 {"chapter": "", "event": "sollte verschwinden"},
             ],
         })),
-    ])
+    ]
 
 
 def generate_fixture_doc(tmp_path):
-    """Build the fixture EPUB, run the real generate_xray() pipeline against
-    it with the fake client above, and return (book, doc). Shared by the
-    tests below and by the golden-regeneration one-liner in this module's
-    docstring -- there must be exactly one path that produces this doc."""
+    """Build the fixture EPUB, fill the chunk cache with the canned
+    extractions above, run the real generate_xray() merge and return
+    (book, doc). Shared by the tests below and by the golden-regeneration
+    one-liner in this module's docstring -- there must be exactly one path
+    that produces this doc."""
     book_path = build_epub(tmp_path, _CHAPTERS, toc=True, epub3=True)
     book = read_epub(book_path)
-    doc = generate_xray(book, _fake_client(), "en", "normal", calibre_uuid=_CALIBRE_UUID)
+    workdir = str(tmp_path / "workdir")
+    write_chunk_cache(book, workdir, "en", "normal", _responses())
+    doc = generate_xray(book, "en", "normal", workdir, calibre_uuid=_CALIBRE_UUID)
     return book, doc
 
 
@@ -259,7 +239,14 @@ def _names(snapshot, list_name):
 def test_golden_equality(fixture_result):
     _, doc = fixture_result
     golden = json.loads(_GOLDEN_PATH.read_text(encoding="utf-8"))
-    assert doc == golden
+    # generator_version tracks VERSION, so comparing it would turn every release
+    # into a golden-file regeneration. The field's presence is asserted, its
+    # value is not.
+    assert doc.keys() == golden.keys()
+    assert isinstance(doc["generator_version"], str)
+    ignored = {"generator_version"}
+    assert {k: v for k, v in doc.items() if k not in ignored} == \
+           {k: v for k, v in golden.items() if k not in ignored}
 
 
 # ---------------------------------------------------------------------------
@@ -373,19 +360,6 @@ def test_doc_validates_clean(fixture_result):
 # ---------------------------------------------------------------------------
 # Anchor uniqueness (device-side findText() depends on this)
 # ---------------------------------------------------------------------------
-
-
-def test_snippet_anchors_unique_in_full_text(fixture_result):
-    book, doc = fixture_result
-    normalized = normalize_text(book.full_text)
-    for cp in doc["checkpoints"]:
-        anchor = cp["snippet_anchor"]
-        assert anchor, f"empty snippet_anchor at checkpoint {cp['percent']}%"
-        count = normalized.count(anchor)
-        assert count == 1, (
-            f"snippet_anchor at checkpoint {cp['percent']}% occurs {count} times "
-            f"in full_text (must be exactly 1): {anchor!r}"
-        )
 
 
 # ---------------------------------------------------------------------------

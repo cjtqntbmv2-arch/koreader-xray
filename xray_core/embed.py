@@ -6,6 +6,7 @@ Stdlib-only on purpose (see xray_core/epub.py): zipfile, xml.etree.ElementTree,
 json, os.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -165,3 +166,28 @@ def read_embedded(epub_path) -> dict | None:
         if DATA_PATH not in zf.namelist():
             return None
         return json.loads(zf.read(DATA_PATH).decode("utf-8"))
+
+
+def partial_md5(path) -> str:
+    """KOReader's book identity: `util.partialMD5` -- 12 x 1024-byte samples at
+    the head-weighted offsets 1024*4^i, i=-1..10 (256 B .. 1 MB). Statistics and
+    reading progress are keyed on (title, authors, this hash), so a file whose
+    partial_md5 changes is a NEW book to the device and starts from zero.
+
+    Note what "head-weighted" does NOT mean: appending is not automatically
+    safe. A sample only exists once the file is long enough to reach its
+    offset, so growing a file ACROSS a sample boundary (1 KiB, 4 KiB, ...,
+    256 KiB, 1 MiB, 4 MiB) adds a sample that previously sat past EOF and
+    changes the hash -- a 0.7 MB novel plus a 1 MB xray does exactly that.
+    Callers that promise to preserve statistics must compare this value before
+    and after rather than reason about which mode they used.
+    """
+    m = hashlib.md5()
+    with open(path, "rb") as f:
+        for i in range(-1, 11):
+            f.seek(int(1024 * 4.0 ** i))
+            sample = f.read(1024)
+            if not sample:
+                break
+            m.update(sample)
+    return m.hexdigest()

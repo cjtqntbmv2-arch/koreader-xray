@@ -1,10 +1,15 @@
 """Checkpoint planning: spoiler-stage boundaries for a book.
 
-Port of KOReader Lua's `computeCheckpoints` (`xray_prefetch.lua:35-102`),
+Port of KOReader Lua's `computeCheckpoints` (`xray_prefetch.lua:computeCheckpoints`),
 using char offsets into `BookText.full_text` instead of page numbers. Each
 `Checkpoint.offset` is the EXCLUSIVE end of the span it covers, so
 `full_text[prev_offset:offset]` is exactly the text available up to that
 checkpoint -- no off-by-one.
+
+A checkpoint carries only offset and percent. The three-stage anchor chain
+(text snippet -> TOC entry -> percent) was dropped in schema v2: the device
+now compares the reading position on the text axis directly against percent,
+which needs no per-checkpoint marker.
 
 Stdlib-only on purpose (see `xray_core/epub.py`).
 """
@@ -12,7 +17,7 @@ Stdlib-only on purpose (see `xray_core/epub.py`).
 import re
 from dataclasses import dataclass
 
-from xray_core.epub import BookText, normalize_text
+from xray_core.epub import BookText
 
 MAX_CHECKPOINTS, HARD_CAP, MAX_INTERVAL_PCT = 10, 12, 15
 
@@ -64,8 +69,6 @@ def thin_to(items, target):
 class Checkpoint:
     offset: int
     percent: int
-    snippet_anchor: str
-    chapter_anchor: dict | None
 
 
 def plan_checkpoints(book: BookText) -> list[Checkpoint]:
@@ -74,13 +77,12 @@ def plan_checkpoints(book: BookText) -> list[Checkpoint]:
         (e for e in book.toc if 0 <= e.offset < total and not is_non_narrative(e.title)),
         key=lambda e: e.offset,
     )
-    ends, anchors = [], {}  # anchors: end offset -> TocEntry (for chapter_anchor)
+    ends = []
     for i, e in enumerate(narrative):
         nxt = narrative[i + 1].offset if i + 1 < len(narrative) else None
         end = nxt if nxt is not None else total
         if 0 < end <= total and (not ends or ends[-1] != end):
             ends.append(end)
-            anchors[end] = e
     if not ends or ends[-1] != total:
         ends.append(total)
     if len(ends) < 2:
@@ -90,7 +92,6 @@ def plan_checkpoints(book: BookText) -> list[Checkpoint]:
             if not ends or ends[-1] != p:
                 ends.append(p)
         ends[-1] = total
-        anchors = {}
     else:
         ends = thin_to(ends, MAX_CHECKPOINTS)
         max_gap = max(1, total * MAX_INTERVAL_PCT // 100)
@@ -109,21 +110,22 @@ def plan_checkpoints(book: BookText) -> list[Checkpoint]:
 
     cps = []
     for i, p in enumerate(ends):
-        # Floor to 1, not 0: a chapter boundary below 1% of the book (two tiny
-        # front chapters is enough) would otherwise yield percent=0, which
-        # schema.validate() rejects -- and generate_xray only validates after
-        # the whole API budget is spent. The device treats pct=0 as page 1
-        # anyway (`pctToPage` in the KOReader importer clamps `p < 1` up),
-        # so 1 is what it would show regardless. Any duplicate this creates
-        # is absorbed by the coalescing pass below.
-        pct = 100 if i == len(ends) - 1 else max(1, p * 100 // total)
-        a = anchors.get(p)
-        cps.append(Checkpoint(
-            offset=p,
-            percent=pct,
-            snippet_anchor=make_snippet_anchor(book.full_text, p),
-            chapter_anchor={"toc_title": a.title, "spine_index": a.spine_index} if a else None,
-        ))
+        # Round UP, not down. percent is the only thing the device compares the
+        # reading position against (the snippet/TOC anchors are gone), and it
+        # must never CLAIM LESS coverage than the snapshot actually has: a
+        # checkpoint whose text runs to 4.92% but reports 4 would be activated
+        # by a reader at 4%, showing entities from text they have not read.
+        # Measured on a real book, flooring gave away almost a full point --
+        # most of the device-side safety margin -- before device pagination
+        # error even entered the picture.
+        #
+        # Ceiling also makes the old floor-to-1 clamp unnecessary: for any
+        # p >= 1 the ceiling is already >= 1, so percent=0 (rejected by
+        # schema.validate(), and only noticed after a full generation run)
+        # can no longer be produced. Duplicates are absorbed by the
+        # coalescing pass below.
+        pct = 100 if i == len(ends) - 1 else min(100, -(-p * 100 // total))
+        cps.append(Checkpoint(offset=p, percent=pct))
 
     # Coalesce checkpoints that land on the same integer percent (e.g. two
     # chapter boundaries <1% of the book apart): percent is a non-decreasing
@@ -140,69 +142,3 @@ def plan_checkpoints(book: BookText) -> list[Checkpoint]:
         else:
             coalesced.append(cp)
     return coalesced
-
-
-_SENTENCE_END_CHARS = ".!?…"
-_WINDOW = 400
-_BASE_SNIPPET_LEN = 120
-_GROWTH_CAP = 300  # ponytail: fixed ceiling: if a repeated phrase's unique
-# context is farther back than this, the snippet stays non-unique; raise if
-# real books hit it (device-side anchor would just be best-effort then).
-_GROWTH_STEP = 40
-
-
-def _cut_trailing_partial_sentence(chunk: str) -> str:
-    """Discard a trailing sentence fragment so the chunk ends cleanly.
-
-    If `chunk` already ends with sentence punctuation, it's already clean
-    (the common case: normalize_text stripped any trailing whitespace).
-    Otherwise, cut back to the last "punct + space" found inside it.
-    """
-    if not chunk or chunk[-1] in _SENTENCE_END_CHARS:
-        return chunk
-    best = -1
-    for i in range(len(chunk) - 1):
-        if chunk[i] in _SENTENCE_END_CHARS and chunk[i + 1] == " ":
-            best = i
-    return chunk[: best + 1] if best != -1 else chunk
-
-
-def _tail_word_safe(chunk: str, length: int) -> str:
-    """Last `length` chars of `chunk`, never starting mid-word."""
-    if length >= len(chunk):
-        return chunk
-    tail = chunk[-length:]
-    if chunk[-length - 1] != " " and tail[0] != " ":
-        sp = tail.find(" ")
-        tail = tail[sp + 1:] if sp != -1 else ""
-    return tail.lstrip()
-
-
-def make_snippet_anchor(text: str, end_offset: int) -> str:
-    """A short, unique-in-`text` snippet ending at (at or before) `end_offset`.
-
-    This is the device-side search marker for a checkpoint: its end is the
-    spoiler boundary, so it must occur exactly once in the book -- never cut
-    into the following (not-yet-revealed) text.
-    """
-    window = _WINDOW
-    start = max(0, end_offset - window)
-    chunk = normalize_text(text[start:end_offset])
-    while not chunk and start > 0:
-        window += _WINDOW
-        start = max(0, end_offset - window)
-        chunk = normalize_text(text[start:end_offset])
-    if not chunk:
-        return ""  # textless zone (e.g. image-only front matter): no anchor
-
-    chunk = _cut_trailing_partial_sentence(chunk)
-
-    length = min(_BASE_SNIPPET_LEN, len(chunk))
-    snippet = _tail_word_safe(chunk, length)
-    normalized_full = normalize_text(text)
-    cap = min(_GROWTH_CAP, len(chunk))
-    # an empty candidate here (_tail_word_safe found no space in the window) is still safe: str.count("") > 1 keeps this loop growing instead of a false "unique" match
-    while normalized_full.count(snippet) > 1 and length < cap:
-        length = min(length + _GROWTH_STEP, cap)
-        snippet = _tail_word_safe(chunk, length)
-    return snippet

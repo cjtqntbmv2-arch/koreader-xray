@@ -1,29 +1,26 @@
-"""Tests for the generation orchestrator (Task 7): parallel extraction,
-ordered-merge D4 barrier, sequential enrichment, quota handling, resume.
+"""Tests for the generation orchestrator: the ordered-merge D4 barrier and
+the chunk cache it reads.
+
+Extraction moved out of this module (the Claude skill writes one JSON file per
+chunk), so the tests that covered the parallel fetch, truncation-split,
+gleaning, quota handling and description enrichment went with it. What is left
+is what generate_xray still does -- and what still has to be true.
+
+Note on ordering: the "a late chunk finishing early must not leak into an
+earlier snapshot" hazard is gone by construction, because there is no fetch
+order any more -- the merge is a plain nested loop over (checkpoint, chunk)
+indices. The observable D4 property is asserted directly instead, in
+test_d4_no_future_entities.
 """
 import json
 import os
-import time
 
 import pytest
+from conftest import write_chunk_cache
 
-from xray_core.checkpoints import plan_checkpoints
 from xray_core.epub import BookText, TocEntry
-from xray_core.gemini import GenResult, QuotaError
-from xray_core.generate import _chunk_path, generate_xray
+from xray_core.generate import _chunk_path, chunk_plan, generate_xray
 from xray_core.schema import validate
-
-
-@pytest.fixture(autouse=True)
-def _no_rate_limit_sleep(monkeypatch):
-    """RateLimiter.acquire() would otherwise pace real requests ~6s apart
-    (per_minute=10) -- tests use a fake client and don't want to actually
-    wait for it. Patches the RateLimiter.acquire *method* specifically
-    (not time.sleep globally) -- `time` is a process-wide singleton module,
-    so patching xray_core.generate.time.sleep would also silently neuter a
-    fake client's own deliberately-real time.sleep calls used below to force
-    specific fetch-completion orderings."""
-    monkeypatch.setattr("xray_core.generate.RateLimiter.acquire", lambda self: None)
 
 
 def _book(full_text, toc=()):
@@ -51,55 +48,32 @@ def _two_chapter_book(ch1_text, ch2_text):
     return _book(ch1_text + ch2_text, toc)
 
 
-def _ok(data):
-    return GenResult(data=data, truncated=False)
-
-
-class FakeClient:
-    """Returns the first canned response whose needle substring is found in
-    the user_prompt -- build_prompt embeds segment_text verbatim into the
-    prompt (xray_core/prompts.py), so canned responses are naturally "keyed
-    by chunk text" via a distinctive marker string placed in that text.
-    raise_quota_for: an optional needle; generate() raises QuotaError once
-    user_prompt contains it, instead of returning any canned response."""
-
-    def __init__(self, responses=(), raise_quota_for=None):
-        self.responses = list(responses)
-        self.raise_quota_for = raise_quota_for
-        self.calls = []
-
-    def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-        self.calls.append(user_prompt)
-        if self.raise_quota_for and self.raise_quota_for in user_prompt:
-            raise QuotaError("quota exceeded")
-        for needle, result in self.responses:
-            if needle in user_prompt:
-                return result
-        return _ok({"characters": [], "locations": [], "historical_figures": [],
-                    "terms": [], "timeline": []})
-
-
 def _filler_book(reps=400):
-    full_text = "Filler prose continues along nicely for quite some time in this book. " * reps
+    # Paragraph-separated on purpose: _chunk_segment only splits at "\n\n",
+    # and deliberately keeps a single oversized paragraph whole.
+    full_text = "Filler prose continues along nicely for quite some time in this book.\n\n" * reps
     return _book(full_text, toc=[])
 
 
+def _run(book, workdir, responses=(), language="en", detail_level="normal"):
+    write_chunk_cache(book, str(workdir), language, detail_level, responses)
+    return generate_xray(book, language, detail_level, str(workdir))
+
+
 # ---------------------------------------------------------------------------
-# End-to-end + D4 ordering
+# End-to-end + D4
 # ---------------------------------------------------------------------------
 
 
-def test_end_to_end_two_checkpoints():
+def test_end_to_end_two_checkpoints(tmp_path):
     ch1 = "Alice walks through the CH1MARKER village at dawn, greeting everyone she meets today. " * 5
     ch2 = "Bob arrives at the CH2MARKER harbor just as the tide turns for the evening light. " * 5
     book = _two_chapter_book(ch1, ch2)
 
-    client = FakeClient([
-        ("CH2MARKER", _ok({"characters": [{"name": "Bob"}]})),
-        ("CH1MARKER", _ok({"characters": [{"name": "Alice"}]})),
+    doc = _run(book, tmp_path, [
+        ("CH2MARKER", {"characters": [{"name": "Bob"}]}),
+        ("CH1MARKER", {"characters": [{"name": "Alice"}]}),
     ])
-
-    doc = generate_xray(book, client, "en", "normal")
 
     assert validate(doc) == []
     assert doc["complete"] is True
@@ -109,17 +83,15 @@ def test_end_to_end_two_checkpoints():
     assert "Bob" not in names_first  # snapshot 2 accumulates snapshot 1's entities
 
 
-def test_d4_no_future_entities():
+def test_d4_no_future_entities(tmp_path):
     ch1 = "Alice explores the CH1MARKER ruins alone, searching for something long lost today. " * 5
     ch2 = "Bob discovers the CH2MARKER treasure hidden beneath the old stone archway nearby. " * 5
     book = _two_chapter_book(ch1, ch2)
 
-    client = FakeClient([
-        ("CH2MARKER", _ok({"characters": [{"name": "Bob"}]})),
-        ("CH1MARKER", _ok({"characters": [{"name": "Alice"}]})),
+    doc = _run(book, tmp_path, [
+        ("CH2MARKER", {"characters": [{"name": "Bob"}]}),
+        ("CH1MARKER", {"characters": [{"name": "Alice"}]}),
     ])
-
-    doc = generate_xray(book, client, "en", "normal")
 
     checkpoints = doc["checkpoints"]
     first_with_bob = next(
@@ -137,562 +109,135 @@ def test_d4_no_future_entities():
     assert bob["first_pct"] == first_with_bob["percent"]
 
 
-def test_d4_holds_under_out_of_order_fetch():
-    """The chapter-2 (later) chunk resolves FIRST (short real sleep) while
-    the chapter-1 (earlier) chunk is still in flight (long real sleep) --
-    max_workers is set >= the maximum possible checkpoint count so every
-    chunk starts essentially simultaneously, making the completion order
-    purely a function of these sleep durations, not submission order. This
-    proves the merge barrier orders by (checkpoint, chunk) index, not
-    fetch-completion order: an early-arriving future for a LATER checkpoint
-    must never enter an EARLIER snapshot."""
-    ch1 = "Alice wanders the CH1MARKER hills for hours, thinking quietly of home again today. " * 5
-    ch2 = "Bob uncovers the CH2MARKER vault at last, breathless with sudden anticipation now. " * 5
+def test_snapshot_is_a_copy_not_a_live_view(tmp_path):
+    """Every checkpoint freezes its own snapshot. If snapshot() handed out the
+    live BookState lists instead of a deep copy, the last merge would be
+    visible in every earlier checkpoint -- the original spoiler-leak bug."""
+    ch1 = "Alice walks the CH1MARKER road with little to say about it today at all. " * 5
+    ch2 = "Bob waits at the CH2MARKER gate for a message that never actually arrives. " * 5
     book = _two_chapter_book(ch1, ch2)
-    ch1_len = len(ch1)
 
-    class SlowFastClient:
-        def __init__(self):
-            self.calls = []
-            self.completion_order = []  # proves genuine out-of-order fetch
-
-        def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-            self.calls.append(user_prompt)
-            if "CH2MARKER" in user_prompt:
-                time.sleep(0.001)
-                self.completion_order.append("ch2")
-                return _ok({"characters": [{"name": "Bob"}]})
-            time.sleep(0.05)
-            self.completion_order.append("ch1")
-            return _ok({"characters": [{"name": "Alice"}]})
-
-    client = SlowFastClient()
-    doc = generate_xray(book, client, "en", "normal", max_workers=12)
-
-    # The whole point of this test: prove completion order really was
-    # reversed relative to checkpoint (submission) order -- otherwise the
-    # D4 assertions below would hold vacuously (the barrier is unconditional
-    # by construction) without ever having exercised the risky path.
-    assert client.completion_order[0] == "ch2"
-    assert "ch1" in client.completion_order
-
-    assert validate(doc) == []
-    assert doc["complete"] is True
-    cps = plan_checkpoints(book)
-    assert len(cps) == len(doc["checkpoints"])
-    for cp_obj, cp_doc in zip(cps, doc["checkpoints"]):
-        if cp_obj.offset <= ch1_len:
-            names = {c["name"] for c in cp_doc["snapshot"]["characters"]}
-            assert "Bob" not in names
-    assert "Bob" in {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
-
-
-# ---------------------------------------------------------------------------
-# Sub-chunking + truncation retry
-# ---------------------------------------------------------------------------
-
-
-def test_oversized_segment_subchunked():
-    para = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt."
-    full_text = "\n\n".join([para] * 20000)  # ~1.84M chars -> ~184k per 10%-grid checkpoint
-    book = _book(full_text, toc=[])
-
-    client = FakeClient([("Lorem", _ok({"characters": [{"name": "Filler"}]}))])
-    doc = generate_xray(book, client, "en", "normal", max_workers=4)
-
-    assert validate(doc) == []
-    # Each 10%-grid segment is ~184k chars >> FULL_TEXT_BUDGET (32k), so every
-    # checkpoint's segment is split into several extraction chunks -- far more
-    # client.generate() calls than checkpoints (gleaning adds even more).
-    assert len(client.calls) > len(doc["checkpoints"])
-
-
-def test_truncated_chunk_split_and_refetched():
-    marked_portion = (
-        "STARTMARKER Alice begins the tale in the quiet village she calls home, "
-        "walking slowly past the old well and the bakery that just opened.\n\n"
-        "She continues onward through the square, thinking of the letter she "
-        "received, and reaches the edge of town as the church bells ring. ENDMARKER"
-    )
-    total = len(marked_portion) * 20
-    filler = "Later uneventful filler text continues on for quite a long while now. " * 300
-    full_text = marked_portion + filler
-    assert len(full_text) >= total
-    book = _book(full_text, toc=[])  # segment 0 (first 10%) == marked_portion + a bit of filler
-
-    class TruncatingClient:
-        def __init__(self):
-            self.calls = []
-
-        def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-            self.calls.append(user_prompt)
-            has_start = "STARTMARKER" in user_prompt
-            has_end = "ENDMARKER" in user_prompt
-            if has_start and has_end:
-                return GenResult(
-                    data={"characters": [{"name": "PartialAlice"}]}, truncated=True
-                )
-            if has_start:
-                return GenResult(
-                    data={"characters": [{"name": "Alice"}, {"name": "FirstHalfOnly"}]},
-                    truncated=False,
-                )
-            if has_end:
-                return GenResult(
-                    data={"characters": [{"name": "Alice"}, {"name": "SecondHalfOnly"}]},
-                    truncated=False,
-                )
-            return GenResult(data={"characters": []}, truncated=False)
-
-    client = TruncatingClient()
-    # glean=False: this test isolates the truncation split-and-retry path; the
-    # additive gleaning pass would issue its own whole-chunk call and re-add the
-    # truncated PartialAlice, which is orthogonal to what's under test here.
-    doc = generate_xray(book, client, "en", "normal", max_workers=2, glean=False)
-
-    assert validate(doc) == []
-    whole_calls = [c for c in client.calls if "STARTMARKER" in c and "ENDMARKER" in c]
-    first_half_calls = [c for c in client.calls if "STARTMARKER" in c and "ENDMARKER" not in c]
-    second_half_calls = [c for c in client.calls if "ENDMARKER" in c and "STARTMARKER" not in c]
-    assert len(whole_calls) == 1  # truncated once, never retried whole again
-    assert len(first_half_calls) == 1
-    assert len(second_half_calls) == 1
-
-    names = {c["name"] for c in doc["checkpoints"][0]["snapshot"]["characters"]}
-    assert names == {"Alice", "FirstHalfOnly", "SecondHalfOnly"}
-    assert "PartialAlice" not in names  # truncated response never accepted as final
-
-
-# ---------------------------------------------------------------------------
-# Gleaning pass (Phase A recall booster)
-# ---------------------------------------------------------------------------
-
-
-def test_gleaning_pass_adds_missed_characters():
-    """Phase A runs a second 'which characters did you miss?' pass per chunk
-    and unions the newly-found characters into the chunk result -- the
-    research's top recall booster. MissedMinor is only ever returned by the
-    gleaning call, so it can reach the snapshot only if gleaning runs."""
-    book = _filler_book()
-
-    class GleanClient:
-        def generate(self, system_instruction, user_prompt, max_output_tokens=65536):
-            if "ALREADY been extracted" in user_prompt:  # the gleaning prompt
-                return _ok({"characters": [{"name": "MissedMinor"}]})
-            return _ok({"characters": [{"name": "MainChar"}]})
-
-    doc = generate_xray(book, GleanClient(), "en", "normal", max_workers=4)
-
-    assert validate(doc) == []
-    names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
-    assert "MainChar" in names
-    assert "MissedMinor" in names
-
-
-def test_gleaning_can_be_disabled():
-    book = _filler_book()
-
-    class GleanClient:
-        def generate(self, system_instruction, user_prompt, max_output_tokens=65536):
-            if "ALREADY been extracted" in user_prompt:
-                return _ok({"characters": [{"name": "MissedMinor"}]})
-            return _ok({"characters": [{"name": "MainChar"}]})
-
-    doc = generate_xray(book, GleanClient(), "en", "normal", glean=False, max_workers=4)
-
-    names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
-    assert "MainChar" in names
-    assert "MissedMinor" not in names
-
-
-def test_gleaning_skipped_on_empty_extract():
-    """A chunk whose extract yields no entities at all (frontmatter/blank) has
-    nothing to glean -- skip the second call to save tokens. Zero content loss:
-    an empty extract carries no relevant content signal to recover."""
-    book = _filler_book()
-
-    class CountingClient:
-        def __init__(self):
-            self.glean_calls = 0
-
-        def generate(self, system_instruction, user_prompt, max_output_tokens=65536):
-            if "ALREADY been extracted" in user_prompt:
-                self.glean_calls += 1
-                return _ok({"characters": []})
-            return _ok({"characters": [], "locations": [], "historical_figures": [],
-                        "terms": [], "timeline": []})
-
-    client = CountingClient()
-    generate_xray(book, client, "en", "normal", max_workers=4)
-    assert client.glean_calls == 0
-
-
-def test_gleaning_does_not_add_timeline():
-    """Gleaning contributes only entities (characters/locations/terms), never
-    timeline -- the extract pass already recorded the chapter timeline once, so
-    a gleaning response's timeline must not double it."""
-    book = _filler_book()
-
-    class GleanTimelineClient:
-        def generate(self, system_instruction, user_prompt, max_output_tokens=65536):
-            return _ok({
-                "characters": [{"name": "Alice", "description": "d"}],
-                "timeline": [{"chapter": "Ch", "event": "Something happens here."}],
-            })
-
-    doc = generate_xray(book, GleanTimelineClient(), "en", "normal", max_workers=4)
-
-    assert validate(doc) == []
-    assert len(doc["timeline"]) == len(doc["checkpoints"])
-
-
-# ---------------------------------------------------------------------------
-# Quota handling + resume
-# ---------------------------------------------------------------------------
-
-
-def test_quota_failure_partial_doc():
-    book = _filler_book()
-    client = FakeClient(raise_quota_for="Reading Progress: 30%")
-
-    doc = generate_xray(book, client, "en", "normal", max_workers=1)
-
-    assert validate(doc) == []
-    assert doc["complete"] is False
-    assert doc["last_percent"] == 20
-    assert len(doc["checkpoints"]) == 2
-
-
-def test_quota_cancels_pending_futures():
-    book = _filler_book()
-
-    class QuotaClient:
-        def __init__(self):
-            self.calls = []
-
-        def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-            # Real (unpatched) sleep: gives the main thread a genuine window
-            # to react to the QuotaError and cancel queued futures before
-            # the single worker thread races ahead through the whole queue
-            # (verified empirically -- an instant fake drains all 10 tasks
-            # before the main thread ever gets scheduled to intervene).
-            time.sleep(0.005)
-            self.calls.append(user_prompt)
-            if "Reading Progress: 20%" in user_prompt:
-                raise QuotaError("quota exceeded")
-            return GenResult(data={"characters": []}, truncated=False)
-
-    client = QuotaClient()
-    doc = generate_xray(book, client, "en", "normal", max_workers=1)
-
-    assert doc["complete"] is False
-    called_percents = [
-        p for p in range(10, 101, 10)
-        if any(f"Reading Progress: {p}%" in c for c in client.calls)
-    ]
-    assert called_percents[:2] == [10, 20]
-    # Comfortably-later checkpoints must never have been dispatched at all.
-    assert 80 not in called_percents
-    assert 90 not in called_percents
-    assert 100 not in called_percents
-
-
-def test_resume_skips_fetched_chunks(tmp_path):
-    book = _filler_book()
-    workdir = str(tmp_path / "work")
-
-    class FailAt20Client:
-        def __init__(self):
-            self.calls = []
-
-        def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-            self.calls.append(user_prompt)
-            if "Reading Progress: 20%" in user_prompt:
-                raise QuotaError("quota exceeded")
-            return GenResult(data={"characters": []}, truncated=False)
-
-    client1 = FailAt20Client()
-    doc1 = generate_xray(book, client1, "en", "normal", workdir=workdir, max_workers=1)
-    assert doc1["complete"] is False
-    assert os.path.exists(os.path.join(workdir, "chunk_0_0_en_normal.json"))
-    assert not os.path.exists(os.path.join(workdir, "chunk_1_0_en_normal.json"))
-
-    client2 = FakeClient()
-    doc2 = generate_xray(book, client2, "en", "normal", workdir=workdir, max_workers=1)
-
-    assert doc2["complete"] is True
-    assert not any("Reading Progress: 10%" in c for c in client2.calls)  # loaded from cache
-    assert any("Reading Progress: 20%" in c for c in client2.calls)  # re-fetched (had failed)
-
-
-def test_resume_with_language_change_refetches_and_drops_stale_language(tmp_path):
-    """A cached chunk is the OUTPUT of clean_response() -- already bound to
-    one specific language. Resuming under a different language must miss
-    the cache entirely rather than mix stale-language prose into a doc
-    whose top-level `language` field now claims something else."""
-    book = _filler_book()
-    workdir = str(tmp_path / "work")
-
-    # glean=False isolates the cache-key behavior under test: with the default
-    # glean pass on, each chunk makes two client calls (extract + glean), which
-    # would double the count below without changing what this test proves.
-    client_de = FakeClient([
-        ("", _ok({"characters": [{"name": "Alice", "description": "Deutsche Beschreibung"}]})),
+    doc = _run(book, tmp_path, [
+        ("CH1MARKER", {"characters": [{"name": "Alice", "description": "early"}]}),
+        ("CH2MARKER", {"characters": [{"name": "Alice", "description": "late"}]}),
     ])
-    doc_de = generate_xray(book, client_de, "de", "normal", workdir=workdir, max_workers=1, glean=False)
-    assert doc_de["complete"] is True
 
-    client_en = FakeClient([
-        ("", _ok({"characters": [{"name": "Alice", "description": "English description"}]})),
-    ])
-    doc_en = generate_xray(book, client_en, "en", "normal", workdir=workdir, max_workers=1, glean=False)
-
-    assert doc_en["complete"] is True
-    # Every chunk missed the "de" cache -- proves a full refetch, not reuse.
-    assert len(client_en.calls) == len(doc_en["checkpoints"])
     descriptions = [
-        c.get("description", "")
-        for cp in doc_en["checkpoints"]
-        for c in cp["snapshot"]["characters"]
+        next(c["description"] for c in cp["snapshot"]["characters"] if c["name"] == "Alice")
+        for cp in doc["checkpoints"]
+        if any(c["name"] == "Alice" for c in cp["snapshot"]["characters"])
     ]
-    assert not any("Deutsche Beschreibung" in d for d in descriptions)
-    assert any("English description" in d for d in descriptions)
+    assert descriptions[0] == "early"
+    assert descriptions[-1] == "late"
 
 
-def test_resume_with_detail_level_change_refetches(tmp_path):
-    """Same cache-busting contract as language, for detail_level: the cached
-    response was fetched under a prompt bound to the OLD detail_level's
-    character caps (xray_core/prompts.py), so it's invalid content once
-    detail_level changes."""
-    book = _filler_book()
-    workdir = str(tmp_path / "work")
+# ---------------------------------------------------------------------------
+# Chunking
+# ---------------------------------------------------------------------------
 
-    client_normal = FakeClient()
-    doc_normal = generate_xray(book, client_normal, "en", "normal", workdir=workdir, max_workers=1)
-    assert doc_normal["complete"] is True
 
-    client_detailed = FakeClient()
-    doc_detailed = generate_xray(
-        book, client_detailed, "en", "detailed", workdir=workdir, enrich=False, max_workers=1
-    )
+def test_oversized_segment_is_subchunked(tmp_path):
+    """A segment past FULL_TEXT_BUDGET becomes several chunks, and every one
+    of them is read back -- if the planner and the reader disagreed on the
+    split, generate_xray would raise on a missing chunk."""
+    # 10 checkpoints over ~420k chars -> ~42k per segment, past the 32k budget
+    book = _filler_book(reps=6000)
+    plan = chunk_plan(book)
 
-    assert doc_detailed["complete"] is True
-    # Every chunk missed the "normal" cache -- proves a full refetch, not reuse.
-    assert len(client_detailed.calls) == len(doc_detailed["checkpoints"])
+    assert any(len(chunk_list) > 1 for _cp, chunk_list in plan), "fixture too small to split"
+
+    doc = _run(book, tmp_path)
+    assert validate(doc) == []
+
+
+# ---------------------------------------------------------------------------
+# The chunk cache
+# ---------------------------------------------------------------------------
+
+
+def test_missing_chunk_raises_and_names_the_file(tmp_path):
+    book = _two_chapter_book("Alice walks on and on through a long first chapter here. " * 5,
+                             "Bob waits patiently through an equally long second chapter. " * 5)
+    write_chunk_cache(book, str(tmp_path), "en", "normal")
+    victim = _chunk_path(str(tmp_path), 0, 0, "en", "normal")
+    os.remove(victim)
+
+    with pytest.raises(ValueError) as excinfo:
+        generate_xray(book, "en", "normal", str(tmp_path))
+
+    assert os.path.basename(victim) in str(excinfo.value)
+
+
+@pytest.mark.parametrize("changed", [
+    {"language": "de"},
+    {"detail_level": "detailed"},
+])
+def test_cache_is_keyed_by_language_and_detail(tmp_path, changed):
+    """A cache file holds already-cleaned, language-bound prose written under
+    one detail level's character caps. Reading it back under different
+    settings would mix languages or mis-sized prose into a document that
+    declares only one -- so it must MISS, loudly, not silently reuse."""
+    book = _two_chapter_book("Alice walks on and on through a long first chapter here. " * 5,
+                             "Bob waits patiently through an equally long second chapter. " * 5)
+    write_chunk_cache(book, str(tmp_path), "en", "normal")
+
+    kwargs = {"language": "en", "detail_level": "normal", **changed}
+    with pytest.raises(ValueError):
+        generate_xray(book, kwargs["language"], kwargs["detail_level"], str(tmp_path))
 
 
 def test_chunk_path_sanitizes_malicious_language(tmp_path):
-    """language is free-form argparse text (no `choices=`, unlike
-    detail_level) and lands directly in a cache filename -- a path-traversal
-    payload must not be able to escape workdir."""
-    workdir = str(tmp_path / "work")
+    path = _chunk_path(str(tmp_path), 0, 0, "../../etc/passwd", "normal")
 
-    path = _chunk_path(workdir, 0, 0, "../../evil", "normal")
-
-    workdir_abs = os.path.abspath(workdir)
-    path_abs = os.path.abspath(path)
-    assert os.path.commonpath([workdir_abs, path_abs]) == workdir_abs
-    assert os.path.dirname(path_abs) == workdir_abs  # stays a direct child, no subdirs
+    assert os.path.dirname(os.path.abspath(path)) == os.path.abspath(str(tmp_path))
     assert ".." not in os.path.basename(path)
+    assert "/" not in os.path.basename(path)
 
 
 def test_chunk_path_caps_a_pathological_language(tmp_path):
-    """A 5000-char --language would push the filename past the OS limit and
-    make _fetch_and_persist's open() raise OSError mid-run. The component is
-    capped, and the resulting path must actually be writable."""
-    workdir = str(tmp_path / "work")
-    os.makedirs(workdir)
+    path = _chunk_path(str(tmp_path), 0, 0, "a" * 500, "normal")
 
-    path = _chunk_path(workdir, 0, 0, "a" * 5000, "normal")
-
-    assert len(os.path.basename(path)) < 255  # every mainstream fs allows 255
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("{}")
-    assert os.path.exists(path)
+    assert len(os.path.basename(path)) < 120  # far below any OS filename limit
 
 
-def test_resume_recleans_a_stale_cache_written_by_an_older_build(tmp_path):
-    """merge_segment trusts its input. A workdir written before a
-    clean_response fix still holds whatever that older build allowed -- here
-    a whitespace-only description, which _merge's newest_wins guard would
-    treat as real content and use to overwrite the real one."""
-    book = _two_chapter_book(
-        "Alice appears in the CH1MARKER village at dawn today, greeting everyone. " * 5,
-        "Alice returns to the CH2MARKER harbor as the evening tide turns again. " * 5,
-    )
-    workdir = str(tmp_path / "work")
-    os.makedirs(workdir)
+def test_stale_cache_is_recleaned_on_load(tmp_path):
+    """A workdir written by an older build carries whatever clean_response
+    guaranteed back then, and the merge trusts its input. Re-cleaning on load
+    is what stops a since-fixed bug from coming back through the cache: here
+    the cached chunk uses the alternative `place`/`desc` keys, which only
+    clean_response knows how to fold into name/description."""
+    book = _two_chapter_book("Alice walks on and on through a long first chapter here. " * 5,
+                             "Bob waits patiently through an equally long second chapter. " * 5)
+    write_chunk_cache(book, str(tmp_path), "en", "normal")
+    with open(_chunk_path(str(tmp_path), 0, 0, "en", "normal"), "w", encoding="utf-8") as f:
+        json.dump({"locations": [{"place": "Harborside", "desc": "the old docks"}]}, f)
 
-    cps = plan_checkpoints(book)
-    poisoned = {
-        "characters": [{"name": "Alice", "description": "   ", "role": "\t"}],
-        "locations": [], "historical_figures": [], "terms": [], "timeline": [],
-        "book_type": "fiction",
-    }
-    for cp_idx in range(len(cps)):
-        with open(_chunk_path(workdir, cp_idx, 0, "en", "normal"), "w", encoding="utf-8") as f:
-            json.dump(poisoned, f)
+    doc = generate_xray(book, "en", "normal", str(tmp_path))
 
-    client = FakeClient([])  # every chunk is cached; no fetch may happen
-    doc = generate_xray(book, client, "en", "normal", workdir=workdir)
-
-    assert client.calls == []
-    alice = doc["checkpoints"][-1]["snapshot"]["characters"][0]
-    assert alice["description"] == ""  # not "   "
-    assert alice["role"] == ""  # not "\t"
+    locations = doc["checkpoints"][-1]["snapshot"]["locations"]
+    assert any(loc["name"] == "Harborside" and loc.get("description") == "the old docks"
+               for loc in locations)
 
 
-# ---------------------------------------------------------------------------
-# Enrichment (Phase C)
-# ---------------------------------------------------------------------------
-
-
-def test_enrich_updates_recurring_descriptions():
-    book = _filler_book()
-
-    class EnrichClient:
-        def __init__(self):
-            self.enrich_calls = []
-
-        def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-            if "MERGE MODE INSTRUCTIONS" in user_prompt:
-                self.enrich_calls.append(user_prompt)
-                return GenResult(
-                    data={"characters": [{"name": "Alice", "description": "Re-synthesized bio."}]},
-                    truncated=False,
-                )
-            return GenResult(
-                data={"characters": [{"name": "Alice", "description": "Original bio."}]},
-                truncated=False,
-            )
-
-    client = EnrichClient()
-    doc = generate_xray(book, client, "en", "detailed", enrich=True, max_workers=4)
-
-    assert validate(doc) == []
-    assert len(client.enrich_calls) > 0
-    last_cp = doc["checkpoints"][-1]
-    alice = next(c for c in last_cp["snapshot"]["characters"] if c["name"] == "Alice")
-    assert alice["description"] == "Re-synthesized bio."
-
-
-def test_enrich_stays_d4_safe():
-    early = "Alice continues her long journey through the countryside every single day. " * 500
-    late = "LATEFACT Alice finally learns the truth about her long-lost brother today. " * 15
-    full_text = early + late
-    book = _book(full_text, toc=[])
-
-    class EnrichSpyClient:
-        def __init__(self):
-            self.enrich_prompts = []
-
-        def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-            if "MERGE MODE INSTRUCTIONS" in user_prompt:
-                self.enrich_prompts.append(user_prompt)
-                return GenResult(
-                    data={"characters": [{"name": "Alice", "description": "Updated bio."}]},
-                    truncated=False,
-                )
-            return GenResult(
-                data={"characters": [{"name": "Alice", "description": "Original bio."}]},
-                truncated=False,
-            )
-
-    client = EnrichSpyClient()
-    doc = generate_xray(book, client, "en", "detailed", enrich=True, max_workers=4)
-
-    assert validate(doc) == []
-    assert len(client.enrich_prompts) > 1
-    non_final_enrich_prompts = client.enrich_prompts[:-1]
-    assert all("LATEFACT" not in p for p in non_final_enrich_prompts)
-
-    earlier_cp = doc["checkpoints"][-2]
-    alice_earlier = next(c for c in earlier_cp["snapshot"]["characters"] if c["name"] == "Alice")
-    assert "LATEFACT" not in alice_earlier["description"]
-
-
-def test_enrich_does_not_duplicate_timeline_events():
-    """The enrich-mode prompt is still the full comprehensive template (plus
-    the MERGE MODE addendum) -- a real model's enrich response can still
-    include a timeline array. Phase A's own extraction already recorded that
-    checkpoint's timeline once; re-merging the enrich response verbatim must
-    not append it a second time."""
-    book = _filler_book()
-
-    class TimelineEnrichClient:
-        def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-            return GenResult(
-                data={
-                    "characters": [{"name": "Alice", "description": "desc"}],
-                    "timeline": [{"chapter": "Ch", "event": "Something happens here."}],
-                },
-                truncated=False,
-            )
-
-    doc = generate_xray(book, TimelineEnrichClient(), "en", "detailed", enrich=True, max_workers=4)
-
-    assert validate(doc) == []
-    assert len(doc["timeline"]) == len(doc["checkpoints"])
-
-
-def test_enrich_does_not_leak_future_entities():
-    """D4 regression test: `_enrich_checkpoint` must patch descriptions onto
-    the already-frozen per-checkpoint snapshot, never re-snapshot the live
-    (fully-accumulated-by-Phase-B) BookState. LateCharacter is introduced
-    ONLY by the very last checkpoint's own Phase A extraction -- unlike the
-    other enrich tests above, which use an always-present character and so
-    can't detect this leak, this one must be absent from every earlier
-    checkpoint regardless of whether that checkpoint went through enrich."""
-    book = _filler_book()
-
-    class LeakProbeClient:
-        def __init__(self):
-            self.calls = []
-
-        def generate(self, system_instruction, user_prompt, max_output_tokens=16384):
-            self.calls.append(user_prompt)
-            if "MERGE MODE INSTRUCTIONS" in user_prompt:
-                return _ok({"characters": [
-                    {"name": "Alice", "description": "Re-synthesized bio."}
-                ]})
-            if "Reading Progress: 100%" in user_prompt:
-                return _ok({"characters": [
-                    {"name": "Alice", "description": "Original bio."},
-                    {"name": "LateCharacter", "description": "Appears only at the very end."},
-                ]})
-            return _ok({"characters": [{"name": "Alice", "description": "Original bio."}]})
-
-    client = LeakProbeClient()
-    doc = generate_xray(book, client, "en", "detailed", enrich=True, max_workers=4)
-
-    assert doc["complete"] is True
-    earlier_checkpoints = doc["checkpoints"][:-1]
-    assert all(
-        "LateCharacter" not in {c["name"] for c in cp["snapshot"]["characters"]}
-        for cp in earlier_checkpoints
-    )
-    last_names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
-    assert "LateCharacter" in last_names  # sanity: fixture actually introduces it
-
-    assert validate(doc) == []
-
-
-def test_generated_snapshots_carry_localized_name_placeholders():
-    ch1 = "Alice walks through the CH1MARKER village at dawn, greeting everyone she meets today. " * 5
-    ch2 = "Bob arrives at the CH2MARKER harbor just as the tide turns for the evening light. " * 5
+def test_snapshots_carry_localized_name_placeholders(tmp_path):
+    """A nameless entity keeps a placeholder name (unlike the empty-field
+    divergence for role/description): BookState._merge must never let two
+    nameless entries collide into one, and the placeholder follows the
+    document's language."""
+    ch1 = "Alice walks the CH1MARKER road with a stranger who never gives a name. " * 5
+    ch2 = "Bob waits at the CH2MARKER gate beside another figure in the rain. " * 5
     book = _two_chapter_book(ch1, ch2)
+    nameless = [("CH1MARKER", {"characters": [{"description": "a figure in the rain"}]})]
 
-    client = FakeClient([
-        ("CH1MARKER", _ok({"characters": [{"description": "eine namenlose Gestalt"}]})),
-        ("CH2MARKER", _ok({"characters": [{"name": "Bob"}]})),
-    ])
+    en = _run(book, tmp_path / "en", nameless, language="en")
+    de = _run(book, tmp_path / "de", nameless, language="de")
 
-    doc = generate_xray(book, client, "de", "normal")
+    def _first_name(doc):
+        for cp in doc["checkpoints"]:
+            for c in cp["snapshot"]["characters"]:
+                return c["name"]
+        return None
 
-    assert validate(doc) == []
-    names = {c["name"] for c in doc["checkpoints"][-1]["snapshot"]["characters"]}
-    assert "Unbenannter Charakter" in names
-    # Regression: the glean pass must clean under the book language too, or a
-    # nameless gleaned entity gets the English default placeholder and survives
-    # as a phantom duplicate card (merge_segment keys by name, so it won't dedup).
-    assert "Unnamed Character" not in names
+    assert _first_name(en)
+    assert _first_name(de)
+    assert _first_name(en) != _first_name(de)
