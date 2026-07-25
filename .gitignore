@@ -1,8 +1,25 @@
-similar/
-xray.koplugin.zip
-scratch/.DS_Store
+# Build-Artefakte
+__pycache__/
+*.pyc
+*.zip
+dist/
+.venv/
+
+# Werkzeuge und lokale Ablagen
 .leann/
-.claude/
 .superpowers/
-.DS_Store
 docs/superpowers/
+scratch/
+similar/
+.DS_Store
+
+# Claude: nur der X-Ray-Skill wird versioniert, der Rest ist lokal.
+# .claude/* statt .claude/ -- sonst steigt git gar nicht erst in das
+# Verzeichnis hinab und die Ausnahme darunter griffe nie.
+.claude/*
+!.claude/skills/
+
+# Nutzer- und Testdaten
+tests/cassettes/local_*
+*_config.json
+book example/

@@ -21,17 +21,36 @@ jobs:
         with:
           fetch-depth: 0 # Fetch all history for all tags and branches
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # Seit dem Monorepo-Umzug lebt die Desktop-Seite hier mit. Die Tests laufen
+      # ohne Netz und ohne calibre (stdlib only), also braucht dieser Schritt kein
+      # requirements-Handling -- und ein rotes Baum-Ergebnis kann kein Release mehr
+      # erzeugen, weil der Job hier abbricht.
+      - name: Run tests
+        run: python -m pytest tests/ -q
+
       - name: Create Plugin Archive
         run: |
           # Package the plugin directory into a zip file
           # Excluding hidden files and git metadata
           zip -r xray.koplugin.zip xray.koplugin -x "*.git*" "*/.*"
 
+      # Zweites Artefakt aus demselben Tag: das calibre-Plugin. Ein Repo, eine
+      # Version, ein Release -- der Dateiname trägt die Version aus VERSION.
+      - name: Create calibre Plugin Archive
+        run: python tools/build_calibre_plugin.py
+
       - name: Create Draft Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: xray.koplugin.zip
+          files: |
+            xray.koplugin.zip
+            dist/xray-generator-*.zip
           draft: true
           prerelease: ${{ contains(github.ref_name, '-beta') }}
           generate_release_notes: true

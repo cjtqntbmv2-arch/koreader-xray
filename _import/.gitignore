@@ -1,8 +1,0 @@
-__pycache__/
-*.pyc
-.venv/
-*.zip
-tests/cassettes/local_*
-*_config.json
-.DS_Store
-.superpowers/
