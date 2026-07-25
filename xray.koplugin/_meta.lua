@@ -4,6 +4,6 @@ local _ = require("gettext")
 return {
     name = "xray",
     fullname = _("X-Ray"),
-    description = _([[Transform your reading experience with AI-powered book analysis, just like Amazon Kindle X-Ray!]]),
+    description = _([[Shows the characters, locations, terms and events of a book up to your current reading position, from data prepared on the desktop.]]),
     version = "26.7.18"
 }

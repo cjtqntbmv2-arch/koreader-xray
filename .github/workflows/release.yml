@@ -33,6 +33,15 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -q
 
+      # The device side has exactly one thing worth testing without a device:
+      # which snapshot a reading position is allowed to see. That is the D4
+      # spoiler guarantee, so it should not be the part CI skips.
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq luajit
+
+      - name: Run device specs
+        run: luajit tools/spec_runner.lua
+
       - name: Create Plugin Archive
         run: |
           # Package the plugin directory into a zip file

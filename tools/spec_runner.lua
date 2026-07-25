@@ -136,29 +136,16 @@ _G.assert = {
 _G.assert.equals = _G.assert.are.equal
 _G.assert.same = _G.assert.are.same
 
--- List of spec files to execute
+-- List of spec files to execute. Hardcoded, not globbed: a spec that is not
+-- listed here silently never runs.
+--
+-- The 2026-07-25 rewrite deleted the on-device generation stack and with it 21
+-- specs (aihelper, fetch, prefetch, chapteranalyzer, data, cachemanager,
+-- import, mentions, lookupmanager, seriesmanager, terms, the old ui/updater/
+-- main, ...). What survives is the one piece of device logic that still
+-- carries a guarantee: which snapshot a reading position is allowed to see.
 local specs = {
-    "spec/xray_utils_spec.lua",
-    "spec/xray_logger_spec.lua",
-    "spec/xray_cachemanager_spec.lua",
-    "spec/xray_chapteranalyzer_spec.lua",
-    "spec/xray_data_spec.lua",
-    "spec/xray_fetch_spec.lua",
-    "spec/xray_lookupmanager_spec.lua",
-    "spec/xray_mentions_spec.lua",
-    "spec/xray_registration_spec.lua",
-    "spec/xray_ui_spec.lua",
-    "spec/json_constraint_spec.lua",
-    "spec/reasoning_logic_spec.lua",
-    "spec/xray_aihelper_spec.lua",
-    "spec/xray_terms_spec.lua",
-    "spec/xray_seriesmanager_spec.lua",
-    "spec/xray_prefetch_spec.lua",
-    "spec/xray_main_spec.lua",
-    "spec/xray_updater_spec.lua",
-    "spec/xray_menu_meta_spec.lua",
-    "spec/xray_import_spec.lua",
-    "spec/xray_prompt_language_spec.lua",
+    "spec/xray_doc_spec.lua",
 }
 
 print("=== Running KOReader X-Ray Unit Tests ===")
