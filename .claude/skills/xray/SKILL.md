@@ -29,27 +29,49 @@ stop you; discovering the cost afterwards does not.
 
 ## 2. Extract
 
-Dispatch one subagent per chunk with the Agent/Task tool, **model `sonnet`**, in
-waves of about 8–12 concurrent agents.
+Dispatch subagents with the Agent/Task tool, **model `sonnet`**, **3 to 5 chunks
+per subagent**, in waves of about 8–12 concurrent agents. Skip any chunk whose
+`raw_file` already exists — that is what makes an interrupted run cheap to
+resume.
 
-Sonnet rather than Opus is a measured decision, not thrift: recall here comes
-from the prompt and the self-glean step, not the model tier, and on a real
-37-chunk book Opus exhausted a MAX-plan quota partway through. Reserve Opus for
-a book that demonstrably comes out badly.
+Two things about this shape are measured, not preference, and both matter more
+than anything you could tune in the prompt:
 
-Skip any chunk whose `raw_file` already exists — that is what makes a
-interrupted run cheap to resume. For each remaining chunk, instruct the
-subagent to:
+**Give each subagent several chunks.** A subagent costs roughly 97k tokens
+before it does any work at all — scaffolding, tool schemas, the agentic loop —
+against about 8k tokens for the chunk it is there to process. One agent per
+chunk means paying that fixed cost 68 times on a full novel. Batching three
+measured 41% cheaper end to end, five about half; the context that accumulates
+inside one agent is a rounding error against the bootstrap it saves. Do not
+batch so far that a failure loses a lot of finished work — 3 to 5 is the range
+where both effects stay comfortable.
 
-- Read `<WORKDIR>/<prompt_file>`. It already contains the extraction
+**Tell it exactly where the files are and to do nothing else.** Pass the
+**absolute** workdir path, never `$TMPDIR` — inside a subagent that resolves to
+a sandbox override and sends it hunting through directories that do not exist.
+An agent that spent 12 tool calls on a two-call job cost four times one that
+spent two, because every call re-sends the whole accumulated context.
+
+Instruct each subagent, for each of its chunks:
+
+- Read `<ABSOLUTE-WORKDIR>/<prompt_file>`. It already contains the extraction
   instruction and that chunk's text; nothing needs to be added to it.
 - Follow it exactly: every character, location, term, historical figure and
   timeline entry present in the chunk, then the self-glean re-scan for minor
-  figures that the first pass missed — using **only** the provided text.
-- Write the resulting JSON object, and nothing else, to `<WORKDIR>/<raw_file>`.
-  Write it **directly** rather than generating a script that writes it;
-  subagents that build `build_*.py` helpers leave them behind in the workdir
-  and cost a round of cleanup for no benefit.
+  figures the first pass missed — using **only** the provided text. Names that
+  appear once still count; those minor figures are most of what separates a
+  good document from a thin one.
+- Write the resulting JSON object, and nothing else, to
+  `<ABSOLUTE-WORKDIR>/<raw_file>`, **directly** with the write tool. Agents that
+  generate a `build_*.py` to write it leave the helper behind and cost a round
+  of cleanup for no benefit.
+- Treat the chunks as independent: nothing from one may appear in another's
+  output.
+
+Sonnet rather than Opus is also measured: recall comes from the prompt and the
+self-glean step, not the model tier, and on a real 37-chunk book Opus exhausted
+a MAX-plan quota partway through. Reserve Opus for a book that demonstrably
+comes out badly.
 
 Report progress as n/total while the waves run.
 
