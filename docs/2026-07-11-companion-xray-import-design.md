@@ -1,7 +1,7 @@
 # Spec B — Companion-file X-Ray import (koreader-xray-plugin)
 
 Status: draft for review · Date: 2026-07-11 · Repo: `koreader-xray-plugin-main`
-Sibling spec: `../calibre-xray/docs/superpowers/specs/2026-07-11-claude-xray-extraction-and-companion-output-design.md` (desktop side).
+Sibling spec: `docs/superpowers/superpowers/specs/2026-07-11-claude-xray-extraction-and-companion-output-design.md` (desktop side; kam mit dem Monorepo-Merge herüber, das alte Repo liegt archiviert als `../calibre-xray-ARCHIV-2026-07-25`).
 
 ## 1. Problem & goal
 

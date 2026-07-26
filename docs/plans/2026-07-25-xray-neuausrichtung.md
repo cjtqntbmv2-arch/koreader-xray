@@ -199,9 +199,19 @@ bleibt, sind belegte Muster (unten jeweils mit Fundstelle im Altcode).
 ### Lesepunkt → Checkpoint (die eine Stelle, an der der Spoilerschutz hängt)
 
 Verglichen wird **nicht** der Seiten-Prozentwert, sondern die Position auf der
-Textachse: `ui.rolling:getCurrentPos()` geteilt durch die Dokumenthöhe
-(`getFullHeight()` beim Bau verifizieren; der Aufrufstil steht in
-`xray_chapteranalyzer.lua:77-80`).
+Textachse. **Auf dem Gerät gemessen (2026-07-25, Kobo, 762-Seiten-Roman):**
+`getFullHeight()` existiert nicht — weder auf `ui.rolling` noch auf
+`ui.document`. Vorhanden und tragfähig ist stattdessen:
+
+```lua
+pos   = ui.document:getPosFromXPointer(ui.document:getXPointer())
+total = ui.document:getPosFromXPointer(ui.document:getPageXPointer(page_count))
+```
+
+`ui.document.info.doc_height` (1040489) gibt es ebenfalls und liegt 0,07 % über
+`total` (1039761) — die Seitenvariante ist konsistenter und wird benutzt.
+`ui.rolling.current_pos` war 0 und ist unbrauchbar; `ui.document:getCurrentPos()`
+liefert denselben Wert wie der XPointer-Weg.
 
 Begründung, gemessen: `full_text` entsteht ausschließlich aus Spine-Text
 (`epub.py:51,252-261`), ein Bild-Spine-Item liefert null Zeichen, belegt auf dem
@@ -288,17 +298,20 @@ Listet gefundene Altlasten (`<buch>.sdr/xray_cache.lua`, `xray_snapshot_*.lua`,
 Serien-Cache im Settings-Verzeichnis, `xray_config.lua`), fragt **einmal** nach,
 löscht dann.
 
-### Lokalisierung
+### Lokalisierung — `xray_i18n.lua` (~40 Zeilen)
 
-Strings englisch im Code über KOReaders `_()`, `de.po` gepflegt. **Vor** dem
-Löschen von `localization_xray.lua` an fünf bis zehn Strings verifizieren, dass
-KOReaders native Gettext-Kette plugin-eigene Kataloge überhaupt lädt: die
-vorhandenen `.po`-Dateien laufen heute durch einen **eigenen** Parser
-(`localization_xray.lua:1`), `_()` wird bisher nur in `_meta.lua` für zwei
-Strings benutzt. Die Kette ist also unbelegt, nicht widerlegt. Nebeneffekt, der
-bewusst mitstirbt: `xray_ui.lua:9-23` patcht `gettext.isRTL`, um eine vom System
-unabhängige Inhaltssprache RTL-korrekt zu setzen — mit dem Wegfall der
-Sprachwahl entfällt das.
+Auf dem Gerät gemessen und **widerlegt**: KOReaders natives `_()` findet keinen
+`.po`-Katalog im Plugin-Verzeichnis, und `gettext:changeLang(<code>)` scheitert
+dort für jeden Sprachcode (siehe R6). Es gibt keinen Nachladeweg, also auch
+keinen nativen Weg zu plugin-eigenen Strings.
+
+Entscheidung (2026-07-25): ein eigener, winziger `.po`-Leser. Beim Start die
+Datei zur eingestellten Sprache (`G_reader_settings:readSetting("language")`,
+Rückfall `gettext.current_lang`) aus `languages/<code>.po` lesen, `msgid` →
+`msgstr` in eine Tabelle, Rückfall auf den englischen Originalstring. Strings
+stehen englisch im Code, `de.po` wird gepflegt. Das ersetzt
+`localization_xray.lua` (580 Zeilen) durch rund 40 — kein Plural-Handling,
+keine Kontexte, kein RTL-Patch (der entfällt mit der Sprachwahl ohnehin).
 
 **Gelöscht:** `xray_aihelper`, `xray_fetch`, `xray_prefetch`,
 `xray_chapteranalyzer`, `xray_seriesmanager`, `xray_mentions`,
@@ -335,18 +348,36 @@ Konfigurationsabfrage. Und calibres Rewrite verändert die Kopfbytes ab Offset 6
 einmal per USB direkt aus dem Bibliotheksordner kopiert und später per WLAN
 nachschickt, verliert die Statistik unabhängig von X-Ray.
 
-**R2 — Positionsmessung.** Der Wechsel auf die Textachse ist gegen das
-Seiten/Zeichen-Problem gerichtet, aber selbst unverifiziert: `getFullHeight()`
-als Nenner und das Verhalten vor dem ersten Rendern müssen beim Bau geprüft
-werden. Die Marge bleibt der Kalibrierknopf; die dokumentierte Rückfallebene ist
-der TOC-Anker.
+**R2 — Positionsmessung: teilweise entwarnt.** Gemessen über 21 Stichproben
+eines 762-Seiten-Romans weicht der Seiten-Prozentwert von der Textachse um
+höchstens **+0,39 / −0,67 Prozentpunkte** ab — die 2-Punkte-Marge deckt das
+mühelos. Die Messung lief ohne jede Positionsänderung (rein rechnerisch über
+`getPosFromXPointer`), ist also beliebig wiederholbar.
 
-**R3 — Speicher.** Ein dicker Roman ergibt grob 1 MB JSON (kumulative
-Snapshots), als Lua-Tabellen ein Mehrfaches. Der Altcode nennt RAM-Schonung
-ausdrücklich als Designtreiber („nie mehr als einen Snapshot gleichzeitig
-laden") — das Risiko ist real, nicht konstruiert. Früh auf einem alten Kobo
-messen; Rückfallweg ist die Aufspaltung in eine JSON-Datei pro Checkpoint beim
-ersten Öffnen, nicht das alte Lua-Cache-Format.
+**Weiterhin ungemessen ist die Hälfte, auf die es ankommt:** verglichen wurden
+zwei *Geräte*-Maße (Seiten vs. gerenderte Pixel). Der Checkpoint-Prozentwert
+kommt aber vom Desktop und ist ein *Zeichen*-Anteil an `full_text`. Bilder
+belegen Pixel ohne Zeichen, verschieben die Pixelachse also gegenüber der
+Zeichenachse — beim Testbuch offenbar kaum, bei einem bebilderten Sachbuch
+womöglich deutlich. Das entscheidet sich im E2E-Lauf (Phase 5); wenn es dort
+driftet, ist der billige Kalibriertest: auf dem Gerät `getPageText(seite)` für
+ein paar Seiten holen, denselben Text am Desktop in `full_text` suchen und die
+beiden Prozentwerte gegenüberstellen.
+
+**R3 — Speicher: entwarnt.** Auf dem Gerät gemessen: ein 0,89-MB-JSON parst in
+**0,042 s** und kostet **+689 KB** Lua-Heap. `rapidjson` ist vorhanden (schneller
+als das reine `json`-Modul) und wird bevorzugt, `json` bleibt Rückfall. Die
+Aufspaltung in eine Datei pro Checkpoint ist damit nicht nötig.
+
+**R6 — Plugin-eigene Übersetzungskataloge funktionieren nicht.** Gemessen:
+KOReaders `_()` findet keinen `.po`-Katalog im Plugin-Verzeichnis, und
+`gettext:changeLang(<code>)` scheitert auf diesem Build für *jeden* Code
+(`frontend/gettext.lua:169: attempt to call method 'match' (a nil value)`) —
+auch für die bereits eingestellte Sprache. Das Modul bietet `dirname`,
+`textdomain`, `translation`, `context` als Felder, aber keinen benutzbaren
+Nachladeweg. Konsequenz: die gettext-Entscheidung aus dem Interview ist nicht
+umsetzbar, siehe „Offene Entscheidung" unten. Nebenwirkung des Tests: der
+geladene Katalog blieb entladen, bis KOReader neu startete.
 
 **R4 — Updater-Versionsvergleich.** CalVer bleibt genau deshalb. Die Regel
 lautet präzise: die erste Zahl darf nie kleiner werden. Ein Wechsel auf SemVer
