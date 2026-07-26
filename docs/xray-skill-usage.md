@@ -28,12 +28,19 @@ From real runs, worth knowing before you blame the wrong thing:
   document. `normal` gives a leaner one. Size is not a device problem
   (a 0.9 MB document parses in 0.042 s for +689 KB of heap, measured on a
   Kobo), it just makes the lists long.
-- **Duplicate cards from name forms.** Dedup does not strip honorifics or
-  ordinals, so "Ser Jaime Lennister" and "Jaime Lennister" survive as two
-  cards, as do "Aerys II. Targaryen" and "Aerys Targaryen". Expect somewhat
-  inflated character counts on dynasty-heavy books. The deliberate
-  counter-rule: bare shared first names ("Robert") are never fuzzy-merged,
-  because those books reuse first names across generations on purpose.
+- **Duplicate cards from name forms.** Dedup folds leading honorifics ("Ser
+  Jaime Lennister"), regnal ordinals ("Aerys II. Targaryen"), leading German
+  articles ("Der Brandywein"), parenthetical suffixes ("Spiegelsee
+  (Kheled-zâram)") and short forms the extraction itself declared as an alias
+  ("Bilbo" into "Bilbo Beutlin"). The card keeps the plainest form as its
+  title and every other form as an alias. What still splits: unrelated surface
+  forms of one figure ("Samweis" vs "Sam Gamdschie" — no shared substring, no
+  declared alias) and descriptive variants of a place ("Moria" vs "Die Minen
+  von Moria"). The deliberate counter-rule: bare shared first names ("Robert")
+  are never fuzzy-merged, because dynastic books reuse first names across
+  generations on purpose — a short form is only folded in when the extraction
+  named it as an alias AND one name is a strictly more complete form of the
+  other.
 - **Chapter headings that fall between chunks.** When a chapter continues into
   a later chunk without repeating its heading, that chunk can under-emit
   timeline events for the headless part. It affects only the document-level

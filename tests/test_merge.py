@@ -714,3 +714,297 @@ def test_two_distinct_nameless_locations_both_survive():
 
     assert len(state.locations) == 2
     assert sorted(l["description"] for l in state.locations) == ["a cave", "a tower"]
+
+
+# --- cross-form name-variant dedup: leading definite articles (German) -----
+# Belegt aus Der-Herr-der-Ringe-Extraktion: "Der Brandywein"/"Brandywein",
+# "Die Turmberge"/"Turmberge", "Das Huegelgrab"/"Huegelgrab" waren getrennte
+# Orts-Karten -- reine Oberflaechen-Varianten mit fuehrendem Artikel.
+
+
+def test_leading_definite_article_variant_merges_into_stripped_canonical():
+    """"Der Brandywein" and "Brandywein" are one location; the article-less
+    form is the display name, the article-carrying form survives as alias."""
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Der Brandywein"}]}, "de"), checkpoint_pct=10
+    )
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Brandywein"}]}, "de"), checkpoint_pct=40
+    )
+
+    assert len(state.locations) == 1
+    assert state.locations[0]["name"] == "Brandywein"
+    assert "Der Brandywein" in state.locations[0]["aliases"]
+    assert state.locations[0]["first_pct"] == 10  # merge does not restamp
+
+
+def test_leading_article_merge_is_order_independent():
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Turmberge"}]}, "de"), checkpoint_pct=10
+    )
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Die Turmberge"}]}, "de"), checkpoint_pct=40
+    )
+
+    assert len(state.locations) == 1
+    assert state.locations[0]["name"] == "Turmberge"
+    assert "Die Turmberge" in state.locations[0]["aliases"]
+
+
+def test_all_german_definite_articles_stripped():
+    for art in ("Der", "Die", "Das", "Den", "Dem"):
+        state = BookState(language="de")
+        state.merge_segment(
+            clean_response({"locations": [{"name": f"{art} Testort"}]}, "de"), checkpoint_pct=10
+        )
+        state.merge_segment(
+            clean_response({"locations": [{"name": "Testort"}]}, "de"), checkpoint_pct=40
+        )
+        assert len(state.locations) == 1, f"article {art!r} did not strip"
+        assert state.locations[0]["name"] == "Testort"
+
+
+def test_leading_article_stripping_does_not_collapse_different_places():
+    # "Die Turmberge" and "Die Halle" strip to different second words -- do
+    # not false-merge.
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response(
+            {"locations": [{"name": "Die Turmberge"}, {"name": "Die Halle"}]}, "de"
+        ),
+        checkpoint_pct=10,
+    )
+
+    assert len(state.locations) == 2
+
+
+def test_lone_article_name_is_not_stripped_without_a_partner():
+    # No collision -> keep the name exactly as the model gave it, article and
+    # all (analogous to test_lone_honorific_name_is_not_stripped_without_a_partner).
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Der Bruch"}]}, "de"), checkpoint_pct=10
+    )
+
+    assert state.locations[0]["name"] == "Der Bruch"
+
+
+def test_article_only_name_never_reduces_to_empty_dedup_key():
+    # A location literally named "Der" (or "Die"): stripping to empty would
+    # collide with any other article-only name AND with placeholder-name
+    # entities. Guard: never reduce to an empty dedup key.
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Der"}, {"name": "Die"}]}, "de"),
+        checkpoint_pct=10,
+    )
+
+    # Both survive, no collision.
+    assert len(state.locations) == 2
+
+
+# --- cross-form name-variant dedup: parenthetical suffix -------------------
+# Belegt aus Der-Herr-der-Ringe-Extraktion: "Spiegelsee"/"Spiegelsee
+# (Kheled-zaram)", "Khazad-dum"/"Khazad-dum (Moria)", "Lothlorien" plus zwei
+# Klammer-Elaborationen waren jeweils eigene Karten.
+
+
+def test_parenthetical_qualifier_never_becomes_the_display_name():
+    """Belegt aus dem Gefaehrten-Lauf: "Auenland" und "Auenland
+    (Beutelhaldenweg)" wurden zu einer Karte zusammengefuehrt -- und die Karte
+    fuer die ganze Region hiess danach nach einer Strasse darin.
+
+    Eine Klammer kann ein zweiter NAME sein ("Kheled-zaram") oder eine
+    EINENGUNG ("Beutelhaldenweg"), und am String ist beides nicht zu
+    unterscheiden. Die schlichte Form ist als Kartentitel nie falsch, die
+    reichere manchmal schon -- also gewinnt die schlichte, und die Klammerform
+    bleibt als Alias erhalten, wo sie nichts kaputtmacht."""
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Auenland"}]}, "de"), checkpoint_pct=10
+    )
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Auenland (Beutelhaldenweg)"}]}, "de"),
+        checkpoint_pct=40,
+    )
+
+    assert len(state.locations) == 1
+    assert state.locations[0]["name"] == "Auenland"
+    assert "Auenland (Beutelhaldenweg)" in state.locations[0]["aliases"]
+
+
+def test_parenthetical_suffix_variant_merges_and_plain_form_wins():
+    """"Spiegelsee (Kheled-zaram)" and "Spiegelsee" are one location; the
+    plain form is the display name, the parenthetical one an alias (see
+    `test_parenthetical_qualifier_never_becomes_the_display_name` for why the
+    richer form cannot be trusted as a title)."""
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Spiegelsee"}]}, "de"), checkpoint_pct=10
+    )
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Spiegelsee (Kheled-zâram)"}]}, "de"),
+        checkpoint_pct=40,
+    )
+
+    assert len(state.locations) == 1
+    assert state.locations[0]["name"] == "Spiegelsee"
+    assert "Spiegelsee (Kheled-zâram)" in state.locations[0]["aliases"]
+    assert state.locations[0]["first_pct"] == 10
+
+
+def test_parenthetical_merge_is_order_independent():
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Khazad-dûm (Moria)"}]}, "de"),
+        checkpoint_pct=10,
+    )
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Khazad-dûm"}]}, "de"), checkpoint_pct=40
+    )
+
+    assert len(state.locations) == 1
+    assert state.locations[0]["name"] == "Khazad-dûm"
+    assert "Khazad-dûm (Moria)" in state.locations[0]["aliases"]
+
+
+def test_multiple_parenthetical_variants_all_merge():
+    """"Lothlorien", "Lothlorien (Naith)", "Lothlorien (Goldener Wald)" ->
+    one location. The bare form is the display name; BOTH elaborations survive
+    as aliases, so nothing the extraction found is lost -- it just does not get
+    to title the card."""
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Lothlórien"}]}, "de"), checkpoint_pct=10
+    )
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Lothlórien (Naith / Der Winkel)"}]}, "de"),
+        checkpoint_pct=20,
+    )
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Lothlórien (der Goldene Wald)"}]}, "de"),
+        checkpoint_pct=30,
+    )
+
+    assert len(state.locations) == 1
+    assert state.locations[0]["name"] == "Lothlórien"
+    aliases_lower = {a.lower() for a in state.locations[0]["aliases"]}
+    assert "lothlórien (naith / der winkel)" in aliases_lower
+    assert "lothlórien (der goldene wald)" in aliases_lower
+
+
+def test_parenthetical_only_stripped_at_end():
+    # "Foo(bar)Baz" -- parens in the MIDDLE of the name, not a suffix. Must
+    # not strip and must not false-merge with a plain "Foo".
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response(
+            {"locations": [{"name": "Foo(bar)Baz"}, {"name": "Foo"}]}, "de"
+        ),
+        checkpoint_pct=10,
+    )
+
+    assert len(state.locations) == 2
+
+
+def test_parenthetical_only_name_never_reduces_to_empty():
+    # A name that is ONLY parentheses ("(Sonderfall)") would strip to empty.
+    # Guard: fall back to the original name so two such names do not collide.
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response(
+            {"locations": [{"name": "(Sonderfall)"}, {"name": "(Anderes)"}]}, "de"
+        ),
+        checkpoint_pct=10,
+    )
+
+    assert len(state.locations) == 2
+
+
+def test_article_and_parenthetical_variant_both_recognized():
+    # "Der Foo (Bar)" and "Foo" strip in both dimensions to the same key.
+    state = BookState(language="de")
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Der Foo (Bar)"}]}, "de"),
+        checkpoint_pct=10,
+    )
+    state.merge_segment(
+        clean_response({"locations": [{"name": "Foo"}]}, "de"), checkpoint_pct=40
+    )
+
+    assert len(state.locations) == 1
+
+
+# --- cross-form dedup via incoming-alias lookup ----------------------------
+# Belegt aus Der-Herr-der-Ringe-Extraktion: "Bilbo"/"Bilbo Beutlin" und
+# "Frodo"/"Frodo Beutlin" waren getrennte Karten, obwohl das spaetere Segment
+# den Kurznamen jeweils als alias mitlieferte. Fix: incoming.aliases auch
+# gegen bereits eingesammelte Namen pruefen, nicht nur incoming.name.
+
+
+def test_incoming_alias_merges_short_form_into_full_form():
+    """Segment 1 introduces "Bilbo" as its own entity; segment 2 then reports
+    "Bilbo Beutlin" and declares "Bilbo" as its alias -- must merge, promoting
+    the fuller name."""
+    state = BookState()
+    state.merge_segment(clean_response({"characters": [{"name": "Bilbo"}]}), 10)
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Bilbo Beutlin", "aliases": ["Bilbo"]}]}),
+        40,
+    )
+
+    assert len(state.characters) == 1
+    assert state.characters[0]["name"] == "Bilbo Beutlin"
+    assert "Bilbo" in state.characters[0]["aliases"]
+    assert state.characters[0]["first_pct"] == 10  # not restamped
+
+
+def test_incoming_alias_lookup_does_not_collapse_dynastic_namesakes():
+    """The safety net for the Aegon problem: if TWO different entities in the
+    store share an alias-worthy first name, an incoming entity that declares
+    that first name as an alias must not be merged into either -- because the
+    incoming name is not a strictly-more-complete form of either existing name.
+    """
+    state = BookState()
+    state.merge_segment(
+        clean_response(
+            {
+                "characters": [
+                    {"name": "Aegon I", "aliases": ["Aegon"]},
+                    {"name": "Aegon II", "aliases": ["Aegon"]},
+                ]
+            }
+        ),
+        10,
+    )
+    # A THIRD Aegon shows up under yet another name, again aliasing "Aegon".
+    # The bare alias must not slot him into either existing king.
+    state.merge_segment(
+        clean_response(
+            {"characters": [{"name": "Aegon III der Wackere", "aliases": ["Aegon"]}]}
+        ),
+        40,
+    )
+
+    assert len(state.characters) == 3
+
+
+def test_incoming_alias_lookup_guarded_by_name_completeness():
+    """If the incoming's name and the alias-matched existing name are UNRELATED
+    (neither is a more-complete form of the other), do not merge -- the alias
+    match is a false lead. Example: incoming "Marta Vega, alias 'Vega'" arrives
+    after "Miguel Vega" is already known; both share the surname-alias 'Vega'
+    but are distinct people."""
+    state = BookState()
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Miguel Vega", "aliases": ["Vega"]}]}),
+        10,
+    )
+    state.merge_segment(
+        clean_response({"characters": [{"name": "Marta Vega", "aliases": ["Vega"]}]}),
+        40,
+    )
+
+    assert len(state.characters) == 2

@@ -96,9 +96,32 @@ _HONORIFICS = {
            "maester", "septa", "septon", "khal", "magister", "meister"},
 }
 
+# Leading definite articles that name one entity across surface forms
+# ("Der Brandywein" == "Brandywein"). Language-keyed like `_HONORIFICS`;
+# unknown languages fall back to English. Kept deliberately narrow to the
+# NOMINATIVE forms the handoff calls out -- oblique cases ("des Nordens")
+# almost never appear as leading tokens of a proper name.
+#
+# English "the" is NOT added on purpose: existing tests (e.g.
+# `test_location_alias_collision_fills_still_empty_field`) rely on "The Shire"
+# staying "The Shire" as the display name; adding "the" would flip that. The
+# concrete Der-Herr-der-Ringe evidence is German-only, so this stays German
+# until an English case turns up in real data.
+_ARTICLES = {
+    "en": set(),
+    "de": {"der", "die", "das", "den", "dem"},
+}
+
 # Canonical Roman-numeral matcher (case-insensitive), used to spot regnal
 # ordinals like "II"/"IV." in a name.
 _ROMAN_RE = re.compile(r"m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})", re.I)
+
+# Parenthetical elaboration at the end of a name: "X (Y)" -> the "(Y)" part.
+# Matches optional leading whitespace, one paren group, optional trailing
+# whitespace, anchored to the string end. Only ONE group is stripped per pass;
+# "Foo (Bar) (Baz)" is contrived and left to yield "Foo (Bar)" as the key
+# rather than escalating this into a loop.
+_PAREN_SUFFIX_RE = re.compile(r"\s*\([^)]*\)\s*$")
 
 
 def _honorifics(language: str) -> set:
@@ -131,25 +154,81 @@ def _has_leading_honorific(name: str, language: str) -> bool:
     return len(toks) > 1 and toks[0].rstrip(".").lower() in _honorifics(language)
 
 
+def _articles(language: str) -> set:
+    return _ARTICLES.get(language, _ARTICLES["en"])
+
+
+def _strip_leading_articles(name: str, language: str) -> str:
+    """Drop leading definite-article tokens ("Der Brandywein" -> "Brandywein"),
+    preserving the case of the rest. Never strips to empty: a name that is
+    *only* an article keeps it (same guard as `_strip_leading_honorifics`)."""
+    arts = _articles(language)
+    if not arts:
+        return name or ""
+    toks = (name or "").split()
+    i = 0
+    while i < len(toks) - 1 and toks[i].lower() in arts:
+        i += 1
+    return " ".join(toks[i:]) if toks else (name or "")
+
+
+def _has_leading_article(name: str, language: str) -> bool:
+    toks = (name or "").split()
+    return (
+        len(toks) > 1
+        and toks[0].lower() in _articles(language)
+    )
+
+
+def _strip_parenthetical_suffix(name: str) -> str:
+    """Drop a trailing "(...)" from a name for dedup purposes. Never strips to
+    empty: a name that is *only* parentheses ("(Sonderfall)") keeps them, so
+    two such names never collide on an empty key."""
+    stripped = _PAREN_SUFFIX_RE.sub("", name or "").strip()
+    return stripped or (name or "")
+
+
+def _has_parenthetical_suffix(name: str) -> bool:
+    """True iff `name` has a "(...)" suffix that a stripped-form comparison
+    would consume -- i.e. the strip would leave a non-empty different string."""
+    n = name or ""
+    if not _PAREN_SUFFIX_RE.search(n):
+        return False
+    stripped = _PAREN_SUFFIX_RE.sub("", n).strip()
+    return bool(stripped) and stripped != n.strip()
+
+
 def _dedup_key(name: str, language: str) -> str:
-    """Collision key for entity dedup: leading honorifics dropped and regnal
-    ordinals removed, lower-cased, whitespace-collapsed. Cross-form variants
-    of one entity ("Ser Jaime Lennister"/"Jaime Lennister", "Aerys II.
-    Targaryen"/"Aerys Targaryen") map to the same key -- while a bare first
-    name ("Robert") never collides with a full name ("Robert Baratheon") and
-    two people differing only by ordinal ("Heinrich IV."/"Heinrich VIII.")
-    keep distinct keys. The ordinal is only removed when >= 2 non-ordinal
-    tokens remain, so a name distinguished *solely* by its ordinal is never
-    reduced to a shared bare first name.
+    """Collision key for entity dedup: parenthetical suffix dropped, leading
+    honorifics AND leading definite articles dropped, regnal ordinals removed,
+    lower-cased, whitespace-collapsed. Cross-form variants of one entity
+    ("Ser Jaime Lennister"/"Jaime Lennister", "Aerys II. Targaryen"/"Aerys
+    Targaryen", "Der Brandywein"/"Brandywein", "Spiegelsee (Kheled-zaram)"/
+    "Spiegelsee") map to the same key -- while a bare first name ("Robert")
+    never collides with a full name ("Robert Baratheon") and two people
+    differing only by ordinal ("Heinrich IV."/"Heinrich VIII.") keep distinct
+    keys. The ordinal is only removed when >= 2 non-ordinal tokens remain, so
+    a name distinguished *solely* by its ordinal is never reduced to a shared
+    bare first name.
 
     Placeholder names ("Unnamed Character", ...) collapse to the EMPTY key so
     two genuinely distinct nameless entities never collide -- they are
     un-dedupable by name, exactly like a truly-empty name (xray_data.lua:
     232-234).
+
+    Normalization order matters: paren-suffix strip runs FIRST so a name like
+    "Der Foo (Bar)" first becomes "Der Foo", then loses its article to "Foo",
+    matching a bare "Foo". Running them in the opposite order would leave the
+    "(Bar)" attached and miss the article strip (article check needs a leading
+    token). Honorifics vs. articles do not overlap in practice (Ser/Lord/... vs.
+    Der/Die/Das/...), so their relative order does not matter.
     """
     if (name or "").strip().lower() in _PLACEHOLDER_NAMES:
         return ""
-    toks = _strip_leading_honorifics(name, language).lower().split()
+    stripped = _strip_parenthetical_suffix(name or "")
+    stripped = _strip_leading_honorifics(stripped, language)
+    stripped = _strip_leading_articles(stripped, language)
+    toks = stripped.lower().split()
     non_ord = [t for t in toks if not _is_ordinal(t)]
     if len(non_ord) >= 2:
         toks = non_ord
@@ -157,20 +236,59 @@ def _dedup_key(name: str, language: str) -> str:
 
 
 def _pick_canonical(existing: str, incoming: str, language: str) -> str:
-    """Display name to keep when two surface forms collide. Prefer the form
-    WITHOUT a leading title ("Jaime Lennister" beats "Ser Jaime Lennister");
-    among forms of equal title-status, keep the existing name unless the
-    incoming one is strictly more complete."""
+    """Display name to keep when two surface forms collide.
+
+    Preference order:
+      1. Article-less over articled ("Brandywein" beats "Der Brandywein"),
+         analogous to the honorific rule.
+      2. Title-less over titled ("Jaime Lennister" beats "Ser Jaime Lennister").
+      3. Plain over parenthesized ("Spiegelsee" beats "Spiegelsee
+         (Kheled-zaram)") -- see below, this one is counter-intuitive.
+      4. Existing name kept unless incoming is strictly more complete.
+
+    Rule 3 used to run the other way, on the theory that "(Kheled-zaram)" is
+    extra information and the richer form makes the better card title. The
+    Fellowship run showed why that does not hold: a parenthetical is sometimes
+    a second NAME ("Khazad-dum (Moria)") and sometimes a NARROWING qualifier
+    ("Auenland (Beutelhaldenweg)" -- a road inside the Shire), and nothing in
+    the string tells the two apart. Preferring it titled the card for a whole
+    region after one of its streets. The plain form is never wrong as a title,
+    the richer one sometimes is, so the plain form wins; the loser survives as
+    an alias (see `_merge`), which is where a second name belongs anyway and
+    where a narrowing qualifier does no harm -- `_dedup_key` strips the
+    parenthesis, so the alias cannot claim a key of its own and swallow a
+    place that genuinely bears that name later.
+
+    Article and honorific rules still run first: they remove noise ("Der"/
+    "Ser") rather than choosing between two contentful forms. An article is
+    only dropped when an article-less partner form actually appeared -- with
+    "Der Balrog" and "Der Balrog (Durins Fluch)" the card stays "Der Balrog",
+    because synthesizing "Balrog" would invent a form the extraction never
+    produced, and German articles carry inflection ("Der Alte Wald" -> "Alte
+    Wald" is broken German, not a shorter name).
+    """
     if not incoming:
         return existing
     if not existing:
         return incoming
+    ex_a = _has_leading_article(existing, language)
+    in_a = _has_leading_article(incoming, language)
+    if ex_a and not in_a:
+        return incoming
+    if in_a and not ex_a:
+        return existing
     ex_h = _has_leading_honorific(existing, language)
     in_h = _has_leading_honorific(incoming, language)
     if ex_h and not in_h:
         return incoming
     if in_h and not ex_h:
         return existing
+    ex_p = _has_parenthetical_suffix(existing)
+    in_p = _has_parenthetical_suffix(incoming)
+    if in_p and not ex_p:
+        return existing
+    if ex_p and not in_p:
+        return incoming
     return incoming if is_more_complete_name(incoming, existing, language) else existing
 
 
@@ -418,10 +536,46 @@ class BookState:
                     alias_map[_dedup_key(alias, lang)] = item
 
         for item in incoming:
-            k = _dedup_key(item.get("name") or "", lang)
+            incoming_name = item.get("name") or ""
+            k = _dedup_key(incoming_name, lang)
             match = seen.get(k) if k else None
             if match is None and k:
                 match = alias_map.get(k)
+
+            # Also try the INCOMING item's declared aliases against what we've
+            # already seen AS NAMES (deliberately NOT against `alias_map`).
+            # Catches "Bilbo" (segment 1, bare) plus later "Bilbo Beutlin
+            # (alias: Bilbo)" (segment 2) -- without this pass they stay split,
+            # because the merge only ever looked up the incoming NAME.
+            #
+            # `seen`-only is the load-bearing restriction that prevents the
+            # dynastic-namesake collapse: if seg 1 declared "Aegon I" AND
+            # "Aegon II" both aliased as "Aegon", `alias_map["aegon"]` points
+            # to whichever ran first, and consulting it would slot every future
+            # "Aegon"-aliasing entity into that same king. `seen`, in contrast,
+            # only holds dedup keys that are actually names of entities -- so
+            # "Aegon" (the alias) doesn't sit in `seen` at all, and the lookup
+            # correctly misses.
+            #
+            # The is_more_complete_name guard is the second safety net: if the
+            # incoming name and the found existing name are UNRELATED (neither
+            # is a more-complete form of the other), the alias hit is treated
+            # as a false lead. Blocks e.g. the Miguel/Marta Vega case where
+            # both share the surname-alias "Vega".
+            if match is None:
+                for alias in item.get("aliases") or []:
+                    ak = _dedup_key(alias, lang)
+                    if not ak:
+                        continue
+                    cand = seen.get(ak)
+                    if cand is None:
+                        continue
+                    cand_name = cand.get("name") or ""
+                    if is_more_complete_name(
+                        incoming_name, cand_name, lang
+                    ) or is_more_complete_name(cand_name, incoming_name, lang):
+                        match = cand
+                        break
 
             if match is None:
                 existing.append(item)
