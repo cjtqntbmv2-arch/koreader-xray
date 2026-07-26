@@ -16,10 +16,13 @@ would otherwise go wrong silently:
   2. Right shape -- schema.validate() on the document.
   3. Intact result -- zip integrity, byte-exact round-trip of the document,
      and read_epub() still parses the result.
-  4. Same book to KOReader -- partial_md5 before and after. Appending usually
-     leaves it untouched, but not always (see xray_core.embed.partial_md5), and
-     a changed hash means the device treats the book as new and drops its
-     reading statistics and progress. Measured, not assumed.
+  4. Same book to KOReader -- partial_md5, twice. Appending usually leaves it
+     untouched, but not always (see xray_core.embed.partial_md5), and a changed
+     hash means the device treats the book as new and drops its reading
+     statistics and progress. Once before the write, because embedding anyway
+     is the reader's call to make; once after it on the library copy itself,
+     because "measured, not assumed" is only worth anything when it measures
+     the file the device will actually get.
 """
 import json
 import os
@@ -143,9 +146,29 @@ class XRayGeneratorAction(InterfaceAction):
                   "over. Embed anyway?")):
             return
 
-        db.add_format(book_id, "EPUB", out, replace=True)
+        # run_hooks=False: calibre otherwise runs every file type plugin that
+        # registers for on_import over the file and stores whatever they hand
+        # back. DeDRM (10.0.9, installed by most readers who own a Kobo) pushes
+        # every EPUB through its zipfix, DRM or not, and returns the rewritten
+        # copy -- same content, rewritten local headers and central directory,
+        # different partial_md5. That is the library copy silently diverging
+        # from the one checked above. The hooks belong to a file entering the
+        # library from outside; this one is the library's own format with one
+        # zip member appended, and it went through them when it was added.
+        db.add_format(book_id, "EPUB", out, replace=True, run_hooks=False)
         _add_tag(db, book_id)
         gui.library_view.model().refresh_ids([book_id])
+
+        # Measured on what the device will get, not on the temporary copy.
+        landed = db.format_abspath(book_id, "EPUB")
+        if landed and partial_md5(landed) != partial_md5(out):
+            return error_dialog(
+                gui, _("Reading statistics will reset"),
+                _('The X-Ray data was embedded into "{0}", but calibre stored a '
+                  "file that differs from the one that was checked. KOReader "
+                  "recognises a book by its first bytes, so it will treat this "
+                  "one as new and start its statistics and reading position "
+                  "over.").format(title), show=True)
 
         info_dialog(
             gui, _("X-Ray embedded"),
