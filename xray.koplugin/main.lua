@@ -10,8 +10,10 @@
 -- the reader menu (one tap to a list), and everything that is not reading
 -- material is tucked into a single "More" submenu.
 
+local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DataStorage = require("datastorage")
+local Dispatcher = require("dispatcher")
 local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
@@ -57,6 +59,7 @@ function XRayPlugin:init()
         end
     end)
     pcall(function() XRayLookup.setup(self) end)
+    pcall(function() self:onDispatcherRegisterActions() end)
     pcall(function()
         UIManager:scheduleIn(UPDATE_CHECK_DELAY, function()
             pcall(function() self:maybeCheckForUpdates() end)
@@ -99,7 +102,30 @@ function XRayPlugin:showStatus()
         UIManager:show(InfoMessage:new{ text = err })
         return
     end
-    pcall(function() XRayUI.showStatus(doc, cp_idx, pct) end)
+    pcall(function() XRayUI.showStatus(self, doc, cp_idx, pct) end)
+end
+
+function XRayPlugin:showDiagnostics()
+    local doc, cp_idx, pct = self:current()
+    pcall(function() XRayUI.showDiagnostics(self, doc, cp_idx, pct) end)
+end
+
+-- Writes the same text next to KOReader's own settings, so it can be read over
+-- USB instead of retyped or photographed off the screen. Plain sibling file
+-- rather than a subdirectory: no mkdir, nothing to clean up, and the settings
+-- directory is exactly where someone debugging this device already looks.
+function XRayPlugin:saveDiagnostics()
+    local doc, cp_idx, pct = self:current()
+    local path = DataStorage:getSettingsDir() .. "/xray_diagnostics.txt"
+    local ok, err = pcall(function()
+        local fh = assert(io.open(path, "w"))
+        fh:write(XRayUI.diagnosticsText(self, doc, cp_idx, pct), "\n")
+        fh:close()
+    end)
+    UIManager:show(InfoMessage:new{
+        text = ok and (_("Saved to") .. "\n" .. path)
+            or (_("Could not save the diagnostics.") .. "\n" .. tostring(err)),
+    })
 end
 
 -- ---------------------------------------------------------------------------
@@ -112,6 +138,70 @@ function XRayPlugin:addToMainMenu(menu_items)
         sorting_hint = "tools",
         sub_item_table_func = function() return self:getSubMenuItems() end,
     }
+end
+
+-- Why X-Ray sits where it sits, and how to get past that:
+--
+-- A plugin cannot choose its position in KOReader's menu. `MenuSorter` matches
+-- entry keys against `reader_menu_order.lua`; a key that is not listed there
+-- -- and a third-party plugin's never is -- becomes an "orphan" and gets
+-- `table.insert`ed at the END of whatever `sorting_hint` names. With "tools"
+-- already holding a dozen entries plus a "More tools" submenu, the end means
+-- page two. Every other tab is similarly full, so moving tabs only relocates
+-- the problem, and the one real override (a `reader_menu_order.lua` in the
+-- device's settings directory) means a plugin writing into the reader's own
+-- menu configuration, which is not ours to do.
+--
+-- A dispatcher action is the supported way to be one gesture away instead:
+-- assign it under Taps and gestures, and X-Ray opens without any menu at all.
+function XRayPlugin:onDispatcherRegisterActions()
+    Dispatcher:registerAction("xray_show",
+        {category="none", event="XRayShow", title=_("X-Ray"), reader=true})
+end
+
+function XRayPlugin:onXRayShow()
+    local buttons = {}
+    for i = 1, #CATEGORIES do
+        local category = CATEGORIES[i]
+        buttons[#buttons + 1] = {{
+            text = _(category.label),
+            callback = function()
+                UIManager:close(self.category_dialog)
+                self.category_dialog = nil
+                self:showCategory(category.key)
+            end,
+        }}
+    end
+    self.category_dialog = ButtonDialog:new{ title = _("X-Ray"), buttons = buttons }
+    UIManager:show(self.category_dialog)
+    return true
+end
+
+-- KOReader v2026.03 and every earlier release deliver the dictionary popup's
+-- buttons through this event; `ui.dictionary:addToDictButtons` (see
+-- xray_lookup.lua) exists only on master since PR #15184 and in no release
+-- yet. The event was deleted in that same commit, so exactly one of the two
+-- paths is live on any given build and they cannot double up.
+function XRayPlugin:onDictButtonsReady(dict_popup, buttons)
+    if not self.dict_integration_enabled then return end
+    if not dict_popup or dict_popup.is_wiki_fullpage then return end
+    -- The reader's query, not the headword the dictionary matched -- see
+    -- XRayLookup.wordFromDictPopup for why those differ and why it matters.
+    local word = XRayLookup.wordFromDictPopup(dict_popup)
+    if not word then return end
+    -- Proof that this build really routes through the event, not just that we
+    -- registered for it -- the distinction the diagnostics screen reports.
+    self.dict_event_fired = true
+
+    table.insert(buttons, 1, {{
+        id = "xray_lookup",
+        text = _("X-Ray"),
+        font_bold = false,
+        callback = function()
+            XRayLookup.dismiss(self.ui, dict_popup)
+            XRayLookup.perform(self, word)
+        end,
+    }})
 end
 
 function XRayPlugin:getSubMenuItems()
@@ -130,6 +220,15 @@ function XRayPlugin:getSubMenuItems()
             {
                 text = _("Status"),
                 callback = function() self:showStatus() end,
+            },
+            {
+                text = _("Diagnostics"),
+                callback = function() self:showDiagnostics() end,
+            },
+            {
+                text = _("Save diagnostics"),
+                help_text = _("Writes the diagnostics to xray_diagnostics.txt in KOReader's settings directory, where it can be read over USB."),
+                callback = function() self:saveDiagnostics() end,
             },
             {
                 text = _("Dictionary integration"),

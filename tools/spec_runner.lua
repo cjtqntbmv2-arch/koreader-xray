@@ -146,6 +146,7 @@ _G.assert.same = _G.assert.are.same
 -- carries a guarantee: which snapshot a reading position is allowed to see.
 local specs = {
     "spec/xray_doc_spec.lua",
+    "spec/xray_lookup_spec.lua",
 }
 
 print("=== Running KOReader X-Ray Unit Tests ===")

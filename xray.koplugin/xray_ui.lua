@@ -271,26 +271,61 @@ end
 
 -- doc/cp_idx: as elsewhere; pct: current reading position 0..100
 -- (XRayDoc.position's return value, forwarded by the caller).
-function XRayUI.showStatus(doc, cp_idx, pct)
+-- "37 / 151" -- what this stage holds against what the finished book holds.
+-- One number alone cannot tell "staged, keep reading" from "the extraction
+-- found little", and those two want opposite reactions from the reader.
+-- Takes an ALREADY translated label: `_()` has to wrap a literal at the call
+-- site or the catalog extractor cannot see the string, and an untranslated
+-- entry only surfaces when someone reads the screen in German.
+local function countLine(label, now, total)
+    return label .. ": " .. tostring(now) .. " / " .. tostring(total)
+end
+
+
+-- Which of the two dictionary-button mechanisms is live on THIS build, and --
+-- for the event one -- whether it has ever actually fired. Both installations
+-- sit inside pcall guards, so without this line a missing button is
+-- indistinguishable from a button nobody pressed. That ambiguity cost a full
+-- debugging round on a released device.
+local function dictHookLine(plugin)
+    local hooks = (plugin and plugin.hooks) or {}
+    if hooks.dict_api then
+        return _("Dictionary button") .. ": " .. _("new API (addToDictButtons)")
+    end
+    if plugin and plugin.dict_integration_enabled == false then
+        return _("Dictionary button") .. ": " .. _("switched off")
+    end
+    return _("Dictionary button") .. ": " .. (plugin and plugin.dict_event_fired
+        and _("legacy event (fired)") or _("legacy event (not fired yet)"))
+end
+
+
+function XRayUI.showStatus(plugin, doc, cp_idx, pct)
     local ok, err = pcall(function()
+        local ui = plugin and plugin.ui
         if not cp_idx then
             showNotYetAvailable(doc)
             return
         end
 
-        -- ASSUMPTION: `doc.source` ("embedded"|"companion") is not part of
-        -- the six documented XRayDoc functions -- xray_doc.lua doesn't exist
-        -- yet, so this field is a best guess at how it will report which
-        -- file won (plan: "Liegt <buch>.epub.xray.json daneben, gewinnt
-        -- sie."). Falls back to "embedded", the default/primary path.
-        local source = (doc.source == "companion") and _("companion file") or _("embedded")
+        -- Reported by XRayDoc.load, not guessed. This line used to fall back
+        -- to "embedded" whenever it did not know -- which is to say always,
+        -- because nothing ever set the field it read.
+        local meta = XRayDoc.meta(ui) or {}
+        local source = (meta.source == "companion") and _("companion file")
+            or (meta.source == "embedded") and _("embedded")
+            or _("unknown")
 
         local snapshot = XRayDoc.snapshot(doc, cp_idx) or {}
         local timeline = XRayDoc.timeline(doc, cp_idx) or {}
+        local totals = XRayDoc.totals(doc)
 
         local lines = {}
         table.insert(lines, _("Source") .. ": " .. source)
-        table.insert(lines, _("Reading position") .. ": " .. string.format("%.0f%%", pct or 0))
+        -- One decimal, not zero: MARGIN is 2 points, and a position rounded to
+        -- whole percent cannot be used to judge -- let alone calibrate -- a
+        -- threshold that fine.
+        table.insert(lines, _("Reading position") .. ": " .. string.format("%.1f%%", pct or 0))
 
         -- doc.checkpoints[cp_idx].percent: doc is assumed to be the parsed
         -- xray.json (schema/xray.schema.json's top-level `checkpoints`
@@ -302,12 +337,29 @@ function XRayUI.showStatus(doc, cp_idx, pct)
             table.insert(lines, _("X-Ray data up to") .. ": " .. tostring(checkpoint.percent) .. "%")
         end
 
+        -- The question a thin list actually raises: is more coming, and when?
+        -- The unlock threshold is percent + MARGIN, so that is the distance to
+        -- report -- reporting the bare percent would promise data a point or
+        -- two before it appears.
+        local next_pct = XRayDoc.nextPercent(doc, cp_idx)
+        if next_pct then
+            local unlock_at = math.min(next_pct + XRayDoc.MARGIN, 100)
+            table.insert(lines, string.format(
+                _("Next stage: %d%% (in %.1f%%)"), next_pct, math.max(0, unlock_at - (pct or 0))))
+        else
+            table.insert(lines, _("Next stage") .. ": " .. _("none -- this is the last one"))
+        end
+
         table.insert(lines, "")
-        table.insert(lines, _("Characters") .. ": " .. #(snapshot.characters or {}))
-        table.insert(lines, _("Locations") .. ": " .. #(snapshot.locations or {}))
-        table.insert(lines, _("Terms") .. ": " .. #(snapshot.terms or {}))
-        table.insert(lines, _("Historical Figures") .. ": " .. #(snapshot.historical_figures or {}))
-        table.insert(lines, _("Timeline Events") .. ": " .. #timeline)
+        table.insert(lines, countLine(_("Characters"), #(snapshot.characters or {}), totals.characters))
+        table.insert(lines, countLine(_("Locations"), #(snapshot.locations or {}), totals.locations))
+        table.insert(lines, countLine(_("Terms"), #(snapshot.terms or {}), totals.terms))
+        table.insert(lines, countLine(_("Historical Figures"),
+            #(snapshot.historical_figures or {}), totals.historical_figures))
+        table.insert(lines, countLine(_("Timeline Events"), #timeline, totals.timeline))
+
+        table.insert(lines, "")
+        table.insert(lines, dictHookLine(plugin))
 
         -- complete/last_percent are top-level xray.json fields (schema.py);
         -- the plan calls for surfacing them here when generation stopped
@@ -326,5 +378,108 @@ function XRayUI.showStatus(doc, cp_idx, pct)
         logger.warn("XRayUI.showStatus failed: " .. tostring(err))
     end
 end
+
+-- ---------------------------------------------------------------------------
+-- Diagnostics
+--
+-- Deliberately NOT folded into the status screen: status answers "where am I
+-- and what can I see", which is a reading question and has to stay short. This
+-- answers "why is it behaving like that", which is only ever asked while
+-- debugging -- and it is verbose enough to ruin the other screen.
+--
+-- Every value here was, at some point, something that had to be reconstructed
+-- from outside the device: the book path out of history.lua, the source by
+-- elimination, the KOReader version by grepping the install. Each line is one
+-- such round trip that does not have to happen again.
+-- ---------------------------------------------------------------------------
+
+local function safe(fn, fallback)
+    local ok, value = pcall(fn)
+    if not ok or value == nil then return fallback or "?" end
+    return value
+end
+
+
+-- Page-axis percent alongside the text-axis one the staging actually uses.
+-- The desktop stamps a CHARACTER share; the device reads a rendered position.
+-- Seeing both at once is what turns the R2 risk from an assumption into a
+-- measurement -- and MARGIN is the knob it calibrates.
+local function pageAxisPercent(ui)
+    return safe(function()
+        local document = ui and ui.document
+        if not document then return nil end
+        local page = (ui.view and ui.view.state and ui.view.state.page)
+            or document:getCurrentPage()
+        local count = document:getPageCount()
+        if type(page) ~= "number" or type(count) ~= "number" or count == 0 then return nil end
+        return string.format("%.1f%%", page / count * 100)
+    end)
+end
+
+
+function XRayUI.diagnosticsText(plugin, doc, cp_idx, pct)
+    local ui = plugin and plugin.ui
+    local meta = XRayDoc.meta(ui) or {}
+    local checkpoint = doc and doc.checkpoints and cp_idx and doc.checkpoints[cp_idx]
+    local fingerprint = (doc and doc.book_fingerprint) or {}
+    local hooks = (plugin and plugin.hooks) or {}
+    local lines = {}
+
+    local function add(label, value)
+        table.insert(lines, label .. ": " .. tostring(value))
+    end
+
+    add("plugin", safe(function() return plugin.version end, "?"))
+    add("koreader", safe(function() return require("version"):getCurrentRevision() end))
+    table.insert(lines, "")
+
+    add("book", meta.book_path or safe(function() return ui.document.file end))
+    add("source", meta.source or "none")
+    add("bytes", meta.bytes or "?")
+    add("load", meta.load_ms and string.format("%.0f ms", meta.load_ms) or "?")
+    table.insert(lines, "")
+
+    add("schema_version", doc and doc.schema_version or "?")
+    add("generator", doc and doc.generator or "?")
+    add("generator_version", doc and doc.generator_version or "?")
+    add("detail_level", doc and doc.detail_level or "?")
+    add("language", doc and doc.language or "?")
+    add("stages", doc and doc.checkpoints and #doc.checkpoints or 0)
+    add("complete", tostring(doc and doc.complete))
+    add("last_percent", doc and doc.last_percent or "?")
+    -- Prefix only: the whole hash is 71 characters of unreadable hex on a
+    -- 6-inch screen, and a mismatch shows up in the first few just as well.
+    add("text_hash", tostring(fingerprint.text_hash or "?"):sub(1, 26))
+    add("title", fingerprint.title or "?")
+    table.insert(lines, "")
+
+    add("position (text axis)", pct and string.format("%.2f%%", pct) or "?")
+    add("position (page axis)", pageAxisPercent(ui))
+    add("stage", checkpoint and (tostring(checkpoint.percent) .. "%") or "none reached")
+    add("stage index", cp_idx or "-")
+    add("MARGIN", XRayDoc.MARGIN)
+    table.insert(lines, "")
+
+    add("hook: highlight dialog", tostring(hooks.highlight == true))
+    add("hook: dict new API", tostring(hooks.dict_api == true))
+    add("hook: dict legacy event fired", tostring(plugin and plugin.dict_event_fired == true))
+    add("dictionary integration", tostring(plugin and plugin.dict_integration_enabled))
+
+    return table.concat(lines, "\n")
+end
+
+
+function XRayUI.showDiagnostics(plugin, doc, cp_idx, pct)
+    local ok, err = pcall(function()
+        UIManager:show(TextViewer:new{
+            title = _("X-Ray Diagnostics"),
+            text = XRayUI.diagnosticsText(plugin, doc, cp_idx, pct),
+        })
+    end)
+    if not ok then
+        logger.warn("XRayUI.showDiagnostics failed: " .. tostring(err))
+    end
+end
+
 
 return XRayUI

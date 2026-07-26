@@ -186,7 +186,7 @@ local function readCompanion(book_path)
     if not raw or raw == "" then return nil, false end
     local doc = decodeJson(raw)
     if not doc or not schemaOk(doc) then return nil, true end
-    return doc, false
+    return doc, false, #raw
 end
 
 -- Embedded copy: `xray/xray.json` inside the EPUB zip.
@@ -224,18 +224,36 @@ local function readEmbedded(book_path)
     if not raw or raw == "" then return nil, true end
     local doc = decodeJson(raw)
     if not doc or not schemaOk(doc) then return nil, true end
-    return doc, false
+    return doc, false, #raw
 end
 
+-- Third return value is diagnostic metadata, kept because the answers are
+-- unrecoverable afterwards: which of the two sources actually won, how big the
+-- document was and what reading it cost. The status screen used to GUESS the
+-- source ("embedded" as a hardcoded fallback) and was therefore wrong every
+-- time a companion file won -- exactly the case one debugs a device over.
 local function loadUncached(book_path)
-    local doc, broken = readCompanion(book_path)
-    if doc then return doc, nil end
-    local embedded_doc, embedded_broken = readEmbedded(book_path)
-    if embedded_doc then return embedded_doc, nil end
-    if broken or embedded_broken then
-        return nil, _("The X-Ray data for this book could not be read.")
+    local started = os.clock()
+    local doc, broken, bytes = readCompanion(book_path)
+    local source = "companion"
+    if not doc then
+        local embedded_doc, embedded_broken, embedded_bytes = readEmbedded(book_path)
+        doc, bytes, source = embedded_doc, embedded_bytes, "embedded"
+        broken = broken or embedded_broken
     end
-    return nil, _("No X-Ray data for this book.")
+
+    local meta = {
+        book_path = book_path,
+        source = doc and source or nil,
+        bytes = bytes,
+        load_ms = (os.clock() - started) * 1000,
+    }
+
+    if doc then return doc, nil, meta end
+    if broken then
+        return nil, _("The X-Ray data for this book could not be read."), meta
+    end
+    return nil, _("No X-Ray data for this book."), meta
 end
 
 -- ---------------------------------------------------------------------
@@ -247,19 +265,54 @@ function XRayDoc.load(ui)
     if not book_path then return nil, _("No book is open.") end
 
     local cached = _cache[book_path]
-    if cached then return cached.doc, cached.err end
+    if cached then return cached.doc, cached.err, cached.meta end
 
     -- Belt-and-suspenders on top of the per-source error handling above:
     -- this runs on every cacheless book open, unconditionally, so a Lua
     -- error here must never be allowed to take the reader down with it
     -- (xray.koplugin/main.lua:406-411 is the precedent this follows).
-    local ok, doc, err = pcall(loadUncached, book_path)
+    local ok, doc, err, meta = pcall(loadUncached, book_path)
     if not ok then
-        doc, err = nil, tostring(doc)
+        doc, err, meta = nil, tostring(doc), nil
     end
 
-    _cache[book_path] = { doc = doc, err = err }
-    return doc, err
+    _cache[book_path] = { doc = doc, err = err, meta = meta }
+    return doc, err, meta
+end
+
+-- Diagnostic metadata for the book currently open, or nil if it has not been
+-- loaded yet. Read from the cache rather than recomputed: re-reading to answer
+-- "where did this come from" would measure the wrong load.
+function XRayDoc.meta(ui)
+    local book_path = ui and ui.document and ui.document.file
+    local cached = book_path and _cache[book_path]
+    return cached and cached.meta or nil
+end
+
+-- The percent at which the NEXT stage unlocks, or nil at the last one. With
+-- cp_idx nil -- nothing reached yet -- this is the first stage, which is the
+-- moment a reader most wants the number.
+function XRayDoc.nextPercent(doc, cp_idx)
+    local cps = doc and doc.checkpoints
+    if type(cps) ~= "table" then return nil end
+    local nxt = cps[(cp_idx or 0) + 1]
+    return nxt and nxt.percent or nil
+end
+
+-- What the FINISHED book holds, taken from the last snapshot. Shown beside the
+-- current stage's counts so that "not much here" splits at a glance into
+-- "staged, keep reading" and "the extraction found little".
+function XRayDoc.totals(doc)
+    local cps = doc and doc.checkpoints
+    local last = type(cps) == "table" and cps[#cps] or nil
+    local snapshot = (last and last.snapshot) or {}
+    return {
+        characters = #(snapshot.characters or {}),
+        locations = #(snapshot.locations or {}),
+        terms = #(snapshot.terms or {}),
+        historical_figures = #(snapshot.historical_figures or {}),
+        timeline = #((doc and doc.timeline) or {}),
+    }
 end
 
 -- Position on the text axis, 0..100. getFullHeight() does not exist on

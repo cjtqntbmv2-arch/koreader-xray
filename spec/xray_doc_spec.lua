@@ -26,6 +26,47 @@ local function makeDoc()
     }
 end
 
+describe("XRayDoc.nextPercent", function()
+    it("returns the percent of the stage after the selected one", function()
+        local doc = makeDoc()
+        assert.equals(50, XRayDoc.nextPercent(doc, 1))
+        assert.equals(100, XRayDoc.nextPercent(doc, 2))
+    end)
+
+    it("returns nil at the last stage -- nothing further can unlock", function()
+        assert.is_nil(XRayDoc.nextPercent(makeDoc(), 3))
+    end)
+
+    it("returns the FIRST stage when none has been reached yet", function()
+        -- cp_idx is nil before the first checkpoint clears, and that is exactly
+        -- when the reader most wants to know from which percent data appears.
+        assert.equals(10, XRayDoc.nextPercent(makeDoc(), nil))
+    end)
+end)
+
+describe("XRayDoc.totals", function()
+    it("counts the LAST snapshot -- what the whole book holds", function()
+        local doc = makeDoc()
+        doc.checkpoints[1].snapshot = {
+            characters = {{name = "A"}}, locations = {}, terms = {}, historical_figures = {},
+        }
+        doc.checkpoints[3].snapshot = {
+            characters = {{name = "A"}, {name = "B"}}, locations = {{name = "L"}},
+            terms = {}, historical_figures = {},
+        }
+
+        local totals = XRayDoc.totals(doc)
+
+        assert.equals(2, totals.characters)
+        assert.equals(1, totals.locations)
+        assert.equals(0, totals.terms)
+    end)
+
+    it("survives a document with no checkpoints at all", function()
+        assert.equals(0, XRayDoc.totals({ checkpoints = {} }).characters)
+    end)
+end)
+
 describe("XRayDoc.selectCheckpoint", function()
     it("returns nil when no checkpoint has been reached", function()
         local doc = makeDoc()

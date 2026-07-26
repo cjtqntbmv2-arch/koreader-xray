@@ -200,3 +200,48 @@ msgstr "Begleitdatei"
 
 msgid "embedded"
 msgstr "eingebettet"
+
+msgid "unknown"
+msgstr "unbekannt"
+
+msgid "Next stage"
+msgstr "Nächste Stufe"
+
+msgid "Next stage: %d%% (in %.1f%%)"
+msgstr "Nächste Stufe: %d %% (in %.1f %%)"
+
+msgid "none -- this is the last one"
+msgstr "keine – dies ist die letzte"
+
+msgid "Dictionary button"
+msgstr "Wörterbuch-Knopf"
+
+msgid "new API (addToDictButtons)"
+msgstr "neue API (addToDictButtons)"
+
+msgid "legacy event (fired)"
+msgstr "Alt-Event (ausgelöst)"
+
+msgid "legacy event (not fired yet)"
+msgstr "Alt-Event (bisher nicht ausgelöst)"
+
+msgid "switched off"
+msgstr "abgeschaltet"
+
+msgid "Diagnostics"
+msgstr "Diagnose"
+
+msgid "X-Ray Diagnostics"
+msgstr "X-Ray-Diagnose"
+
+msgid "Save diagnostics"
+msgstr "Diagnose sichern"
+
+msgid "Writes the diagnostics to xray_diagnostics.txt in KOReader's settings directory, where it can be read over USB."
+msgstr "Schreibt die Diagnose nach xray_diagnostics.txt im Einstellungsverzeichnis von KOReader, wo sie sich per USB auslesen lässt."
+
+msgid "Saved to"
+msgstr "Gesichert unter"
+
+msgid "Could not save the diagnostics."
+msgstr "Die Diagnose konnte nicht gesichert werden."

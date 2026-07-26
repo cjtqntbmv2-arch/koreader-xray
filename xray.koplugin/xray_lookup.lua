@@ -31,6 +31,28 @@ local function normalize(text)
     return text:gsub("^[^%w]+", ""):gsub("[^%w]+$", ""):lower()
 end
 
+-- The word to look up from a dictionary popup: the reader's QUERY, never the
+-- headword the dictionary matched it to.
+--
+-- KOReader's DictQuickLookup carries both. `word` is the original query
+-- (readerdictionary.lua sets it under the comment "original lookup word");
+-- `lookupword`/`displayword` hold the entry that was found, which on a fuzzy
+-- match is a different word in a different language -- a German book with an
+-- English-German dictionary installed turns "Frodo" into the entry "brood".
+-- KOReader itself shows the difference ("(query: Frodo)" under the headword).
+-- Matching X-Ray names against the headword can therefore only ever miss.
+--
+-- No fallback to the headword when the query is empty: a whitespace-only
+-- manual lookup trims to "", and searching for the dictionary's artefact
+-- instead would turn "nothing to look up" into a confident wrong answer.
+function XRayLookup.wordFromDictPopup(dict_popup)
+    local word = dict_popup and dict_popup.word
+    if type(word) ~= "string" then return nil end
+    word = word:gsub("^%s+", ""):gsub("%s+$", "")
+    if word == "" then return nil end
+    return word
+end
+
 local function matchesEntry(entry, query)
     if normalize(entry.name) == query then return true end
     if type(entry.aliases) == "table" then
@@ -181,6 +203,11 @@ function XRayLookup.setup(plugin)
     end
     local ui = plugin.ui
     if not ui then return end
+    -- What actually got installed, for the diagnostics screen. Both blocks
+    -- below sit in pcall guards and skip silently on a build that lacks the
+    -- API -- without recording it, "no X-Ray button" and "X-Ray button nobody
+    -- pressed" look identical from the outside.
+    plugin.hooks = plugin.hooks or {}
 
     -- Highlight dialog: long-press on an existing highlight (attested hook
     -- point: xray.koplugin/main.lua:172-205).
@@ -196,13 +223,17 @@ function XRayLookup.setup(plugin)
                     end,
                 }
             end)
+            plugin.hooks.highlight = true
         end
     end)
 
-    -- New dict-button API only (attested hook point:
-    -- xray.koplugin/main.lua:208-219). The legacy onDictButtonsReady hook for
-    -- pre-PR#15184 KOReader builds is deliberately not ported, per the task
-    -- brief.
+    -- The NEW dict-button API. It arrived with PR #15184 on 2026-05-04 and is
+    -- in no tagged release yet: v2026.03 does not have it, which is why a
+    -- device running a release showed no X-Ray button at all until the
+    -- DictButtonsReady handler in main.lua was added. The two are mutually
+    -- exclusive -- the event was deleted in the same commit that added this
+    -- method -- so each side guards on what the running build actually offers
+    -- and exactly one of them fires.
     pcall(function()
         if ui.dictionary and type(ui.dictionary.addToDictButtons) == "function" then
             ui.dictionary:addToDictButtons{
@@ -210,13 +241,21 @@ function XRayLookup.setup(plugin)
                 menu_text = _("X-Ray"),
                 text = "X-Ray",
                 callback = function(dict_popup)
-                    local word = dict_popup and (dict_popup.word or dict_popup.text)
+                    local word = XRayLookup.wordFromDictPopup(dict_popup)
                     closeAndClearSelection(ui, dict_popup)
                     performLookup(plugin, word)
                 end,
             }
+            plugin.hooks.dict_api = true
         end
     end)
 end
+
+-- Exposed for main.lua's onDictButtonsReady handler. That event is delivered
+-- to the plugin object, because the plugin is what sits in KOReader's event
+-- chain -- so the button's callback has to live there while the work stays
+-- here.
+XRayLookup.perform = performLookup
+XRayLookup.dismiss = closeAndClearSelection
 
 return XRayLookup
