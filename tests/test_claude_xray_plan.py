@@ -31,20 +31,31 @@ def _book(tmp_path):
 def test_plan_chunks_match_generate_xray_chunking(tmp_path):
     book, _ = _book(tmp_path)
 
-    # Recompute the ground truth exactly as generate_xray does.
+    # Recompute the SPLIT independently -- that is what must not drift, because
+    # a planner and a reader that disagree here make every chunk miss its cache
+    # file. The percent is checked separately below rather than mirrored: a
+    # second copy of the rounding rule would only test that the copy matches.
     cps = plan_checkpoints(book)
     expected = []
     prev = 0
     for cp_idx, cp in enumerate(cps):
         segment = book.full_text[prev:cp.offset]
         for chunk_idx, text in enumerate(_chunk_segment(segment)):
-            expected.append((cp_idx, chunk_idx, cp.percent, text))
+            expected.append((cp_idx, chunk_idx, text))
         prev = cp.offset
 
-    got = [(c["cp_idx"], c["chunk_idx"], c["percent"], c["text"]) for c in plan_chunks(book)]
-    assert got == expected
+    chunks = plan_chunks(book)
+    assert [(c["cp_idx"], c["chunk_idx"], c["text"]) for c in chunks] == expected
     # sanity: at least one checkpoint produced more than one chunk
-    assert any(c["chunk_idx"] > 0 for c in plan_chunks(book))
+    assert any(c["chunk_idx"] > 0 for c in chunks)
+
+    # Each chunk carries its OWN percent: never decreasing, within range, and
+    # the last one is the end of the book.
+    pcts = [c["percent"] for c in chunks]
+    assert pcts == sorted(pcts)
+    assert all(1 <= p <= 100 for p in pcts)
+    assert pcts[-1] == 100
+    assert len(set(pcts)) > len(cps), "chunk percents must be finer than the checkpoint grid"
 
 
 def test_write_plan_emits_prompts_and_manifest(tmp_path):

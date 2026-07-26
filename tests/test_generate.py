@@ -144,10 +144,41 @@ def test_oversized_segment_is_subchunked(tmp_path):
     book = _filler_book(reps=6000)
     plan = chunk_plan(book)
 
-    assert any(len(chunk_list) > 1 for _cp, chunk_list in plan), "fixture too small to split"
+    assert any(len(chunk_list) > 1 for _cp, chunk_list, _pcts in plan), "fixture too small to split"
 
     doc = _run(book, tmp_path)
     assert validate(doc) == []
+
+
+def test_every_chunk_becomes_its_own_stage(tmp_path):
+    """The staging grid is the CHUNK grid, not the checkpoint grid.
+
+    `plan_checkpoints` is a port of the on-device generator, where every
+    checkpoint cost an API call at read time -- which is why there are only
+    10-12 of them. On the desktop that constraint is gone: the extraction has
+    already happened, at chunk granularity, so freezing a snapshot after every
+    chunk costs nothing but document size and needs no re-extraction, because
+    no chunk boundary moves.
+
+    Measured on Der Herr der Ringe Bd. 1 before this change: checkpoints at 4 %
+    and 16 % with nothing in between, so a reader at 15 % got the 4 % snapshot
+    -- 8 characters where the next stage had 51, and Gandalf in the gap.
+
+    Equal percents collapse into one stage: `schema.validate` requires strictly
+    ascending percents, and two stages the device cannot tell apart are one
+    stage anyway.
+    """
+    book = _filler_book(reps=6000)
+    plan = chunk_plan(book)
+    assert sum(len(chunks) for _cp, chunks, _pcts in plan) > len(plan), \
+        "fixture too small -- no checkpoint holds several chunks"
+
+    doc = _run(book, tmp_path)
+
+    expected = sorted({p for _cp, _chunks, pcts in plan for p in pcts})
+    assert [c["percent"] for c in doc["checkpoints"]] == expected
+    assert len(expected) > len(plan), "staging must be finer than the checkpoint grid"
+    assert doc["last_percent"] == 100
 
 
 # ---------------------------------------------------------------------------

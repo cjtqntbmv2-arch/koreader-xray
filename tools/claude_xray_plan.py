@@ -25,11 +25,16 @@ def plan_chunks(book):
     Both sides go through chunk_plan(), so the planner cannot drift from the
     reader -- a drift would make every chunk miss its cache file."""
     chunks = []
-    for cp_idx, (cp, chunk_list) in enumerate(chunk_plan(book)):
+    for cp_idx, (_cp, chunk_list, chunk_pcts) in enumerate(chunk_plan(book)):
         for chunk_idx, text in enumerate(chunk_list):
             chunks.append({
+                # The chunk's OWN percent, not its checkpoint's: it is what the
+                # extraction prompt tells the model about how far into the book
+                # this text sits, and it is the percent the finished stage will
+                # carry. A checkpoint's percent would overstate every chunk but
+                # its last.
                 "cp_idx": cp_idx, "chunk_idx": chunk_idx,
-                "percent": cp.percent, "text": text,
+                "percent": chunk_pcts[chunk_idx], "text": text,
             })
     return chunks
 

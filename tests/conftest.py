@@ -25,7 +25,7 @@ def write_chunk_cache(book, workdir, language, detail_level, responses=()):
     clean_response over them on load.
     """
     os.makedirs(workdir, exist_ok=True)
-    for cp_idx, (_cp, chunk_list) in enumerate(chunk_plan(book)):
+    for cp_idx, (_cp, chunk_list, _pcts) in enumerate(chunk_plan(book)):
         for chunk_idx, text in enumerate(chunk_list):
             data = dict(_EMPTY_EXTRACT)
             for needle, response in responses:

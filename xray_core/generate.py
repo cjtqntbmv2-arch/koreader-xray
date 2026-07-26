@@ -52,6 +52,29 @@ def _paragraph_spans(text):
     return spans
 
 
+def _chunk_groups(segment_text, budget=FULL_TEXT_BUDGET):
+    """Paragraph-aligned (start, end) spans, one per chunk.
+
+    Split out of `_chunk_segment` so the staging grid can be derived from the
+    SAME grouping the chunk texts come from. A second pass walking the
+    paragraphs again would be free to drift, and a drifted grid would stage
+    entries against text they were not extracted from -- a D4 hazard, not a
+    cosmetic one.
+    """
+    if len(segment_text) <= budget:
+        return [(0, len(segment_text))]
+
+    spans = _paragraph_spans(segment_text)
+    groups = [spans[0]]
+    for p_start, p_end in spans[1:]:
+        g_start, _ = groups[-1]
+        if p_end - g_start <= budget:
+            groups[-1] = (g_start, p_end)
+        else:
+            groups.append((p_start, p_end))
+    return groups
+
+
 def _chunk_segment(segment_text, budget=FULL_TEXT_BUDGET, overlap=CHUNK_OVERLAP):
     """Split into <=budget chunks at paragraph boundaries. Every chunk after
     the first is prefixed with up to `overlap` chars of the immediately
@@ -67,15 +90,7 @@ def _chunk_segment(segment_text, budget=FULL_TEXT_BUDGET, overlap=CHUNK_OVERLAP)
     if len(segment_text) <= budget:
         return [segment_text]
 
-    spans = _paragraph_spans(segment_text)
-    groups = [spans[0]]
-    for p_start, p_end in spans[1:]:
-        g_start, _ = groups[-1]
-        if p_end - g_start <= budget:
-            groups[-1] = (g_start, p_end)
-        else:
-            groups.append((p_start, p_end))
-
+    groups = _chunk_groups(segment_text, budget)
     chunks = [segment_text[groups[0][0]:groups[0][1]]]
     for g_start, g_end in groups[1:]:
         prefix_start = max(0, g_start - overlap)
@@ -123,18 +138,40 @@ def _generator_version():
 
 
 def chunk_plan(book: BookText):
-    """[(checkpoint, [chunk_text, ...]), ...] -- the extraction unit list.
+    """[(checkpoint, [chunk_text, ...], [chunk_percent, ...]), ...] -- the
+    extraction unit list AND the staging grid.
 
     The single definition of how a book is cut up, shared by the planner
     (which writes one prompt per chunk) and by generate_xray (which reads one
     result per chunk back). If these two ever disagreed, every chunk would
     miss its cache file.
+
+    The percents are per CHUNK, not per checkpoint. `plan_checkpoints` decides
+    where the text is cut for extraction, and its 10-12 stages are an artefact
+    of the on-device generator this ports, where every checkpoint cost an API
+    call at read time. Here the extraction has already happened, so freezing a
+    snapshot after each chunk is free and cuts the reader's lag from a dozen
+    percentage points to a couple (measured: 4 % and 16 % with nothing between
+    them left a reader at 15 % looking at 8 characters instead of 51). Chunk
+    TEXTS are untouched by this, so an existing chunk cache stays valid.
     """
     cps = plan_checkpoints(book)
+    total = len(book.full_text) or 1
     plan, prev_offset = [], 0
     for cp in cps:
-        plan.append((cp, _chunk_segment(book.full_text[prev_offset:cp.offset])))
+        segment = book.full_text[prev_offset:cp.offset]
+        ends = [prev_offset + g_end for _, g_end in _chunk_groups(segment)]
+        # The segment's last chunk ends AT the checkpoint whatever trailing
+        # whitespace the paragraph spans dropped -- otherwise the final stage
+        # could fall short of 100 %.
+        ends[-1] = cp.offset
+        # Round UP, like plan_checkpoints: a stage must never claim less
+        # coverage than its snapshot has, or the device unlocks it too early.
+        pcts = [max(1, min(100, -(-end * 100 // total))) for end in ends]
+        plan.append((cp, _chunk_segment(segment), pcts))
         prev_offset = cp.offset
+    if plan:
+        plan[-1][2][-1] = 100  # the book's end is 100 %, not 99 % from rounding
     return plan
 
 
@@ -151,7 +188,7 @@ def generate_xray(book: BookText, language, detail_level, workdir,
     plan = chunk_plan(book)
 
     results, missing = {}, []
-    for cp_idx, (_cp, chunk_list) in enumerate(plan):
+    for cp_idx, (_cp, chunk_list, _pcts) in enumerate(plan):
         for chunk_idx in range(len(chunk_list)):
             path = _chunk_path(workdir, cp_idx, chunk_idx, language, detail_level)
             if not os.path.exists(path):
@@ -176,10 +213,18 @@ def generate_xray(book: BookText, language, detail_level, workdir,
     # index order, which is the book's own order.
     state = BookState(language)
     checkpoints_out = []
-    for cp_idx, (cp, chunk_list) in enumerate(plan):
+    for cp_idx, (_cp, chunk_list, chunk_pcts) in enumerate(plan):
         for chunk_idx in range(len(chunk_list)):
-            state.merge_segment(results[(cp_idx, chunk_idx)], cp.percent)
-        checkpoints_out.append({"percent": cp.percent, "snapshot": state.snapshot()})
+            pct = chunk_pcts[chunk_idx]
+            state.merge_segment(results[(cp_idx, chunk_idx)], pct)
+            # One stage per distinct percent: schema.validate demands strictly
+            # ascending percents, and two stages the device cannot tell apart
+            # are one stage to it anyway. The later merge wins, so the stage
+            # always holds everything up to its own percent.
+            if checkpoints_out and checkpoints_out[-1]["percent"] == pct:
+                checkpoints_out[-1]["snapshot"] = state.snapshot()
+            else:
+                checkpoints_out.append({"percent": pct, "snapshot": state.snapshot()})
 
     doc = {
         "schema_version": SCHEMA_VERSION,
