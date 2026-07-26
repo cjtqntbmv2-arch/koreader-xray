@@ -27,11 +27,16 @@ jobs:
           python-version: '3.x'
 
       # Seit dem Monorepo-Umzug lebt die Desktop-Seite hier mit. Die Tests laufen
-      # ohne Netz und ohne calibre (stdlib only), also braucht dieser Schritt kein
-      # requirements-Handling -- und ein rotes Baum-Ergebnis kann kein Release mehr
-      # erzeugen, weil der Job hier abbricht.
+      # ohne Netz und ohne calibre (stdlib only) -- aber pytest ist selbst ein
+      # Fremdpaket und liegt auf dem Runner nicht bereit. Genau daran ist der
+      # erste Lauf dieses Schritts gescheitert ("No module named pytest"): dass
+      # der Testinhalt nichts braucht, heisst nicht, dass der Testlaeufer schon
+      # da ist. Ein rotes Baum-Ergebnis kann kein Release mehr erzeugen, weil der
+      # Job hier abbricht.
       - name: Run tests
-        run: python -m pytest tests/ -q
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest tests/ -q
 
       # The device side has exactly one thing worth testing without a device:
       # which snapshot a reading position is allowed to see. That is the D4
