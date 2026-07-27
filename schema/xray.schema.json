@@ -52,6 +52,10 @@
             "type": "integer", "minimum": 1, "maximum": 100,
             "description": "Rounded UP from the checkpoint's char offset, so it never claims less coverage than its snapshot actually has: the device compares its reading position straight against this value."
           },
+          "recap": {
+            "type": "string",
+            "description": "Optional 'story so far' prose for this stage, covering 0..percent and nothing beyond. Only a subset of stages carries one (the recap pass writes at most 12 per book); the device walks back to the newest stage at or below the reader. Absent means the feature is off for this document -- never an error, and never an empty string."
+          },
           "snapshot": {
             "type": "object",
             "required": ["characters", "locations", "terms", "historical_figures"],

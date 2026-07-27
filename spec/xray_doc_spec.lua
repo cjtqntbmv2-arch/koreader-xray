@@ -118,3 +118,61 @@ describe("XRayDoc.timeline", function()
         assert.equals(0, #XRayDoc.timeline(doc, idx))
     end)
 end)
+
+-- Seven stages so an index can sit *between* two staged recaps. Recaps only
+-- exist on the stages a test asks for -- partial coverage is the normal state
+-- of a document, not a defect: the generation pass is one model call per
+-- stage and an interrupted run leaves the later ones unwritten.
+local function makeStagedDoc(recaps)
+    local checkpoints = {}
+    for i = 1, 7 do
+        checkpoints[i] = { percent = i * 12, snapshot = {} }
+    end
+    for idx, text in pairs(recaps or {}) do
+        checkpoints[idx].recap = text
+    end
+    return { checkpoints = checkpoints }
+end
+
+describe("XRayDoc.recap", function()
+    it("returns the recap of the selected stage", function()
+        local doc = makeStagedDoc({ [5] = "recap at five" })
+        assert.equals("recap at five", XRayDoc.recap(doc, 5))
+    end)
+
+    it("walks back to the nearest earlier stage that has one", function()
+        local doc = makeStagedDoc({ [2] = "recap at two", [5] = "recap at five" })
+        assert.equals("recap at five", XRayDoc.recap(doc, 7))
+    end)
+
+    -- The D4 bound. Without this case an implementation that ignores idx and
+    -- returns the last non-empty recap in the document passes every other
+    -- assertion here -- and hands a reader at 30% the recap written for the
+    -- ending.
+    it("never returns a recap from a stage beyond the reader", function()
+        local doc = makeStagedDoc({ [2] = "recap at two", [5] = "recap at five" })
+        assert.equals("recap at two", XRayDoc.recap(doc, 3))
+    end)
+
+    -- "" is truthy in Lua, so `cp.recap or nil` would stop here and hand the
+    -- viewer an empty page instead of the perfectly good earlier recap.
+    it("treats an empty string as no recap and keeps walking back", function()
+        local doc = makeStagedDoc({ [2] = "recap at two", [5] = "" })
+        assert.equals("recap at two", XRayDoc.recap(doc, 5))
+    end)
+
+    it("returns nil when no stage carries a recap", function()
+        assert.is_nil(XRayDoc.recap(makeStagedDoc(), 7))
+    end)
+
+    it("returns nil when no checkpoint has been reached", function()
+        local doc = makeStagedDoc({ [2] = "recap at two" })
+        assert.is_nil(XRayDoc.recap(doc, nil))
+    end)
+
+    it("survives malformed documents", function()
+        assert.is_nil(XRayDoc.recap(nil, 3))
+        assert.is_nil(XRayDoc.recap({}, 3))
+        assert.is_nil(XRayDoc.recap({ checkpoints = "nope" }, 3))
+    end)
+end)

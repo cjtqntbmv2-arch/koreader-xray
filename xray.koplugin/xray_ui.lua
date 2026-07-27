@@ -379,6 +379,44 @@ function XRayUI.showStatus(plugin, doc, cp_idx, pct)
     end
 end
 
+
+-- Unlike the category views, this one is reachable on documents that carry no
+-- recaps at all, so the "there is none" case is answered here rather than by
+-- hiding the menu entry: hiding it would force XRayDoc.load -- and with it a
+-- mkdir+unzip over the whole EPUB -- into the menu build, which is data-free
+-- today.
+--
+-- The two empty cases are NOT the same and must not share a message.
+-- showNotYetAvailable speaks about checkpoints ("X-Ray data available from
+-- N%") and is right only while the reader is still short of the first one; on
+-- a document whose first stage sits at 1%, telling a reader at 60% that data
+-- starts at 1% would be false twice over.
+function XRayUI.showRecap(doc, cp_idx)
+    local ok, err = pcall(function()
+        if not cp_idx then
+            showNotYetAvailable(doc)
+            return
+        end
+
+        local text = XRayDoc.recap(doc, cp_idx)
+        if not text then
+            UIManager:show(InfoMessage:new{
+                text = _("This book's X-Ray data contains no recap."),
+                timeout = 3,
+            })
+            return
+        end
+
+        UIManager:show(TextViewer:new{
+            title = _("Story so far"),
+            text = text,
+        })
+    end)
+    if not ok then
+        logger.warn("XRayUI.showRecap failed: " .. tostring(err))
+    end
+end
+
 -- ---------------------------------------------------------------------------
 -- Diagnostics
 --

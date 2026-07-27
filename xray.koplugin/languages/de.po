@@ -245,3 +245,9 @@ msgstr "Gesichert unter"
 
 msgid "Could not save the diagnostics."
 msgstr "Die Diagnose konnte nicht gesichert werden."
+
+msgid "Story so far"
+msgstr "Was bisher geschah"
+
+msgid "This book's X-Ray data contains no recap."
+msgstr "Die X-Ray-Daten dieses Buchs enthalten keinen Rückblick."

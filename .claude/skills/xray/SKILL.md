@@ -96,7 +96,54 @@ claims would stage spoilers wrongly.
 `--out` may be the book's own directory. Nothing here writes an EPUB, so
 nothing can overwrite the source.
 
-## 4. Report and hand over
+## 4. Recap (optional)
+
+A "story so far" prose recap the reader can open mid-book, staged like
+everything else so it never describes anything past their position. Skipping
+this step leaves a perfectly valid document — the device just does not offer
+the entry.
+
+**Decide before handing the book over in §5.** Adding recaps afterwards means
+embedding into a book that already carries `xray/xray.json`: the append path
+refuses that, the calibre plugin falls back to a full rewrite, and it warns —
+correctly — that KOReader may then see the book as a different one and reset
+its reading statistics.
+
+```
+python3 -m tools.claude_xray_recap plan "<EPUB>" --doc "<OUTDIR>/xray.json" --workdir "<WORKDIR>"
+```
+
+This writes at most 12 prompt files plus `recap_manifest.json`. A document
+carries ~57 per-chunk stages; one recap each would add ~20k words of prose to a
+file the device unzips on e-ink hardware, so the pass spreads a dozen over the
+book and the device walks back to the newest one at or below the reader.
+
+Dispatch subagents exactly as in §2 — model `sonnet`, several stages per agent,
+**absolute** workdir path — and instruct each, for each of its stages:
+
+- Read `<ABSOLUTE-WORKDIR>/<prompt_file>`. It already carries the instruction
+  and all the material; nothing needs to be added to it.
+- Write the prose, and nothing else, to `<ABSOLUTE-WORKDIR>/<out_file>`,
+  **directly** with the write tool. Plain text — no JSON, no headings, no
+  preamble like "Here is the recap".
+- Use only the events and characters the prompt lists. Anything else is a
+  spoiler, and the fold step will throw the recap away for it.
+
+```
+python3 -m tools.claude_xray_recap fold --doc "<OUTDIR>/xray.json" --workdir "<WORKDIR>" --out "<OUTDIR>"
+```
+
+Folding validates and rewrites both filenames. It drops any recap that names a
+character who only appears in a later stage, and prints which — re-dispatch
+that stage's subagent if the recap is wanted back. Stages whose prose was never
+written are skipped; partial coverage is fine.
+
+**After any re-run of §3, run `fold` again.** `assemble` rebuilds the
+checkpoints from the chunk cache alone and overwrites both files, so a repeated
+assemble removes every recap without saying so. The prose is still in the
+workdir, so re-folding costs nothing.
+
+## 5. Report and hand over
 
 Give the user both paths and the route that fits them:
 

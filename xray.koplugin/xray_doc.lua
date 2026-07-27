@@ -371,6 +371,26 @@ function XRayDoc.snapshot(doc, idx)
     return cp and cp.snapshot or nil
 end
 
+-- Recaps exist only on the stages the generation pass covered (~11 of the ~57
+-- a document carries), so any other reading position walks BACK to the newest
+-- recap at or below it -- never forward, which would describe the book past
+-- the reader. Partial coverage is normal, not a defect: the pass is one model
+-- call per stage and an interrupted run leaves the later ones unwritten.
+-- `""` counts as absent. The fold pass omits the key rather than writing an
+-- empty string, but a hand-edited document can carry one, and `""` is truthy
+-- in Lua -- `cp.recap or nil` would stop here and show an empty page.
+function XRayDoc.recap(doc, idx)
+    if type(doc) ~= "table" or type(doc.checkpoints) ~= "table" then return nil end
+    if type(idx) ~= "number" then return nil end
+
+    for i = idx, 1, -1 do
+        local cp = doc.checkpoints[i]
+        local text = type(cp) == "table" and cp.recap or nil
+        if type(text) == "string" and text ~= "" then return text end
+    end
+    return nil
+end
+
 -- The timeline is a flat, whole-book list at the document level, NOT nested
 -- inside each snapshot (generate.py/merge.py) -- rendering it unfiltered
 -- would show a reader at 5% the end of the book. Filtering against the

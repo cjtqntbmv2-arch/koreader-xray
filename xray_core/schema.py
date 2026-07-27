@@ -131,6 +131,17 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
                 )
             prev_percent = percent
 
+        # Optional, and checked before the snapshot block below because that
+        # one `continue`s on a malformed snapshot -- a bad recap would slip
+        # through unmentioned otherwise. A document generated without the
+        # recap pass simply has no such key; the device gates on presence, not
+        # on schema_version, so its absence is a feature being off rather than
+        # an error. When it is there it must be prose: the viewer renders it
+        # verbatim into a TextViewer.
+        recap = cp.get("recap")
+        if recap is not None and not isinstance(recap, str):
+            problems.append(f"{label}.recap must be a string")
+
         snapshot = cp.get("snapshot")
         if not isinstance(snapshot, dict):
             problems.append(f"{label}.snapshot must be an object")
