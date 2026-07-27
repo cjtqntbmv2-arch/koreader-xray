@@ -175,101 +175,210 @@ sofort (`checkpoint 15%: recap names 'Emeric Thale'`).
 
 ## B — Beziehungs-Ego-Netz
 
+Fassung 3 (2026-07-27, nach dem Interview zu Feature B). Fassung 2 setzte
+stillschweigend voraus, dass Kanten aus den Buchtext-Chunks fallen, und leitete
+daraus drei Merge-Umbauten, eine `first_pct`-Stempelung und einen selbst
+geschriebenen Bresenham ab. Der Nachlauf-Weg, der sich bei Feature A bewährt
+hat, macht alle fünf gegenstandslos. Was davon warum entfällt, steht unten unter
+„Was ersatzlos entfällt" — die Belege der alten Fassung waren richtig, nur die
+Voraussetzung war es nicht.
+
+### Erzeugung: ein Aufruf pro Buch, im Nachlauf
+
+`tools/claude_xray_relations.py`, gebaut wie `claude_xray_recap.py`: liest das
+fertige `xray.json`, schreibt eine Prompt-Datei, faltet die Antwort ein,
+validiert, schreibt **beide** Dateinamen neu.
+
+Material für den einen Aufruf: die `characters`- und `historical_figures`-Liste
+der **letzten** Stage, mit Namen, Aliasen und Beschreibungen. Nicht der
+Buch-Rohtext. Ein Aufruf pro Buch statt einer pro Stage, weil D4 hier nicht aus
+dem Material entsteht, sondern am Gerät (siehe unten) — und ein Nachlauf über
+alle 43 Stages wäre der vierfache Aufwand des Recaps für dieselbe Anzeige.
+
+Weil der Nachlauf nur das fertige Dokument braucht, lassen sich **bestehende
+Bücher nachrüsten**, ohne einen einzigen Buchtext-Chunk erneut zu holen.
+
 ### Daten
 
-Kanten am Charakter-Objekt:
+Flache Liste auf Dokumentebene, Geschwister von `checkpoints` — nicht am
+Charakter, weil die Kanten den Merge nie berühren:
 
 ```json
-{ "name": "Ned Stark",
-  "relations": [ { "to": "Robb Stark", "label": "father of", "first_pct": 12 } ] }
+{ "schema_version": 2,
+  "checkpoints": [ … ],
+  "relations": [
+    { "from": "Robb Stark",    "to": "Eddard Stark", "label": "Vater" },
+    { "from": "Eddard Stark",  "to": "Robb Stark",   "label": "Sohn" }
+  ] }
 ```
 
-### Drei Stellen, an denen Kanten heute verschwinden
+`label` benennt die Rolle, die `to` für `from` hat — in Robbs Netz steht neben
+Eddard „Vater". Jede Beziehung wird deshalb **zweimal** geliefert, einmal je
+Richtung. Das Gerät filtert dann nur auf `from` und braucht keinerlei
+Umkehrlogik; ein `label_rev` und die Frage, was ein fehlendes `label_rev`
+anrichtet, entfallen. Kein `first_pct` (siehe D4 unten).
 
-**1. `clean_response` verwirft sie.** `merge.py:362-378` baut jeden Charakter
-aus einem festen Key-Set neu auf (`name`, `role`, `description`, `gender`,
-`occupation`, `aliases`); `relations` fällt heraus. Nachgemessen: `relations
-survived: False`. Die Funktion läuft zweimal — in `claude_xray_assemble.py:68`
-und beim Cache-Laden in `generate.py:204`, ein handgepatchter Chunk-Cache wird
-also ebenfalls gestrippt. → `relations` in die Comprehension aufnehmen, mit
-einem Mini-Cleaner analog `_aliases`.
+Vergisst das Modell eine Gegenrichtung, **fehlt** die Kante in einem der beiden
+Netze, statt falsch beschriftet zu erscheinen. Der `fold` meldet jede
+unerwiderte Kante — stillschweigend durchlassen darf er sie nicht, sonst ist
+das Netz asymmetrisch und niemand erfährt es.
 
-Damit ist die Aussage aus Fassung 1, das koste „bei der Erzeugung fast nichts",
-falsch: ohne diese Änderung kommt das Feld nie an.
+**Enge statt Vollständigkeit.** Der Prompt gibt die zulässigen Arten vor —
+Verwandtschaft, Herrschaft/Dienst, Bündnis, Feindschaft, Liebe/Ehe,
+Mentorschaft — und höchstens fünf je Figur. Flüchtige Begegnungen („trifft",
+„kennt") fallen raus. Auf 6 Zoll ist Sparsamkeit die Qualität: damit passen die
+Nachbarn praktisch immer auf eine Bildschirmseite, und die Kappung wird zur
+Absicherung statt zum Regelfall. Labels folgen `language` wie aller andere
+erzeugte Text.
 
-**2. `BookState._merge` kann keine Listen vereinigen.** Beide vorhandenen
-Feldregeln sind Skalarzuweisung (`merge.py:617-622`). Nachgemessen: ohne
-Regel-Eintrag gewinnt das erste Segment und alle späteren Kanten gehen verloren;
-mit `relations` in `newest_wins` gewinnt das letzte und alle früheren gehen
-verloren. → Eigene Kantenschleife in `merge_segment` nach den vier
-`_merge`-Aufrufen; `_merge` bleibt unangetastet. Vereinigung nach `(to, label)`,
-kleinstes `first_pct` gewinnt.
+### D4 entsteht am Gerät, konstruktiv
 
-**3. Der Chunk-Cache ist nicht auf den Feldsatz geschlüsselt.** `_chunk_path`
-(`generate.py:114-123`) schlüsselt auf `(cp_idx, chunk_idx, language,
-detail_level)`. `SKILL.md` weist ausdrücklich an, unterbrochene Läufe zu
-resumen — ein vor dieser Änderung begonnenes workdir liefert dann still ein
-Dokument ganz ohne Kanten. → Feldsatz-Marker in den Dateinamen, mit derselben
-Begründung, die der dortige Docstring für `language`/`detail_level` schon gibt.
+Der eine Nachlauf sieht das gesamte Figurenpersonal. Die Spoilerfreiheit trägt
+deshalb **allein der Anzeigefilter**, und der ist eine einzige Regel:
 
-### `first_pct` wird gestempelt, nicht erfragt
+> Eine Kante wird gezeigt, wenn **beide** Endpunkte in `characters` **oder**
+> `historical_figures` des gerade sichtbaren Snapshots auflösen (Name oder
+> Alias, case-insensitiv).
 
-Der Chunk-Subagent sieht ein Textstück und weiß nicht, bei welchem Buchprozent
-er steht — er lässt `first_pct` weg oder rät. Nachgemessen: eine Kante ohne
-`first_pct` rutscht durch jeden Guard (`schema.py:214` springt bei absentem Feld
-nicht an) und landet im **frühesten** Snapshot; `validate()` liefert `[]`.
+Damit kann keine Kante einen Namen zeigen, den der Leser an dieser Stelle nicht
+ohnehin in der Liste findet — der Fall „`first_pct` ist korrekt, aber der Name
+selbst ist der Spoiler" aus Fassung 2 kann gar nicht erst entstehen. Es gibt
+kein Feld, das ein Modell raten müsste, und keinen Snapshot-Filter am Desktop.
+Historische Figuren sind gültige Ziele, weil sie aus **demselben** Snapshot
+stammen, also derselben Spoilergrenze unterliegen; im Netz werden sie optisch
+abgesetzt, damit ablesbar bleibt, dass ein Tap dort in eine andere Kategorie
+führt.
 
-**Also:** `first_pct` beim ersten Sehen im Merge mit `checkpoint_pct` stempeln,
-genau wie bei Entitäten (`merge.py:587-590`). Das Modell liefert das Feld gar
-nicht. Damit gilt D4 für Kanten konstruktiv, und `_validate_chronology_entry`
-wird **nicht** wiederverwendet — es verlangt `name` und `first_seq`, die eine
-Kante nicht hat (nachgemessen: zwei Fehler pro Kante). Das Schema bekommt nur
-eine Formprüfung.
+Der `fold` verwirft zusätzlich schon am Desktop, was in der letzten Stage nicht
+auflöst — das fängt Halluzinationen ab, bevor sie ausgeliefert werden.
 
-### Kantenziele: eine Regel gegen drei Fehler
-
-`to` ist ein roher Modell-String und trifft nicht verlässlich einen Knoten.
-Zwei belegte Fälle:
-
-- **Namensdrift im Merge:** Segment 1 kennt „Ser Jaime Lennister", Segment 2
-  „Jaime Lennister". `_pick_canonical` (`merge.py:599-603`) benennt den Knoten
-  um und schiebt die alte Form in `aliases` — die Kante zeigt weiter auf den
-  alten String. Ein Namensvergleich auf dem Gerät findet nichts, die eingehende
-  Kante fehlt in Jaimes Netz.
-- **Ziel existiert im Snapshot noch nicht:** Eine bei 15 % extrahierte Kante
-  `Ned Stark --(Vater von)--> Jon Snow` zeigt bei 15 % den Namen einer Figur,
-  die dort in keiner Liste steht. `first_pct` ist dabei völlig korrekt — **der
-  Name selbst ist der Spoiler.**
-
-**Regel:** Beim Einfrieren eines Snapshots werden Kanten verworfen, deren `to`
-nicht auf einen Eintrag *derselben* Snapshot-Charakterliste auflöst (Name oder
-Alias). Am Desktop, weil dort die kanonischen Namen und Aliase bekannt sind —
-das Gerät braucht dann keine Alias-Auflösung und kann nichts falsch machen.
-Eine Regel schließt Namensdrift, Namens-Spoiler und tote, nicht antippbare
-Knoten.
+**Bekannte Grenze: früh eingefrorene Umbenennungen.** `_pick_canonical`
+(`merge.py:599-603`) benennt einen Knoten um und schiebt die *alte* Form in
+`aliases`; `snapshot()` friert per `deepcopy` ein (`merge.py:670`). Heißt eine
+Figur in Stage 5 noch „Ser Jaime Lennister" und erst ab Stage 20 „Jaime
+Lennister", steht die spätere Form im Stage-5-Snapshot weder als Name noch als
+Alias. Eine Kante auf den kanonischen Namen löst dort also nicht auf und
+**fehlt**, bis der Leser die umbenennende Stage erreicht. Das ist die
+D4-sichere Richtung des Fehlers (zu wenig, nie zu viel), betrifft nur
+umbenannte Figuren und wird bewusst nicht behandelt — jede Gegenmaßnahme
+verlangte Alias-Historie im Dokument oder Auflösungslogik am Gerät, beides
+teurer als der Schaden.
 
 ### Darstellung
 
-Neues `xray_graph.lua`: eigenes Widget mit eigenem `paintTo`, Vorbild
-`frontend/ui/widget/bookmapwidget.lua`.
+**In zwei Phasen ausgeliefert** (Beschluss 2026-07-27, nach der Aufwandsmessung
+unten): Phase 1 zeigt die Nachbarn als `Menu` nach dem Muster der bestehenden
+Kategorielisten — ~25 Zeilen, nur erprobte Widgets, kein neues Modul. Daten,
+Spoilerfilter, Einstieg und Tap-Navigation sind damit vollständig und am Gerät
+abnehmbar. Phase 2 tauscht allein die Darstellung gegen das unten beschriebene
+gezeichnete Netz aus, wenn es echte Kanten zum Draufschauen gibt. Details in
+`docs/plans/2026-07-27-beziehungsnetz-plan.md`.
 
-- **Layout:** gewählte Figur im Zentrum, Nachbarn radial gleichverteilt.
-  Mehr als 8 Nachbarn werden nach `first_pct` gekappt (früheste zuerst), mit
-  Hinweiszeile „+N weitere". `table.sort` braucht dabei einen Fallback für
-  fehlende Werte — sonst `attempt to compare nil with number`.
+Das gezeichnete Netz (Phase 2): neues `xray_graph.lua`, eigenes Widget mit
+eigenem `paintTo`, Vorbild `frontend/ui/widget/bookmapwidget.lua` (dort
+`bb:paintRect` bei :610, :617, :2116).
+
+- **Layout:** gewählte Figur mittig, Nachbarn in je einer Spalte links und
+  rechts, abwechselnd befüllt.
+- **Kanten:** waagerechte Striche von der Mittelfigur zur jeweiligen Spalte —
+  reines `paintRect`. Kein Bresenham, keine selbst geschriebene Rasterlinie.
+  Belegt gegen `koreader-base/ffi/blitbuffer.lua`: `paintRect`,
+  `paintRoundedRect`, `setPixel`, `paintCircle`, `paintBorder` existieren,
+  `paintLine` tatsächlich nicht.
 - **Knoten:** `paintRoundedRect`, Beschriftung über
-  `RenderText:renderUtf8Text(bb, x, y + baseline, …)`.
-- **Kanten:** Speichen vom Zentrum. KOReaders BlitBuffer hat **kein**
-  `paintLine` — Diagonalen als ~20-Zeilen-Bresenham über `bb:setPixel`, genau
-  wie `hatchRect` es intern macht. (`LineWidget` hilft nicht, das ist trotz
-  Namens nur `paintRect`.)
+  `RenderText:renderUtf8Text(bb, x, y + baseline, …)`; historische Figuren mit
+  abgesetztem Rahmen.
+- **Keine Kappung.** Fassung 2 kappte bei 8 und wollte die Grenze aus der
+  Schriftgröße messen; eine Zwischenfassung rechnete sie aus der
+  Bildschirmhöhe. Beides ist gegenstandslos: der `fold` begrenzt bereits auf
+  fünf Kanten je Figur, während eine Clara BW (1072 px, Knoten ~60 px) auf ~17
+  Plätze je Spalte käme. Die Grenze kann nicht greifen — mit ihr entfallen der
+  Parameter, die Frage wer ihn ausrechnet, die Überlaufzeile „+N weitere" und
+  zwei Abnahmefälle. Nähert sich die Kantengrenze je einer Spaltenhöhe, kommt
+  die Kappung zurück, dann im Widget gerechnet.
 - **Tap:** Trefferrechteck pro Knoten; Tap auf einen Nachbarn öffnet dessen
   Ego-Netz, ein Historien-Stack macht „zurück" zum vorigen Netz statt zum Menü.
+  Soll zusätzlich die Detailkarte erreichbar sein, reicht `xray_ui` dafür ein
+  Callback hinein — `xray_graph` darf `xray_ui` **nicht** requiren, das wäre
+  ein Zyklus (`xray_ui` → `xray_doc`, `xray_lookup` → `xray_ui`, und `main.lua:24`
+  lädt `xray_lookup` zuerst).
 
-Aufwand: ~200–250 Zeilen in einer neuen Datei.
+Aufwand: **250–350 Zeilen**. Die ~120 einer früheren Fassung waren nicht
+belegt. Gezählte Vergleichswerte: `HistogramWidget` 48 Zeilen für reine Balken
+ohne Text und Tap, `ProgressWidget:paintTo` 117 für *einen* Balken,
+`CalendarDay` 94 für **eine** antippbare beschriftete Box, `BookMapRow` — das
+Vorbild oben — 634. Dazu kommt, dass `xray.koplugin/` bisher **kein** einziges
+`paintTo`, `InputContainer` oder `GestureRange` enthält: es gibt kein
+hauseigenes Gerüst zum Abschreiben.
+
+### Einstieg: Knopf auf der Figurenkarte
+
+Die Detailkarte (`XRayUI.showEntry`, `xray_ui.lua:236`) bekommt unten einen
+Knopf „Beziehungen". `TextViewer.buttons_table` ist dafür vorhanden
+(`textviewer.lua:48`). Kein eigener Menüeintrag: eine Figurenauswahl existiert
+mit `showList` bereits, ein zweiter Einstieg müsste sie duplizieren.
+
+`showEntry` braucht dafür zusätzlich den Snapshot — heute bekommt es nur
+`entry` und `category`. Das betrifft **vier Aufrufer in zwei Dateien**:
+`xray_ui.lua:105` und `:112` (beide in `buildRow`, das die Werte selbst von
+`showList` bekommen muss) sowie `xray_lookup.lua:117` und `:162`. Der
+Lookup-Weg — einen Namen im Text antippen — ist dabei der wichtigste von
+allen, und `showPicker` (`:108`) hält weder `doc` noch `cp_idx`, braucht also
+dieselbe Erweiterung. Übersieht man ihn, fehlt der Knopf dort
+**stillschweigend**, weil `showEntry`s Rumpf in einem `pcall` liegt.
+
+Zwei Formdetails am `TextViewer`: `add_default_buttons = true` muss mitgesetzt
+werden, sonst *ersetzt* `buttons_table` die Standardzeile und die
+**Schließen**-Taste verschwindet von genau den Karten, die das Feature
+betrifft (`textviewer.lua:391-392`, Kommentar `:76-77`). Und `buttons_table`
+ist eine Liste von **Zeilen**, die per `table.insert` in place verändert wird —
+also je Aufruf frisch bauen.
+
+**Ohne übrigbleibende Kanten erscheint der Knopf nicht.** Das widerspricht
+Feature A nur scheinbar: dort bleibt der Menüeintrag sichtbar, weil Ausblenden
+`XRayDoc.load` in den datenfreien `getSubMenuItems` zöge. Auf der Figurenkarte
+ist das Dokument längst geladen — der Weg dorthin führt durch `showList`, das
+`doc` hält. Prüfen kostet hier also nichts.
+
+Der Kopfkommentar von `xray_ui.lua:6-10` nennt „linked entries" ausdrücklich
+als Feature, das dieser Rebuild weggeworfen hat. Wir holen einen Teil davon
+zurück — aber als Knopf auf dem bestehenden `TextViewer`, nicht als Rückkehr
+zur alten `ButtonDialog`/`VerticalGroup`-Detailansicht, die der Kommentar meint.
+
+### Was ersatzlos entfällt
+
+Alles Folgende stand in Fassung 2 und ist mit dem Nachlauf-Weg gegenstandslos —
+nicht widerlegt, sondern ohne Gegenstand, weil Kanten den Merge nie berühren:
+
+| Aus Fassung 2 | Warum weg |
+|---|---|
+| `clean_response` um `relations` erweitern | Kanten laufen nie durch `clean_response` |
+| Kantenschleife in `merge_segment`, Vereinigung nach `(to, label)` | kein Merge, keine Segmente |
+| Feldsatz-Marker im Chunk-Cache-Schlüssel | Chunk-Cache unberührt |
+| `first_pct` im Merge stempeln | Feld existiert nicht mehr; D4 am Gerät |
+| Kantenfilter beim Einfrieren des Snapshots | Filter am Gerät, gegen den sichtbaren Snapshot |
+| Bresenham über `bb:setPixel` | waagerechte Kanten, `paintRect` genügt |
+| Schriftgröße für 8 Knoten messen | Spalten überlappen nicht, Kappung wird gerechnet |
+
+Damit fällt der Aufwand von „drei Desktop-Umbauten plus 200–250 Zeilen Lua" auf
+„ein Tool plus ~120 Zeilen Lua", und der Altbestand ist ohne neuen
+Buchtext-Lauf nachrüstbar.
 
 ### Verworfene Alternativen
 
+- **Kanten aus dem Extraktions-Prompt** — tiefere Beziehungen, weil das Modell
+  den Rohtext sieht. Preis: die drei Merge-Umbauten oben, und Nachrüsten
+  bestehender Bücher hieße ein kompletter Neulauf über alle Chunks.
+- **Nachlauf pro Stage** (~11 wie beim Recap, oder alle 43) — Spoilerfreiheit
+  doppelt abgesichert, aber bei Rücklauf bekommt eine gerade neu aufgetauchte
+  Figur ein leeres Netz, und 43 Aufrufe sind der vierfache Recap-Aufwand.
+- **Radiales Layout** — sieht am ehesten nach „Graph" aus, verlangt aber
+  Bresenham und lässt bei 8 Nachbarn die Labels auf den Diagonalen überlappen.
+- **Liste statt Bild** (`Menu` wie die Kategorien, ~25 Zeilen) — auf jedem
+  Display garantiert lesbar, aber ausdrücklich kein Bild mehr; das war der Kern
+  der ursprünglichen Idee.
+- **Symmetrische Labels** („Vater und Sohn") — halb so viele Einträge, aber bei
+  Ned im Zentrum und Robb daneben nicht ablesbar, wer der Vater ist.
 - **Fertiges Bild vom Desktop einbetten** — scheitert an der Navigierbarkeit
   (Tap-Ziele auf einem PNG) und an fester Auflösung über sehr verschiedene
   Displays; außerdem ist `xray_core` stdlib-only.
@@ -295,19 +404,29 @@ busted grün**. Jeder Check unten trägt deshalb seine Gegenprobe.
 
 **pytest (Desktop)**
 
-- **Nicht-Vakuität zuerst:** das Fixture-Dokument enthält > 0 Kanten, und der
-  Weg dahin führt durch `clean_response` — nicht durch einen Unit-Test, der sie
-  umgeht. Ohne diese Assertion sind alle folgenden Kanten-Checks vakuum-grün.
-- Schema als **Negativfall**: `recap: 12345` und `relations: "x"` erzeugen je
-  ein `problems`-Element. (Der Positivfall ist heute schon grün und beweist
-  nichts.)
-- D4-Kanten am **ungestempelten** Fall: eine Kante ohne `first_pct` aus einem
-  späten Chunk erscheint in keinem frühen Snapshot. Der Stempel-im-Merge macht
-  das zur Konstruktion, der Test hält sie fest.
-- Kantenziel-Filter: eine Kante auf eine im Snapshot noch nicht vorhandene
-  Figur wird verworfen; eine auf einen umbenannten Knoten (`aliases`) bleibt.
-- Merge vereinigt nach `(to, label)` und behält das kleinste `first_pct` —
-  geprüft über zwei Segmente, nicht über einen direkten `_merge`-Aufruf.
+- **Nicht-Vakuität zuerst:** das Fixture-Dokument enthält nach dem `fold` > 0
+  Kanten, und der Weg dahin führt durch den `fold` — nicht durch einen
+  Unit-Test, der ihn umgeht. Ohne diese Assertion sind alle folgenden
+  Kanten-Checks vakuum-grün.
+- Schema als **Negativfall**: `recap: 12345`, `relations: "x"` und ein
+  Kanteneintrag ohne `to` erzeugen je ein `problems`-Element — **plus
+  Positivfall**: ein Dokument mit wohlgeformten `relations` erzeugt keins. Ohne
+  ihn besteht eine Regel, die alles ablehnt, die Liste mit 10/10 (nachgemessen).
+- `fold` verwirft, was in der letzten Stage nicht auflöst — mit Gegenprobe:
+  eine Kante auf einen Namen, der dort nur als **Alias** steht, bleibt
+  erhalten. Ohne diese zweite Hälfte besteht ein `fold`, der alles verwirft.
+  Für `historical_figures` gilt die Alias-Hälfte **nicht**: dort löst nur der
+  Name auf, weil `clean_response` diese Kategorie ohne `aliases` aufbaut
+  (`merge.py:391-401` gegen `:374`).
+- `fold` meldet eine **unerwiderte** Kante: `A→B` ohne `B→A` erzeugt eine
+  Warnung. Gegenprobe: ein vollständig erwidertes Paar erzeugt keine.
+- `fold` setzt die Obergrenze je `from` durch und verwirft Selbstkanten und
+  Duplikate — mit Anzahl-Assertion, nicht nur „enthält nicht", und **in
+  Alias-Schreibweise**: `„Ned"→X` und `„Eddard Stark"→X` müssen als *eine*
+  Kante enden. Mit zwei identischen Strings geprüft, übersieht der Check eine
+  Filterkette, die zu spät normalisiert — nachgemessen liefert die dann zwei
+  widersprüchliche Kanten und eine Selbstkante ins ausgelieferte Dokument,
+  bei grünem `validate()` und grüner Abnahme.
 - Recap-Namens-Scan: gegen ein Dokument mit eingebautem Leak meldet er ihn und
   leert das Feld; gegen ein sauberes Dokument meldet er nichts.
 
@@ -326,14 +445,48 @@ busted grün**. Jeder Check unten trägt deshalb seine Gegenprobe.
   sich kein JSON-Modul (`rapidjson`/`json`/`dkjson`/`cjson` alle nicht
   vorhanden). Ersatz ist die Ortsassertion auf der Desktop-Seite, die festhält,
   dass `recap` neben `snapshot` landet und nicht darin.
-- Layout: `#rects == math.min(n, 8)` für n = 0, 1, 8, 20 — die Anzahl mit
-  assertieren, sonst besteht ein `layout()`, das immer `{}` liefert, alle vier
-  Fälle. Dazu ein Nachbar ohne `first_pct` in der Liste.
+- Layout (**erst Phase 2**, mit dem gezeichneten Netz): `#nodes == n` für
+  n = 0, 1, 5 — **und** alle Rechtecke haben
+  `w > 0 and h > 0`, und keine zwei teilen sich dieselbe `(x, y)`. Die
+  Anzahl allein genügt nicht: ein `layout()`, das die richtige Zahl Rechtecke
+  der Größe null am Ursprung liefert, besteht sie (nachgemessen, 6/0) — und
+  dann trifft kein einziger Tap je einen Knoten.
+- **Der Anzeigefilter, gestaffelt und in beide Richtungen:** ein Dokument mit
+  zwei Stages, eine Figur existiert erst in der späteren, eine Kante zeigt auf
+  sie. An der frühen Stage erscheint sie **nicht**, an der späten **schon**;
+  dazu eine Figur, die nur als **Alias** geführt wird und erscheinen muss.
+  Ungestaffelt — nur „Figur fehlt im Snapshot" — besteht ein `egoNet`, das
+  gegen den **letzten** statt den sichtbaren Snapshot auflöst, die Liste mit
+  6/0 (nachgemessen). Das ist kein Randfall: dieser Mutant zeigt einem Leser
+  bei 20 % jeden Namen des Buchs, also der vollständige Ausfall der einzigen
+  D4-Instanz dieses Features. Der Recap-Check nebenan ist genau deshalb
+  gestaffelt formuliert.
+- Historische Figuren als Ziel: eine Kante auf einen Eintrag aus
+  `historical_figures` erscheint **und** ist als solche markiert. Ohne die
+  zweite Assertion besteht eine Implementierung, die sie zwar zeigt, aber vom
+  Tap in die falsche Kategorie schickt.
+- **Richtung:** in Robbs Netz trägt Ned das Label „Vater", in Neds Netz trägt
+  Robb „Sohn". Ohne diesen Fall besteht eine `egoNet`, die auf `to` statt auf
+  `from` filtert — sie liefert dieselben Nachbarn und vertauscht nur alle
+  Labels.
 - Ego-Netz mit **Abwesenheits-Gegenprobe**: eine dritte, unbeteiligte Figur mit
   eigener Kante taucht nicht auf. Ohne sie besteht eine `egoNet`, die schlicht
   alle Kanten aller Figuren zurückgibt.
+- Kein Knopf ohne Kanten: eine Figur ohne auflösbare Nachbarn bekommt keinen
+  `buttons_table`-Eintrag — mit Gegenprobe, dass eine Figur mit Nachbarn ihn
+  bekommt.
 - Ein Fall in `spec/xray_doc_spec.lua`, der das Versions-Gate berührt — heute
-  gibt es dazu keinen einzigen (`grep schema_version spec/` → nichts).
+  gibt es dazu keinen einzigen (`grep schema_version spec/` → nichts). **Das
+  verlangt eine Zeile Vorarbeit:** `schemaOk` und `SUPPORTED_SCHEMA`
+  (`xray_doc.lua:34`, `:165-166`) sind beide lokal, und der einzige Weg von
+  außen führt über `XRayDoc.load` → `decodeJson`, das ohne JSON-Modul `nil`
+  liefert und vor dem Gate kurzschließt. Nachgemessen antworten
+  `schema_version` 2, 3 und 99 identisch mit „could not be read" — ein Spec
+  „v3 wird abgelehnt" wäre also **vakuum-grün**, und „v2 wird akzeptiert"
+  färbt die nackte Suite rot, die die Abnahme grün verlangt. Entweder
+  `XRayDoc.schemaOk` exportieren (eine Zeile, dann ist der Fall trivial und
+  JSON-frei) oder den Punkt streichen und das Gate als nur am Gerät geprüft
+  führen.
 
 **Auf dem Gerät gemessen (2026-07-27, Kobo Clara BW, „Die Gefährten", 43
 Stages / 11 Recaps, Companion-Datei 4,27 MB):**
@@ -354,13 +507,17 @@ der calibre-Einbettungsweg.
 
 Damit ist Feature A abgenommen.
 
-Ursprüngliche Messliste:
+Am Gerät zu messen bleibt für Feature B:
 
-- Linienbreite in Pixeln, bei der Bresenham-Kanten auf E-Ink sicher sichtbar
-  sind.
 - Trefferquote bei n Taps auf Knoten am Rand des Layouts.
-- Schriftgröße, bei der 8 Knotenlabels noch lesbar sind — **dieser Wert
-  entscheidet die Kappungsgrenze**, die bis dahin bei 8 nur gesetzt ist.
+- Verhalten langer Namen in einer Spalte — Umbruch, Kürzung oder Überlauf.
+- Ob fünf Kanten je Figur in der Praxis eine sinnvolle Grenze sind; das ist der
+  einzige Prompt-Parameter, den erst ein echtes Buch beantwortet.
+
+Die beiden übrigen Posten der ursprünglichen Messliste sind entfallen:
+Linienbreite für Bresenham-Kanten (es gibt keine Diagonalen mehr) und
+Schriftgröße für 8 Labels (Spalten überlappen nicht, die Kappung wird
+gerechnet).
 
 ---
 
