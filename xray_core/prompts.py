@@ -474,3 +474,107 @@ def build_recap_prompt(language, title, author, percent, events, characters):
     instr = instr.replace("{TIMELINE}", _recap_events_block(events))
     instr = instr.replace("{CHARACTERS}", _recap_characters_block(characters))
     return _SYSTEM[language], instr
+
+
+# ---------------------------------------------------------------------------
+# Ego-net relations (feature B). One call per book, over the finished document.
+# ---------------------------------------------------------------------------
+
+# Narrow on purpose. On a 6" screen sparseness is the quality: with a handful
+# of structural bonds per figure the neighbours always fit on one screen, and
+# every edge shown carries information. "Meets" and "knows" do not.
+MAX_RELATIONS_PER_FIGURE = 5
+
+RELATIONS_EN = r"""Book: {TITLE}
+Author: {AUTHOR}
+
+TASK: List the relationships between the figures below. Use ONLY the figures listed; never invent a name, and never name anyone who is not in the lists.
+
+Record ONLY these kinds of bond: family, rule/service, alliance, enmity, love/marriage, mentorship. Leave out passing encounters -- that two figures met, travelled together or know each other is not a relationship here.
+
+At most {MAX} relationships per figure. If a figure has more, keep the ones that matter most to the plot.
+
+Give EVERY relationship in BOTH directions, as two separate entries. `label` names the role `to` has for `from`: for a father Eddard and his son Robb, write both {"from": "Robb Stark", "to": "Eddard Stark", "label": "father"} and {"from": "Eddard Stark", "to": "Robb Stark", "label": "son"}. A missing counterpart makes the relationship disappear from one of the two figures.
+
+Keep `label` short -- a word or two, no sentence.
+
+Output ONLY a JSON object of the form {"relations": [{"from": "...", "to": "...", "label": "..."}]}.
+
+FIGURES:
+{CHARACTERS}
+
+HISTORICAL FIGURES (real people referenced in the book; valid targets too):
+{HISTORICAL}"""
+
+RELATIONS_DE = r"""Buch: {TITLE}
+Autor: {AUTHOR}
+
+AUFGABE: Führen Sie die Beziehungen zwischen den unten genannten Figuren auf. Verwenden Sie AUSSCHLIESSLICH die aufgeführten Figuren; erfinden Sie keinen Namen und nennen Sie niemanden, der nicht in den Listen steht.
+
+Erfassen Sie NUR diese Arten von Bindung: Verwandtschaft, Herrschaft/Dienst, Bündnis, Feindschaft, Liebe/Ehe, Mentorschaft. Flüchtige Begegnungen bleiben weg -- dass zwei Figuren sich getroffen haben, zusammen gereist sind oder einander kennen, ist hier keine Beziehung.
+
+Höchstens {MAX} Beziehungen je Figur. Hat eine Figur mehr, behalten Sie die für die Handlung wichtigsten.
+
+Geben Sie JEDE Beziehung in BEIDEN Richtungen an, als zwei getrennte Einträge. `label` benennt die Rolle, die `to` für `from` hat: für den Vater Eddard und seinen Sohn Robb also sowohl {"from": "Robb Stark", "to": "Eddard Stark", "label": "Vater"} als auch {"from": "Eddard Stark", "to": "Robb Stark", "label": "Sohn"}. Fehlt die Gegenrichtung, verschwindet die Beziehung bei einer der beiden Figuren.
+
+Halten Sie `label` kurz -- ein bis zwei Wörter, kein Satz.
+
+Ausgabe: NUR ein JSON-Objekt der Form {"relations": [{"from": "...", "to": "...", "label": "..."}]}.
+
+FIGUREN:
+{CHARACTERS}
+
+HISTORISCHE PERSONEN (reale Personen, auf die das Buch verweist; ebenfalls gültige Ziele):
+{HISTORICAL}"""
+
+_RELATIONS = {"en": RELATIONS_EN, "de": RELATIONS_DE}
+
+
+def _relations_figures_block(figures, description_key: str, with_aliases: bool) -> str:
+    lines = []
+    for figure in figures or []:
+        name = (figure.get("name") or "").strip()
+        if not name:
+            continue
+        line = f"- {name}"
+        if with_aliases:
+            aliases = [a.strip() for a in figure.get("aliases") or [] if (a or "").strip()]
+            if aliases:
+                line += f" (also: {', '.join(aliases)})"
+        desc = (figure.get(description_key) or "").strip()
+        if desc:
+            line += f": {desc}"
+        lines.append(line)
+    return "\n".join(lines) or "(none recorded)"
+
+
+def build_relations_prompt(language, title, author, characters, historical):
+    """Build (system, user) for the one relations pass of a book.
+
+    No %-formatting anywhere -- not `_apply_percent_args`, not a bare `%`.
+    Two reasons, both measured. That helper takes a `percent` this whole-book
+    prompt does not have, and it spreads it across every specifier from the
+    third onward, so a cap written as %d renders as 0: a prompt asking for "at
+    most 0 relations per figure" that still looks well-formed. And a book whose
+    title or a character description contains a '%' would either raise or eat
+    the next character. Plain .replace() has neither failure mode.
+
+    Not routed through build_prompt either: that one prepends
+    `_SEGMENT_PREFIX + segment_text`, and this pass has no book-text segment --
+    it reads the finished document.
+
+    Characters get their aliases, historical figures do not: clean_response
+    builds that category with no `aliases` key at all (merge.py), so offering
+    an alias line there would promise a matching rule the fold cannot honour.
+    """
+    instr = _RELATIONS[language]
+    instr = instr.replace("{TITLE}", title or "")
+    instr = instr.replace("{AUTHOR}", author or "")
+    instr = instr.replace("{MAX}", str(MAX_RELATIONS_PER_FIGURE))
+    instr = instr.replace(
+        "{CHARACTERS}", _relations_figures_block(characters, "description", True)
+    )
+    instr = instr.replace(
+        "{HISTORICAL}", _relations_figures_block(historical, "biography", False)
+    )
+    return _SYSTEM[language], instr
