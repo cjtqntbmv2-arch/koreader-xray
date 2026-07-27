@@ -1,17 +1,12 @@
 # Build-Artefakte
-__pycache__/
 *.pyc
 *.zip
 dist/
-.venv/
 
 # Werkzeuge und lokale Ablagen
-.leann/
-.superpowers/
 docs/superpowers/
 scratch/
 similar/
-.DS_Store
 
 # Claude: nur der X-Ray-Skill wird versioniert, der Rest ist lokal.
 # .claude/* statt .claude/ -- sonst steigt git gar nicht erst in das
