@@ -511,7 +511,26 @@ der calibre-Einbettungsweg.
 
 Damit ist Feature A abgenommen.
 
-Am Gerät zu messen bleibt für Feature B:
+**Feature B, Phase 1 abgenommen (2026-07-28, Kobo Clara BW, „Die Gefährten").**
+156 Kanten über 63 Figuren, erzeugt im Nachlauf über das fertige Dokument —
+ohne einen einzigen neu geholten Chunk, womit der Nachrüst-Weg belegt ist. Die
+elf Rückblicke blieben dabei unverändert erhalten.
+
+Der Lauf hat einen Fehler aufgedeckt, den keine Suite finden konnte: mit dem
+`fold`-Deckel bei fünf behielt Frodo fünf von dreizehn Beziehungen — Familie,
+weil das die Reihenfolge war, in der die Antwort sie aufschrieb. Gandalf,
+Aragorn, Legolas, Gimli, Boromir, Sauron und Gollum fielen heraus, die
+Hauptfigur bekam das ärmste Netz des Buchs. Alle fünfzehn
+Asymmetrie-Warnungen erzeugte die Kappung selbst. Konsequenz: der Deckel im
+`fold` ist jetzt eine reine Sicherung (15) statt einer Auswahl, die
+inhaltliche Grenze bleibt allein im Prompt (5), und wenn der Deckel doch
+greift, nimmt er das ganze Paar.
+
+Nicht beantwortet: ob ein Modell die Gegenrichtung zuverlässig liefert. Die
+Antwort dieses Laufs entstand programmatisch aus Paaren, die Reziprozität war
+also konstruktiv erfüllt. Bleibt für den nächsten echten Lauf offen.
+
+Am Gerät zu messen bleibt für Feature B (Phase 2):
 
 - Trefferquote bei n Taps auf Knoten am Rand des Layouts.
 - Verhalten langer Namen in einer Spalte — Umbruch, Kürzung oder Überlauf.
