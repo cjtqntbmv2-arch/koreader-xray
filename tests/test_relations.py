@@ -262,7 +262,7 @@ def test_duplicate_pair_keeps_the_first(doc):
 
 
 def test_cap_per_figure_is_enforced(doc):
-    from xray_core.prompts import MAX_RELATIONS_PER_FIGURE
+    from tools.claude_xray_relations import HARD_CAP_PER_FIGURE as MAX_RELATIONS_PER_FIGURE
 
     targets = [f"Fig {i}" for i in range(MAX_RELATIONS_PER_FIGURE + 3)]
     doc["checkpoints"][0]["snapshot"]["characters"].extend(
@@ -473,7 +473,7 @@ def test_a_missing_answer_file_leaves_the_document_alone(doc, tmp_path):
 def test_the_cap_applies_per_source_not_globally(doc):
     """Two source figures must each get their own allowance; a global counter
     would give the first figure everything and the second nothing."""
-    from xray_core.prompts import MAX_RELATIONS_PER_FIGURE
+    from tools.claude_xray_relations import HARD_CAP_PER_FIGURE as MAX_RELATIONS_PER_FIGURE
 
     targets = [f"Fig {i}" for i in range(MAX_RELATIONS_PER_FIGURE)]
     doc["checkpoints"][0]["snapshot"]["characters"].extend(
@@ -501,3 +501,60 @@ def test_padded_names_resolve_and_a_blank_label_does_not(doc):
          {"from": "Eddard Stark", "to": "Robb Stark", "label": "   "}], doc)
     assert len(kept) == 1
     assert kept[0]["from"] == "Robb Stark"
+
+
+def test_the_fold_cap_is_a_safety_net_not_a_selection(doc):
+    """Measured on "Die Gefährten": with the cap at the prompt's 5, Frodo kept
+    5 outgoing edges while 13 figures pointed at him -- the protagonist got the
+    poorest net in the book, and which 5 survived was decided by the order the
+    model happened to write them in. The prompt's limit is the editorial one;
+    the fold's exists only to stop a derailed answer."""
+    from tools.claude_xray_relations import HARD_CAP_PER_FIGURE
+    from xray_core.prompts import MAX_RELATIONS_PER_FIGURE
+
+    assert HARD_CAP_PER_FIGURE > MAX_RELATIONS_PER_FIGURE
+
+    targets = [f"Fig {i}" for i in range(MAX_RELATIONS_PER_FIGURE + 3)]
+    doc["checkpoints"][0]["snapshot"]["characters"].extend(
+        _character(n, 30 + i) for i, n in enumerate(targets))
+    raw = []
+    for t in targets:
+        raw.append(edge("Robb Stark", t, "kennt"))
+        raw.append(edge(t, "Robb Stark", "kennt"))
+
+    kept, warnings = filter_relations(raw, doc)
+    assert len([r for r in kept if r["from"] == "Robb Stark"]) == len(targets)
+    assert warnings == [], f"nothing should be capped or unreciprocated here: {warnings}"
+
+
+def test_the_cap_drops_whole_pairs(doc):
+    """When the cap does bite, it must take the counterpart with it. Capping
+    one direction only leaves B's card showing A while A's card does not show
+    B -- and reports it as an unreciprocated edge, which is a defect the fold
+    manufactured rather than found."""
+    from tools.claude_xray_relations import HARD_CAP_PER_FIGURE
+
+    targets = [f"Fig {i}" for i in range(HARD_CAP_PER_FIGURE + 2)]
+    doc["checkpoints"][0]["snapshot"]["characters"].extend(
+        _character(n, 40 + i) for i, n in enumerate(targets))
+    raw = []
+    for t in targets:
+        raw.append(edge("Robb Stark", t, "kennt"))
+        raw.append(edge(t, "Robb Stark", "kennt"))
+
+    kept, warnings = filter_relations(raw, doc)
+    pairs = {(r["from"], r["to"]) for r in kept}
+    assert len([r for r in kept if r["from"] == "Robb Stark"]) == HARD_CAP_PER_FIGURE
+    for source, target in pairs:
+        assert (target, source) in pairs, f"{source} -> {target} lost its counterpart"
+    assert not any("unreciprocated" in w for w in warnings)
+    assert any("cap" in w.lower() for w in warnings), "a silent drop is the thing to avoid"
+
+
+def test_a_genuinely_one_sided_edge_is_still_kept_and_reported(doc):
+    """Counter-probe to the case above: the pair-drop must not swallow the
+    asymmetry the model itself produced, which is the one worth warning about."""
+    kept, warnings = filter_relations(
+        [edge("Robb Stark", "Eddard Stark", "Vater")], doc)
+    assert len(kept) == 1
+    assert any("unreciprocated" in w for w in warnings)

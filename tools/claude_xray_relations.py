@@ -24,7 +24,7 @@ import json
 import os
 import re
 
-from xray_core.prompts import MAX_RELATIONS_PER_FIGURE, build_relations_prompt
+from xray_core.prompts import build_relations_prompt
 from xray_core.schema import validate
 
 ANSWER_FILE = "relations.json"
@@ -96,6 +96,16 @@ def _resolver(doc) -> dict:
 # sentence is where names and events hide.
 MAX_LABEL_WORDS = 4
 
+# A safety net against a derailed answer, NOT an editorial limit -- that one is
+# MAX_RELATIONS_PER_FIGURE in the prompt, where the model can weigh which bonds
+# matter. Measured on "Die Gefährten" with the two set equal at 5: Frodo kept 5
+# outgoing edges while 13 figures pointed at him, so the protagonist ended up
+# with the poorest net in the book -- his family, because that is the order the
+# answer happened to list things in. Gandalf, Aragorn, Legolas, Gimli, Boromir,
+# Sauron and Gollum all fell out. A cap that selects by input order is not a
+# cap, it is a coin toss.
+HARD_CAP_PER_FIGURE = 15
+
 
 def _label_problem(label: str, endpoints: set, index: dict):
     """Why this label must not be displayed, or None.
@@ -136,6 +146,7 @@ def filter_relations(raw, doc):
     resolve = _resolver(doc)
     kept = []
     seen = set()
+    capped = set()
     warnings = []
     per_figure: collections.Counter = collections.Counter()
 
@@ -156,7 +167,8 @@ def filter_relations(raw, doc):
         pair = (canon_source, canon_target)
         if pair in seen:
             continue
-        if per_figure[canon_source] >= MAX_RELATIONS_PER_FIGURE:
+        if per_figure[canon_source] >= HARD_CAP_PER_FIGURE:
+            capped.add(pair)
             continue
 
         problem = _label_problem(label, {canon_source, canon_target}, resolve)
@@ -168,6 +180,22 @@ def filter_relations(raw, doc):
         seen.add(pair)
         per_figure[canon_source] += 1
         kept.append({"from": canon_source, "to": canon_target, "label": label})
+
+    # The cap takes whole pairs. Capping one direction only leaves B's card
+    # showing A while A's card does not show B -- and the reciprocity check
+    # below would then report an asymmetry this function manufactured rather
+    # than found. Measured on "Die Gefährten": every one of the 15 warnings a
+    # per-direction cap produced was of exactly that kind.
+    if capped:
+        orphans = {(target, source) for source, target in capped
+                   if (target, source) in seen}
+        if orphans:
+            kept = [r for r in kept if (r["from"], r["to"]) not in orphans]
+            seen -= orphans
+        for source, target in sorted(capped):
+            warnings.append(
+                f"cap reached: {source} -> {target} dropped "
+                f"({HARD_CAP_PER_FIGURE} relations already kept for {source})")
 
     # Unreciprocated edges are reported, never dropped: the edge is correct in
     # one figure's net, it is only missing from the other's. Silently passing
