@@ -19,17 +19,10 @@ local XRayUI = require("xray_ui")
 
 local XRayLookup = {}
 
-local CATEGORIES = { "characters", "locations", "terms", "historical_figures" }
-
--- Trims leading/trailing non-word characters and lowercases, so a selection
--- like "Frodo." or a dict popup's punctuation-wrapped word still matches the
--- stored name "Frodo". Ported verbatim from xray_lookupmanager.lua:23-28
--- (`normalize`) -- still an exact match, just tolerant of surrounding
--- punctuation, unlike the contains-scoring around it that this rebuild drops.
-local function normalize(text)
-    if type(text) ~= "string" or text == "" then return "" end
-    return text:gsub("^[^%w]+", ""):gsub("[^%w]+$", ""):lower()
-end
+-- Name matching lives in xray_doc.lua, which is the bottom of the require
+-- graph (xray_lookup -> xray_ui -> xray_doc). The ego net needs the exact same
+-- resolution, and this module cannot be required from down there -- so the
+-- shared half moved down rather than being copied sideways.
 
 -- The word to look up from a dictionary popup: the reader's QUERY, never the
 -- headword the dictionary matched it to.
@@ -53,37 +46,10 @@ function XRayLookup.wordFromDictPopup(dict_popup)
     return word
 end
 
-local function matchesEntry(entry, query)
-    if normalize(entry.name) == query then return true end
-    if type(entry.aliases) == "table" then
-        for _unused, alias in ipairs(entry.aliases) do
-            if type(alias) == "string" and normalize(alias) == query then return true end
-        end
-    end
-    return false
-end
-
 -- snapshot: {characters=, locations=, terms=, historical_figures=} as
 -- returned by XRayDoc.snapshot -- never a document's full entity lists.
 -- Returns a list of {entry=, category=}, possibly empty.
-function XRayLookup.find(snapshot, word)
-    local results = {}
-    if type(snapshot) ~= "table" or type(word) ~= "string" then return results end
-    local query = normalize(word)
-    if query == "" then return results end
-
-    for _unused, category in ipairs(CATEGORIES) do
-        local list = snapshot[category]
-        if type(list) == "table" then
-            for _unused, entry in ipairs(list) do
-                if type(entry) == "table" and matchesEntry(entry, query) then
-                    table.insert(results, { entry = entry, category = category })
-                end
-            end
-        end
-    end
-    return results
-end
+XRayLookup.find = XRayDoc.resolve
 
 local function showInfo(text)
     UIManager:show(InfoMessage:new{ text = text, timeout = 3 })
