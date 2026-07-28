@@ -371,6 +371,166 @@ function XRayDoc.snapshot(doc, idx)
     return cp and cp.snapshot or nil
 end
 
+-- Recaps exist only on the stages the generation pass covered (~11 of the ~57
+-- a document carries), so any other reading position walks BACK to the newest
+-- recap at or below it -- never forward, which would describe the book past
+-- the reader. Partial coverage is normal, not a defect: the pass is one model
+-- call per stage and an interrupted run leaves the later ones unwritten.
+-- `""` counts as absent. The fold pass omits the key rather than writing an
+-- empty string, but a hand-edited document can carry one, and `""` is truthy
+-- in Lua -- `cp.recap or nil` would stop here and show an empty page.
+function XRayDoc.recap(doc, idx)
+    if type(doc) ~= "table" or type(doc.checkpoints) ~= "table" then return nil end
+    if type(idx) ~= "number" then return nil end
+
+    for i = idx, 1, -1 do
+        local cp = doc.checkpoints[i]
+        local text = type(cp) == "table" and cp.recap or nil
+        if type(text) == "string" and text ~= "" then return text end
+    end
+    return nil
+end
+
+-- ---------------------------------------------------------------------------
+-- Name resolution and the ego net
+-- ---------------------------------------------------------------------------
+
+-- Trims leading/trailing non-word characters and lowercases, so "Frodo." from
+-- a dict popup still matches the stored name "Frodo". Lives here rather than
+-- in xray_lookup.lua because xray_doc is the bottom of the require graph
+-- (xray_lookup -> xray_ui -> xray_doc): the ego net needs the same resolution,
+-- and a second copy would be the thing that drifts.
+local function normalize(text)
+    if type(text) ~= "string" or text == "" then return "" end
+    return text:gsub("^[^%w]+", ""):gsub("[^%w]+$", ""):lower()
+end
+
+XRayDoc.normalize = normalize
+
+local RESOLVE_CATEGORIES = { "characters", "locations", "terms", "historical_figures" }
+
+local function matchesEntry(entry, query)
+    if normalize(entry.name) == query then return true end
+    if type(entry.aliases) == "table" then
+        for _unused, alias in ipairs(entry.aliases) do
+            if type(alias) == "string" and normalize(alias) == query then return true end
+        end
+    end
+    return false
+end
+
+-- snapshot: {characters=, locations=, terms=, historical_figures=} as returned
+-- by XRayDoc.snapshot -- never a document's full entity lists.
+-- Returns a list of {entry=, category=}, possibly empty. A name can legitimately
+-- hit more than once (an alias colliding with another entry's name), which is
+-- why this returns a list and not one entry -- see xray_lookup's showPicker.
+function XRayDoc.resolve(snapshot, name)
+    local results = {}
+    if type(snapshot) ~= "table" or type(name) ~= "string" then return results end
+    local query = normalize(name)
+    if query == "" then return results end
+
+    for _unused, category in ipairs(RESOLVE_CATEGORIES) do
+        local list = snapshot[category]
+        if type(list) == "table" then
+            for _unused2, entry in ipairs(list) do
+                if type(entry) == "table" and matchesEntry(entry, query) then
+                    table.insert(results, { entry = entry, category = category })
+                end
+            end
+        end
+    end
+    return results
+end
+
+-- The ego net of `entry` at checkpoint `idx`: a list of
+-- {entry=, category=, label=}, sorted by displayed name, possibly empty.
+--
+-- `doc.relations` is a flat, whole-book list (the desktop derives it from the
+-- finished document in one pass, so it never travels through the merge and
+-- carries no percent of its own). D4 is therefore established HERE and nowhere
+-- else: an edge is shown only when BOTH endpoints resolve inside the snapshot
+-- the reader can already see. Resolving against the last snapshot instead --
+-- or against the document's full cast -- would show a reader at 20% every name
+-- in the book while passing every other test in the spec.
+--
+-- Filtering is on `from`, never `to`: the generator emits each relationship
+-- twice, once per direction, with the label naming the role `to` has for
+-- `from`. Filtering on `to` returns the same neighbours with every label
+-- silently swapped.
+--
+-- Nodes are labelled with the resolved snapshot entry's own `name`, not with
+-- the edge's `to` string: the edge carries the canonical spelling of the last
+-- stage, and an earlier snapshot may still know that figure under a different
+-- one. Using the edge's spelling would put a name on the node that the reader
+-- cannot find in any list.
+function XRayDoc.egoNet(doc, idx, entry)
+    local net = {}
+    if type(doc) ~= "table" or type(doc.relations) ~= "table" then return net end
+    if type(entry) ~= "table" then return net end
+
+    local snapshot = XRayDoc.snapshot(doc, idx)
+    if type(snapshot) ~= "table" then return net end
+
+    -- Every spelling the centre figure answers to, so an edge stored under the
+    -- canonical name still finds a figure the reader sees under an alias.
+    local centre = {}
+    local own = normalize(entry.name)
+    if own ~= "" then centre[own] = true end
+    if type(entry.aliases) == "table" then
+        for _unused, alias in ipairs(entry.aliases) do
+            local key = normalize(alias)
+            if key ~= "" then centre[key] = true end
+        end
+    end
+    if next(centre) == nil then return net end
+
+    local seen = {}
+    for _unused, relation in ipairs(doc.relations) do
+        if type(relation) == "table"
+            and type(relation.from) == "string"
+            and type(relation.to) == "string"
+            and centre[normalize(relation.from)]
+        then
+            -- Only figures are valid targets; a name that resolves to a place
+            -- or a term is a generator slip, not a relationship. Scanned rather
+            -- than taking hits[1] and testing its category afterwards: resolve
+            -- walks characters, locations, terms, historical_figures in that
+            -- order and returns EVERY hit, so a term sharing a name with a
+            -- historical figure -- a routine extraction outcome for legendary
+            -- names -- would shadow it and drop the edge. An exact name match
+            -- beats another figure's alias for the same reason showPicker
+            -- exists: the collision is real.
+            local hit
+            local target = normalize(relation.to)
+            for _unused2, candidate in ipairs(XRayDoc.resolve(snapshot, relation.to)) do
+                if candidate.category == "characters"
+                    or candidate.category == "historical_figures" then
+                    if normalize(candidate.entry.name) == target then
+                        hit = candidate
+                        break
+                    end
+                    hit = hit or candidate
+                end
+            end
+            if hit then
+                local name = hit.entry.name or ""
+                if not seen[name] and normalize(name) ~= own then
+                    seen[name] = true
+                    table.insert(net, {
+                        entry = hit.entry,
+                        category = hit.category,
+                        label = relation.label,
+                    })
+                end
+            end
+        end
+    end
+
+    table.sort(net, function(a, b) return (a.entry.name or "") < (b.entry.name or "") end)
+    return net
+end
+
 -- The timeline is a flat, whole-book list at the document level, NOT nested
 -- inside each snapshot (generate.py/merge.py) -- rendering it unfiltered
 -- would show a reader at 5% the end of the book. Filtering against the

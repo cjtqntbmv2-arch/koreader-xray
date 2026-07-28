@@ -96,7 +96,10 @@ local PREVIEW_FIELD = {
     historical_figures = "biography",
 }
 
-local function buildRow(entry, category)
+-- doc/cp_idx are threaded through purely so the detail card can offer the
+-- ego-net button; every consumer below tolerates them being nil, which is what
+-- a caller that has no document in scope passes.
+local function buildRow(entry, category, doc, cp_idx)
     if category == "timeline" then
         return {
             text = (entry.chapter or "") .. ": " .. (entry.event or ""),
@@ -109,11 +112,15 @@ local function buildRow(entry, category)
         text = "\226\128\162 " .. (entry.name or "?"), -- U+2022 BULLET
         keep_menu_open = true,
         separator = true,
-        callback = function() XRayUI.showEntry(entry, category) end,
+        callback = function() XRayUI.showEntry(entry, category, doc, cp_idx) end,
     }
     local preview = PREVIEW_FIELD[category] and entry[PREVIEW_FIELD[category]]
     if preview and preview ~= "" then
-        row.subtext = truncate(preview, 80)
+        -- `mandatory`, not `subtext`: Menu has no `subtext` field (0
+        -- occurrences in KOReader's menu.lua across master, v2023.05 and
+        -- v2025.04), so these previews were never drawn. Shortened to fit --
+        -- `mandatory` is right-aligned beside the row text, not a second line.
+        row.mandatory = truncate(preview, 40)
     end
     return row
 end
@@ -164,7 +171,7 @@ function XRayUI.showList(ui, doc, cp_idx, category)
             })
         end
         for _unused, entry in ipairs(entries) do
-            table.insert(items, buildRow(entry, category))
+            table.insert(items, buildRow(entry, category, doc, cp_idx))
         end
 
         UIManager:show(Menu:new{
@@ -231,9 +238,63 @@ local DETAIL_BUILDERS = {
     end,
 }
 
+-- The ego net of one figure: its directly related figures, each tappable to
+-- open THEIR net. UIManager stacks the menus, so "back" walks the path the
+-- reader took without this having to keep a history of its own.
+--
+-- Displayed as a Menu, the same widget the category lists use. The design's
+-- drawn two-column net is phase 2 and replaces only this function; everything
+-- that decides WHICH figures appear -- and therefore the whole spoiler
+-- guarantee -- lives in XRayDoc.egoNet and is unaffected by that swap.
+function XRayUI.showEgoNet(doc, cp_idx, entry)
+    local ok, err = pcall(function()
+        local net = XRayDoc.egoNet(doc, cp_idx, entry)
+        if #net == 0 then return end
+
+        local items = {}
+        for _unused, neighbour in ipairs(net) do
+            local name = neighbour.entry.name or "?"
+            -- Historical figures are marked because a tap on one opens a card
+            -- from a different category than the reader expects.
+            if neighbour.category == "historical_figures" then
+                name = name .. " \226\128\148 " .. _("historical") -- U+2014 EM DASH
+            end
+            table.insert(items, {
+                text = "\226\128\162 " .. name, -- U+2022 BULLET
+                -- `mandatory`, not `subtext`: Menu has no `subtext` field at
+                -- all (0 occurrences in KOReader's menu.lua in master,
+                -- v2023.05 and v2025.04), so a label put there is simply never
+                -- drawn -- and the label is this view's whole payload.
+                -- `mandatory` is the real field for a short, right-aligned
+                -- value next to the row text.
+                mandatory = neighbour.label,
+                keep_menu_open = true,
+                separator = true,
+                callback = function()
+                    XRayUI.showEgoNet(doc, cp_idx, neighbour.entry)
+                end,
+            })
+        end
+
+        UIManager:show(Menu:new{
+            title = (entry.name or "") .. " \226\128\148 " .. _("Relations"),
+            item_table = items,
+            is_borderless = true,
+            width = Screen:getWidth(),
+            height = Screen:getHeight(),
+        })
+    end)
+    if not ok then
+        logger.warn("XRayUI.showEgoNet failed: " .. tostring(err))
+    end
+end
+
 -- category: same vocabulary as showList; entry: one item from a snapshot
 -- list (or a timeline event when category == "timeline").
-function XRayUI.showEntry(entry, category)
+--
+-- doc/cp_idx are optional and only enable the "Relations" button. Callers that
+-- have no document in scope pass nothing and get the card unchanged.
+function XRayUI.showEntry(entry, category, doc, cp_idx)
     local ok, err = pcall(function()
         if not entry then return end
 
@@ -255,9 +316,35 @@ function XRayUI.showEntry(entry, category)
             table.insert(lines, body)
         end
 
+        -- Only offered when this figure actually has neighbours the reader may
+        -- see. Checking costs nothing here -- the document is already loaded,
+        -- unlike in getSubMenuItems, which stays deliberately data-free.
+        --
+        -- Built fresh per call, never as a module constant: TextViewer appends
+        -- its default row with table.insert, mutating whatever it was handed.
+        -- And add_default_buttons is required, because a caller's buttons_table
+        -- otherwise REPLACES that row -- the Close button would vanish from
+        -- exactly the cards this feature touches (textviewer.lua).
+        -- Only figures have relations. Without the category test a term or a
+        -- location whose name happens to match a `from` gets the button too,
+        -- and it opens a net titled after the term.
+        local is_figure = category == "characters" or category == "historical_figures"
+        local buttons, add_defaults = nil, nil
+        if is_figure and doc and cp_idx and #XRayDoc.egoNet(doc, cp_idx, entry) > 0 then
+            buttons = {{
+                {
+                    text = _("Relations"),
+                    callback = function() XRayUI.showEgoNet(doc, cp_idx, entry) end,
+                },
+            }}
+            add_defaults = true
+        end
+
         UIManager:show(TextViewer:new{
             title = entry.name or "",
             text = table.concat(lines, "\n"),
+            buttons_table = buttons,
+            add_default_buttons = add_defaults,
         })
     end)
     if not ok then
@@ -376,6 +463,44 @@ function XRayUI.showStatus(plugin, doc, cp_idx, pct)
     end)
     if not ok then
         logger.warn("XRayUI.showStatus failed: " .. tostring(err))
+    end
+end
+
+
+-- Unlike the category views, this one is reachable on documents that carry no
+-- recaps at all, so the "there is none" case is answered here rather than by
+-- hiding the menu entry: hiding it would force XRayDoc.load -- and with it a
+-- mkdir+unzip over the whole EPUB -- into the menu build, which is data-free
+-- today.
+--
+-- The two empty cases are NOT the same and must not share a message.
+-- showNotYetAvailable speaks about checkpoints ("X-Ray data available from
+-- N%") and is right only while the reader is still short of the first one; on
+-- a document whose first stage sits at 1%, telling a reader at 60% that data
+-- starts at 1% would be false twice over.
+function XRayUI.showRecap(doc, cp_idx)
+    local ok, err = pcall(function()
+        if not cp_idx then
+            showNotYetAvailable(doc)
+            return
+        end
+
+        local text = XRayDoc.recap(doc, cp_idx)
+        if not text then
+            UIManager:show(InfoMessage:new{
+                text = _("This book's X-Ray data contains no recap."),
+                timeout = 3,
+            })
+            return
+        end
+
+        UIManager:show(TextViewer:new{
+            title = _("Story so far"),
+            text = text,
+        })
+    end)
+    if not ok then
+        logger.warn("XRayUI.showRecap failed: " .. tostring(err))
     end
 end
 

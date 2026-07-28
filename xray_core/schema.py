@@ -107,6 +107,13 @@ def validate(doc: dict) -> list[str]:
     if isinstance(timeline, list):
         problems.extend(_validate_timeline(timeline))
 
+    relations = doc.get("relations")
+    if relations is not None:
+        if isinstance(relations, list):
+            problems.extend(_validate_relations(relations))
+        else:
+            problems.append("relations must be a list")
+
     return problems
 
 
@@ -130,6 +137,17 @@ def _validate_checkpoints(checkpoints: list, last_percent) -> list[str]:
                     f"(got {percent} after {prev_percent})"
                 )
             prev_percent = percent
+
+        # Optional, and checked before the snapshot block below because that
+        # one `continue`s on a malformed snapshot -- a bad recap would slip
+        # through unmentioned otherwise. A document generated without the
+        # recap pass simply has no such key; the device gates on presence, not
+        # on schema_version, so its absence is a feature being off rather than
+        # an error. When it is there it must be prose: the viewer renders it
+        # verbatim into a TextViewer.
+        recap = cp.get("recap")
+        if recap is not None and not isinstance(recap, str):
+            problems.append(f"{label}.recap must be a string")
 
         snapshot = cp.get("snapshot")
         if not isinstance(snapshot, dict):
@@ -218,6 +236,35 @@ def _validate_chronology_entry(entry, label: str, checkpoint_percent) -> list[st
                 f"{label} ({name!r}) first_pct ({entry['first_pct']}) must be "
                 f"<= checkpoint percent ({checkpoint_percent})"
             )
+    return problems
+
+
+_RELATION_FIELDS = ("from", "to", "label")
+
+
+def _validate_relations(relations: list) -> list[str]:
+    """Shape only -- an ego-net edge is three non-empty strings and nothing else.
+
+    Deliberately no cross-field rule: that both endpoints resolve to a figure
+    is enforced by the fold in tools/claude_xray_relations.py, because
+    generate_xray raises on any validation problem *after* the entire
+    extraction budget is spent (generate.py) -- one hallucinated edge must not
+    cost a whole run. `_validate_chronology_entry` is not reused either: it
+    requires `name` and `first_seq`, which an edge does not have.
+
+    No `first_pct`: D4 for edges holds on the device, where an edge is only
+    shown when both endpoints resolve inside the snapshot the reader can
+    already see (design, "D4 entsteht am Gerät, konstruktiv").
+    """
+    problems: list[str] = []
+    for i, relation in enumerate(relations):
+        if not isinstance(relation, dict):
+            problems.append(f"relations[{i}] must be an object")
+            continue
+        for field in _RELATION_FIELDS:
+            value = relation.get(field)
+            if not isinstance(value, str) or not value.strip():
+                problems.append(f"relations[{i}].{field} must be a non-empty string")
     return problems
 
 

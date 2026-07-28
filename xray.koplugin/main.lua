@@ -105,6 +105,15 @@ function XRayPlugin:showStatus()
     pcall(function() XRayUI.showStatus(self, doc, cp_idx, pct) end)
 end
 
+function XRayPlugin:showRecap()
+    local doc, cp_idx, _pct, err = self:current()
+    if not doc then
+        UIManager:show(InfoMessage:new{ text = err })
+        return
+    end
+    pcall(function() XRayUI.showRecap(doc, cp_idx) end)
+end
+
 function XRayPlugin:showDiagnostics()
     local doc, cp_idx, pct = self:current()
     pcall(function() XRayUI.showDiagnostics(self, doc, cp_idx, pct) end)
@@ -172,6 +181,19 @@ function XRayPlugin:onXRayShow()
             end,
         }}
     end
+    -- The recap belongs on the gesture path too. This dialog, not the tools
+    -- menu, is the one-gesture route (see onDispatcherRegisterActions above),
+    -- and a reading aid reachable only from page two of a submenu is one
+    -- nobody opens mid-chapter.
+    buttons[#buttons + 1] = {{
+        text = _("Story so far"),
+        callback = function()
+            UIManager:close(self.category_dialog)
+            self.category_dialog = nil
+            self:showRecap()
+        end,
+    }}
+
     self.category_dialog = ButtonDialog:new{ title = _("X-Ray"), buttons = buttons }
     UIManager:show(self.category_dialog)
     return true
@@ -213,6 +235,10 @@ function XRayPlugin:getSubMenuItems()
             callback = function() self:showCategory(category.key) end,
         })
     end
+    table.insert(items, {
+        text = _("Story so far"),
+        callback = function() self:showRecap() end,
+    })
     table.insert(items, {
         text = _("More"),
         separator = true,

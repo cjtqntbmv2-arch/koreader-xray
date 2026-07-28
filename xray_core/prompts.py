@@ -214,9 +214,52 @@ Spoiler-Grenze: %d%% Lesefortschritt
 
 Ausgabe: NUR ein JSON-Objekt der Form {"characters": [{"name": "...", "description": "..."}]}. Schreiben Sie die Beschreibung jedes unten gelisteten Charakters neu, basierend auf dem "BOOK TEXT CONTEXT" am Ende. Keine neuen Charaktere, keine weiteren Felder. SPOILER: nur Informationen bis zur %d%%-Marke."""
 
+RECAP_EN = r"""Book: %s
+Author: %s
+
+Write a "story so far" recap for a reader who has read %d%% of this book and is picking it up again after weeks away.
+
+Use ONLY the events and characters listed below. They are everything the reader has read; anything beyond them would be a spoiler. Do not speculate about what comes next, and do not hint that something is still to be revealed.
+
+Write about {WORDS} words of flowing prose. No headings, no bullet lists, no cast list at the end -- one continuous piece that gives the reader back the thread.
+{WEIGHTING}
+EVENTS SO FAR:
+{TIMELINE}
+
+CHARACTERS THE READER HAS MET:
+{CHARACTERS}"""
+
+RECAP_DE = r"""Buch: %s
+Autor: %s
+
+Schreiben Sie einen Rückblick („Was bisher geschah") für eine Leserin, die %d%% dieses Buchs gelesen hat und es nach Wochen wieder aufschlägt.
+
+Verwenden Sie AUSSCHLIESSLICH die unten aufgeführten Ereignisse und Figuren. Sie sind alles, was die Leserin gelesen hat; alles darüber hinaus wäre ein Spoiler. Spekulieren Sie nicht über das Kommende und deuten Sie nicht an, dass noch etwas enthüllt wird.
+
+Schreiben Sie etwa {WORDS} Wörter Fließtext. Keine Überschriften, keine Aufzählungen, keine Figurenliste am Ende -- ein zusammenhängender Text, der den Faden zurückgibt.
+{WEIGHTING}
+BISHERIGE EREIGNISSE:
+{TIMELINE}
+
+FIGUREN, DIE DIE LESERIN KENNT:
+{CHARACTERS}"""
+
+# Weighted AGAINST reading order, which is the whole point of this recap: you
+# forget the opening and remember last night's chapter. Appended only once
+# there is a past worth weighting -- see build_recap_prompt.
+RECAP_WEIGHTING_EN = r"""
+Weight the retelling AGAINST the reading order: the reader still remembers the most recent chapters and has forgotten the opening. Spend about 55%% of the words on everything up to the %d%% mark, about 30%% on the stretch from %d%% to %d%%, and only about 15%% on the most recent part -- that one needs a reminder, not a retelling.
+"""
+
+RECAP_WEIGHTING_DE = r"""
+Gewichten Sie die Nacherzählung GEGEN die Leserichtung: die letzten Kapitel hat die Leserin noch im Kopf, den Anfang hat sie vergessen. Verwenden Sie etwa 55%% der Wörter auf alles bis zur %d%%-Marke, etwa 30%% auf den Abschnitt von %d%% bis %d%%, und nur etwa 15%% auf den jüngsten Teil -- der braucht eine Erinnerung, keine Nacherzählung.
+"""
+
 _COMPREHENSIVE = {"en": COMPREHENSIVE_XRAY_EN, "de": COMPREHENSIVE_XRAY_DE}
 _GLEAN = {"en": GLEAN_EN, "de": GLEAN_DE}
 _ENRICH_HEADER = {"en": ENRICH_HEADER_EN, "de": ENRICH_HEADER_DE}
+_RECAP = {"en": RECAP_EN, "de": RECAP_DE}
+_RECAP_WEIGHTING = {"en": RECAP_WEIGHTING_EN, "de": RECAP_WEIGHTING_DE}
 _SYSTEM = {"en": SYSTEM_INSTRUCTION_EN, "de": SYSTEM_INSTRUCTION_DE}
 _NAME_RULES = {"en": NAME_RULES_EN, "de": NAME_RULES_DE}
 _SEGMENT_ADDENDUM = {"en": SEGMENT_ADDENDUM_EN, "de": SEGMENT_ADDENDUM_DE}
@@ -358,3 +401,183 @@ def build_glean_prompt(language, detail_level, title, author, percent,
     names = ", ".join(found_names) if found_names else "(none yet)"
     instr = instr.replace("{FOUND_NAMES}", names)
     return system, _SEGMENT_PREFIX + segment_text + _INSTR_SEP + instr + _CONTEXT_FOOTER[language]
+
+
+def _recap_events_block(events) -> str:
+    if not events:
+        return "(none recorded)"
+    return "\n".join(
+        f"- {ev.get('pct', 0)}%: {(ev.get('event') or '').strip()}"
+        for ev in events
+    )
+
+
+def _recap_characters_block(characters) -> str:
+    """Names carry even without a description -- the recap needs to know an
+    entity exists in order to name it correctly, and extraction leaves
+    `description` empty rather than inventing a placeholder (see merge.py)."""
+    lines = []
+    for ch in characters or []:
+        name = (ch.get("name") or "").strip()
+        if not name:
+            continue
+        desc = (ch.get("description") or "").strip()
+        lines.append(f"- {name}: {desc}" if desc else f"- {name}")
+    return "\n".join(lines) or "(none recorded)"
+
+
+# Length follows the material, not the reading position. Measured on a real
+# book: at 16% there were 11 timeline events, and against a flat "250 to 400
+# words" the model still wrote 399 -- padding with the founding of the Shire in
+# 1601 and a history of pipe-weed. A densely plotted book at 20% has more to
+# report than a slow one at 40%, and the event count is what knows that.
+RECAP_WORDS_PER_EVENT = 8
+RECAP_WORDS_MIN = 150
+RECAP_WORDS_MAX = 400
+
+
+def recap_target_words(event_count: int) -> int:
+    return max(RECAP_WORDS_MIN,
+               min(RECAP_WORDS_MAX, RECAP_WORDS_PER_EVENT * event_count))
+
+
+def build_recap_prompt(language, title, author, percent, events, characters):
+    """Build (system, user) for one stage's "story so far" recap.
+
+    Deliberately NOT routed through build_prompt: that one is built for chunk
+    extraction and unconditionally prepends `_SEGMENT_PREFIX + segment_text`
+    plus the context footer. A recap has no book-text segment at all -- its
+    input is the frozen snapshot of the stage it belongs to, which is exactly
+    what keeps it spoiler-safe.
+
+    `events` and `characters` must already be cut to this stage. That cut is
+    the D4 boundary and belongs to the caller (tools/claude_xray_recap.py), not
+    here -- a prompt builder that silently filtered would hide where the
+    guarantee lives.
+    """
+    instr = _apply_percent_args(_RECAP[language], title, author, percent)
+    instr = instr.replace("{WORDS}", str(recap_target_words(len(events or []))))
+
+    # Below 20% there is no "long ago" worth extra room; the bands would carve
+    # up a handful of chapters. Chronological order is the better answer there,
+    # and that is what the base template already asks for.
+    if percent >= 20:
+        far, mid = round(percent * 0.5), round(percent * 0.85)
+        weighting = _RECAP_WEIGHTING[language] % (far, far, mid)
+    else:
+        weighting = "\n"
+    instr = instr.replace("{WEIGHTING}", weighting)
+
+    # Substituted AFTER %-formatting: a '%' inside an event text or a character
+    # description would otherwise be read as a format specifier -- the same
+    # reason build_prompt formats the instruction before prepending the chunk.
+    instr = instr.replace("{TIMELINE}", _recap_events_block(events))
+    instr = instr.replace("{CHARACTERS}", _recap_characters_block(characters))
+    return _SYSTEM[language], instr
+
+
+# ---------------------------------------------------------------------------
+# Ego-net relations (feature B). One call per book, over the finished document.
+# ---------------------------------------------------------------------------
+
+# Narrow on purpose. On a 6" screen sparseness is the quality: with a handful
+# of structural bonds per figure the neighbours always fit on one screen, and
+# every edge shown carries information. "Meets" and "knows" do not.
+MAX_RELATIONS_PER_FIGURE = 5
+
+RELATIONS_EN = r"""Book: {TITLE}
+Author: {AUTHOR}
+
+TASK: List the relationships between the figures below. Use ONLY the figures listed; never invent a name, and never name anyone who is not in the lists.
+
+Record ONLY these kinds of bond: family, rule/service, alliance, enmity, love/marriage, mentorship. Leave out passing encounters -- that two figures met, travelled together or know each other is not a relationship here.
+
+At most {MAX} relationships per figure. If a figure has more, keep the ones that matter most to the plot.
+
+Give EVERY relationship in BOTH directions, as two separate entries. `label` names the role `to` has for `from`: for a father Eddard and his son Robb, write both {"from": "Robb Stark", "to": "Eddard Stark", "label": "father"} and {"from": "Eddard Stark", "to": "Robb Stark", "label": "son"}. A missing counterpart makes the relationship disappear from one of the two figures.
+
+Keep `label` short -- a word or two, no sentence.
+
+Output ONLY a JSON object of the form {"relations": [{"from": "...", "to": "...", "label": "..."}]}.
+
+FIGURES:
+{CHARACTERS}
+
+HISTORICAL FIGURES (real people referenced in the book; valid targets too):
+{HISTORICAL}"""
+
+RELATIONS_DE = r"""Buch: {TITLE}
+Autor: {AUTHOR}
+
+AUFGABE: Führen Sie die Beziehungen zwischen den unten genannten Figuren auf. Verwenden Sie AUSSCHLIESSLICH die aufgeführten Figuren; erfinden Sie keinen Namen und nennen Sie niemanden, der nicht in den Listen steht.
+
+Erfassen Sie NUR diese Arten von Bindung: Verwandtschaft, Herrschaft/Dienst, Bündnis, Feindschaft, Liebe/Ehe, Mentorschaft. Flüchtige Begegnungen bleiben weg -- dass zwei Figuren sich getroffen haben, zusammen gereist sind oder einander kennen, ist hier keine Beziehung.
+
+Höchstens {MAX} Beziehungen je Figur. Hat eine Figur mehr, behalten Sie die für die Handlung wichtigsten.
+
+Geben Sie JEDE Beziehung in BEIDEN Richtungen an, als zwei getrennte Einträge. `label` benennt die Rolle, die `to` für `from` hat: für den Vater Eddard und seinen Sohn Robb also sowohl {"from": "Robb Stark", "to": "Eddard Stark", "label": "Vater"} als auch {"from": "Eddard Stark", "to": "Robb Stark", "label": "Sohn"}. Fehlt die Gegenrichtung, verschwindet die Beziehung bei einer der beiden Figuren.
+
+Halten Sie `label` kurz -- ein bis zwei Wörter, kein Satz.
+
+Ausgabe: NUR ein JSON-Objekt der Form {"relations": [{"from": "...", "to": "...", "label": "..."}]}.
+
+FIGUREN:
+{CHARACTERS}
+
+HISTORISCHE PERSONEN (reale Personen, auf die das Buch verweist; ebenfalls gültige Ziele):
+{HISTORICAL}"""
+
+_RELATIONS = {"en": RELATIONS_EN, "de": RELATIONS_DE}
+
+
+def _relations_figures_block(figures, description_key: str, with_aliases: bool) -> str:
+    lines = []
+    for figure in figures or []:
+        name = (figure.get("name") or "").strip()
+        if not name:
+            continue
+        line = f"- {name}"
+        if with_aliases:
+            aliases = [a.strip() for a in figure.get("aliases") or [] if (a or "").strip()]
+            if aliases:
+                line += f" (also: {', '.join(aliases)})"
+        desc = (figure.get(description_key) or "").strip()
+        if desc:
+            line += f": {desc}"
+        lines.append(line)
+    return "\n".join(lines) or "(none recorded)"
+
+
+def build_relations_prompt(language, title, author, characters, historical):
+    """Build (system, user) for the one relations pass of a book.
+
+    No %-formatting anywhere -- not `_apply_percent_args`, not a bare `%`.
+    Two reasons, both measured. That helper takes a `percent` this whole-book
+    prompt does not have, and it spreads it across every specifier from the
+    third onward, so a cap written as %d renders as 0: a prompt asking for "at
+    most 0 relations per figure" that still looks well-formed. And a book whose
+    title or a character description contains a '%' would either raise or eat
+    the next character. Plain .replace() has neither failure mode.
+
+    Not routed through build_prompt either: that one prepends
+    `_SEGMENT_PREFIX + segment_text`, and this pass has no book-text segment --
+    it reads the finished document.
+
+    Both categories get their aliases. This shipped as characters-only on
+    2026-07-27, justified by `clean_response` building historical figures with
+    no `aliases` key (merge.py) -- but the snapshot this pass reads is
+    POST-merge, where `_add_alias` does add one. Measured: "Yssa the Elder"
+    merged with "Queen Yssa the Elder" stores aliases ['Queen Yssa the Elder'].
+    Withholding those from the model only cost edges.
+    """
+    instr = _RELATIONS[language]
+    instr = instr.replace("{TITLE}", title or "")
+    instr = instr.replace("{AUTHOR}", author or "")
+    instr = instr.replace("{MAX}", str(MAX_RELATIONS_PER_FIGURE))
+    instr = instr.replace(
+        "{CHARACTERS}", _relations_figures_block(characters, "description", True)
+    )
+    instr = instr.replace(
+        "{HISTORICAL}", _relations_figures_block(historical, "biography", True)
+    )
+    return _SYSTEM[language], instr

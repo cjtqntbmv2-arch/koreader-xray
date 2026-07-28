@@ -85,3 +85,64 @@ def test_empty_names_never_collide(minimal_doc):
         {"name": ""},
     ]
     assert not any("duplicate" in p.lower() for p in validate(minimal_doc))
+
+
+# ---------------------------------------------------------------------------
+# relations (ego net, feature B) -- shape only. That both endpoints resolve to
+# a real figure is enforced constructively by the fold in
+# tools/claude_xray_relations.py, never here: generate_xray raises on any
+# validation problem *after* the whole extraction budget is spent, so a single
+# bad edge would cost the entire run (design, "D4 gilt konstruktiv").
+# ---------------------------------------------------------------------------
+
+
+def test_wellformed_relations_are_accepted(minimal_doc):
+    """The positive case is load-bearing, not decoration: without it a rule
+    that rejects every document passes the whole negative battery. Measured --
+    a `reject_everything` mutant ran 10/10 green against the acceptance list
+    while this case was missing."""
+    minimal_doc["relations"] = [
+        {"from": "Jane Doe", "to": "John Doe", "label": "sister"},
+        {"from": "John Doe", "to": "Jane Doe", "label": "brother"},
+    ]
+    assert validate(minimal_doc) == []
+
+
+def test_relations_must_be_a_list(minimal_doc):
+    minimal_doc["relations"] = "x"
+    assert validate(minimal_doc) == ["relations must be a list"]
+
+
+def test_relation_entry_must_be_an_object(minimal_doc):
+    minimal_doc["relations"] = ["Jane Doe -> John Doe"]
+    assert validate(minimal_doc) == ["relations[0] must be an object"]
+
+
+def test_relation_requires_every_field(minimal_doc):
+    minimal_doc["relations"] = [{"from": "Jane Doe", "label": "sister"}]
+    assert validate(minimal_doc) == ["relations[0].to must be a non-empty string"]
+
+
+def test_relation_fields_must_be_non_empty_strings(minimal_doc):
+    minimal_doc["relations"] = [{"from": "Jane Doe", "to": "John Doe", "label": 12345}]
+    assert validate(minimal_doc) == ["relations[0].label must be a non-empty string"]
+
+    minimal_doc["relations"] = [{"from": "Jane Doe", "to": "John Doe", "label": ""}]
+    assert validate(minimal_doc) == ["relations[0].label must be a non-empty string"]
+
+
+def test_relation_fields_of_pure_whitespace_are_rejected(minimal_doc):
+    """Same reasoning as _str/_first_nonempty in xray_core/merge.py, which
+    strip and treat a then-empty string as a missing field (project CLAUDE.md,
+    "bewusste Divergenzen vom Lua"): bool("   ") is true in Python, so without
+    stripping a whitespace-only name passes every truthiness check and then
+    resolves to no figure at all on the device."""
+    minimal_doc["relations"] = [{"from": "   ", "to": "John Doe", "label": "brother"}]
+    assert validate(minimal_doc) == ["relations[0].from must be a non-empty string"]
+
+
+def test_absent_relations_are_not_required(minimal_doc):
+    """Feature-presence gating, not version gating: a document generated
+    before this feature existed stays valid (design, "Kein Schema-Bump")."""
+    assert "relations" not in minimal_doc
+    assert validate(minimal_doc) == []

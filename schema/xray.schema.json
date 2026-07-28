@@ -52,6 +52,10 @@
             "type": "integer", "minimum": 1, "maximum": 100,
             "description": "Rounded UP from the checkpoint's char offset, so it never claims less coverage than its snapshot actually has: the device compares its reading position straight against this value."
           },
+          "recap": {
+            "type": "string",
+            "description": "Optional 'story so far' prose for this stage, covering 0..percent and nothing beyond. Only a subset of stages carries one (the recap pass writes at most 12 per book); the device walks back to the newest stage at or below the reader. Absent means the feature is off for this document -- never an error, and never an empty string."
+          },
           "snapshot": {
             "type": "object",
             "required": ["characters", "locations", "terms", "historical_figures"],
@@ -120,6 +124,19 @@
               }
             }
           }
+        }
+      }
+    },
+    "relations": {
+      "type": "array",
+      "description": "optional; enforced: if present, a list of objects whose from/to/label are each a non-empty string. Ego-net edges for the whole book, siblings of checkpoints rather than fields on a character -- they are produced by a post-pass over the finished document and never travel through the merge. `label` names the role `to` has for `from`, so every relationship appears twice, once per direction, and the device filters on `from` alone. Deliberately no first_pct: D4 for edges holds on the device, which shows an edge only when BOTH endpoints resolve inside the snapshot the reader can already see. Absent means the feature is off for this document -- never an error.",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "label"],
+        "properties": {
+          "from": { "type": "string", "minLength": 1 },
+          "to": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 }
         }
       }
     }
