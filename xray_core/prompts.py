@@ -563,9 +563,12 @@ def build_relations_prompt(language, title, author, characters, historical):
     `_SEGMENT_PREFIX + segment_text`, and this pass has no book-text segment --
     it reads the finished document.
 
-    Characters get their aliases, historical figures do not: clean_response
-    builds that category with no `aliases` key at all (merge.py), so offering
-    an alias line there would promise a matching rule the fold cannot honour.
+    Both categories get their aliases. This shipped as characters-only on
+    2026-07-27, justified by `clean_response` building historical figures with
+    no `aliases` key (merge.py) -- but the snapshot this pass reads is
+    POST-merge, where `_add_alias` does add one. Measured: "Yssa the Elder"
+    merged with "Queen Yssa the Elder" stores aliases ['Queen Yssa the Elder'].
+    Withholding those from the model only cost edges.
     """
     instr = _RELATIONS[language]
     instr = instr.replace("{TITLE}", title or "")
@@ -575,6 +578,6 @@ def build_relations_prompt(language, title, author, characters, historical):
         "{CHARACTERS}", _relations_figures_block(characters, "description", True)
     )
     instr = instr.replace(
-        "{HISTORICAL}", _relations_figures_block(historical, "biography", False)
+        "{HISTORICAL}", _relations_figures_block(historical, "biography", True)
     )
     return _SYSTEM[language], instr

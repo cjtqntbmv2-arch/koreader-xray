@@ -139,14 +139,18 @@ plus eine Selbstkante `Ned → Eddard Stark`, `validate()` meldete `[]`, und all
 zehn Abnahmechecks blieben grün. Dieselbe Lücke ließ eine Figur `2 ×
 MAX_RELATIONS_PER_FIGURE` Kanten unter zwei Schreibweisen tragen.
 
-**Auflösung nach Kategorie unterschiedlich:** `characters` über Name **und**
-Aliase, `historical_figures` **nur über den Namen**. Grund: `clean_response`
-baut historische Figuren ohne `aliases`-Schlüssel auf (`merge.py:391-401`, im
-Gegensatz zu Charakteren bei `:374`) — nachgemessen bleiben von
-`{"name":"Aegon","aliases":["der Eroberer"]}` genau
-`biography, context_in_book, importance_in_book, name, role` übrig, bestätigt
-gegen `tests/golden/xray_golden.json`. Die Alias-Hälfte wäre für diese
-Kategorie toter Code.
+**Auflösung über Name und Aliase, für beide Figurenkategorien.**
+
+*Korrigiert am 2026-07-28.* Umgesetzt war es zunächst name-only für
+`historical_figures`, begründet damit, dass `clean_response` diese Kategorie
+ohne `aliases`-Schlüssel aufbaut (`merge.py:391-401` gegen `:374`) — das
+stimmt für `clean_response`, aber der Snapshot ist **nach** dem Merge, und
+`_add_alias` (`merge.py:603`) legt den Schlüssel dort an. Nachgemessen:
+„Yssa the Elder" gemerged mit „Queen Yssa the Elder" speichert
+`aliases: ['Queen Yssa the Elder']`. (Mit „König Aegon" greift es nicht, weil
+der deutsche Titel nicht in der Honorific-Liste steht — daran ging der erste
+Gegentest vorbei.) Die Einschränkung verwarf still jede Kante, die eine solche
+Form benutzte.
 
 **Unerwiderte Kanten werden gemeldet, nicht verworfen:** existiert `A→B` ohne
 `B→A`, gibt der `fold` eine Warnung mit beiden Namen aus.

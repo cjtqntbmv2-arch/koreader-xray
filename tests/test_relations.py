@@ -92,16 +92,19 @@ def test_nameless_entries_are_skipped():
     assert "namenlos, wird übersprungen" not in instr
 
 
-def test_historical_figures_are_listed_separately_and_without_aliases():
-    """clean_response builds historical figures with no `aliases` key at all
-    (merge.py, unlike characters), so offering the model an alias line there
-    would promise a matching rule the fold cannot honour."""
+def test_historical_figures_are_listed_with_their_aliases():
+    """This shipped the other way round on a wrong premise. `clean_response`
+    does build historical figures without an `aliases` key -- but the snapshot
+    the pass reads is POST-MERGE, and `_add_alias` puts one there: measured,
+    "Yssa the Elder" merged with "Queen Yssa the Elder" stores
+    aliases ['Queen Yssa the Elder']. Withholding them from the model while the
+    fold could resolve them only loses edges."""
     _system, instr = build(
         historical=[{"name": "Aegon der Eroberer", "aliases": ["der Drache"],
                      "biography": "Einiger der Sieben Königslande."}],
     )
     assert "Aegon der Eroberer" in instr
-    assert "der Drache" not in instr
+    assert "der Drache" in instr
 
 
 def test_both_directions_are_demanded():
@@ -209,9 +212,11 @@ def test_alias_endpoint_survives_and_is_canonicalised(doc):
     assert kept[0]["to"] == "Eddard Stark", "must be rewritten to the canonical name"
 
 
-def test_historical_figures_resolve_by_name_only(doc):
-    """clean_response builds that category with no `aliases` key at all
-    (merge.py), so an alias rule there would promise what cannot be honoured."""
+def test_historical_figures_resolve_by_name_and_alias(doc):
+    """Corrected 2026-07-28: the original rule here was name-only, justified by
+    clean_response not building an `aliases` key. The snapshot is post-merge,
+    where `_add_alias` does add one -- see
+    test_historical_figures_resolve_by_alias_too."""
     doc["checkpoints"][0]["snapshot"]["historical_figures"][0]["aliases"] = ["der Drache"]
     by_name, _warn = filter_relations(
         [edge("Robb Stark", "Aegon der Eroberer", "Ahn")], doc)
@@ -219,7 +224,8 @@ def test_historical_figures_resolve_by_name_only(doc):
 
     by_alias, _warn = filter_relations(
         [edge("Robb Stark", "der Drache", "Ahn")], doc)
-    assert by_alias == []
+    assert len(by_alias) == 1
+    assert by_alias[0]["to"] == "Aegon der Eroberer"
 
 
 def test_normalisation_runs_before_dedup(doc):
@@ -364,3 +370,134 @@ def test_run_fold_writes_both_filenames(doc, tmp_path):
     for name in ("xray.json", manifest["companion_name"]):
         assert (out / name).exists()
         assert json.loads((out / name).read_text(encoding="utf-8"))["relations"]
+
+
+# ---------------------------------------------------------------------------
+# Review follow-ups (2026-07-28): findings from four independent reviewers
+# ---------------------------------------------------------------------------
+
+def test_label_naming_a_figure_drops_the_edge(doc):
+    """The label is the one string on the ego-net screen that the device's D4
+    filter never inspects -- it is rendered verbatim beside the neighbour. A
+    label like "Vater, auch von Jon Schnee" therefore leaks a name the reader
+    may not have reached, however correct both endpoints are. Caught here,
+    because only the desktop knows the full cast."""
+    doc["checkpoints"][0]["snapshot"]["characters"].append(
+        _character("Jon Schnee", 9, description="Ziehsohn."))
+    kept, warnings = filter_relations(
+        [edge("Robb Stark", "Eddard Stark", "Vater, auch von Jon Schnee")], doc)
+    assert kept == []
+    assert any("Jon Schnee" in w for w in warnings)
+
+
+def test_an_ordinary_label_is_untouched(doc):
+    """Counter-probe: without it a scanner that drops every label passes."""
+    kept, _warn = filter_relations(
+        [edge("Robb Stark", "Eddard Stark", "Vater")], doc)
+    assert len(kept) == 1
+    assert kept[0]["label"] == "Vater"
+
+
+def test_the_endpoints_own_names_do_not_trip_the_scan(doc):
+    """Both figures are on screen anyway, so naming them is not a leak."""
+    kept, _warn = filter_relations(
+        [edge("Robb Stark", "Eddard Stark", "Sohn von Eddard Stark")], doc)
+    assert len(kept) == 1
+
+
+def test_a_sentence_shaped_label_is_rejected(doc):
+    """Catches the leak class the name scan cannot see: a label naming a place,
+    a house or an event that is not in the cast. The prompt asks for one or two
+    words; anything sentence-shaped is a rule violation, not a role."""
+    kept, warnings = filter_relations(
+        [edge("Robb Stark", "Eddard Stark",
+              "sein Vater und der Herr von Winterfell im Norden")], doc)
+    assert kept == []
+    assert warnings
+
+
+def test_historical_figures_resolve_by_alias_too(doc):
+    """Corrects an assumption this module shipped with. `clean_response` builds
+    historical figures without an `aliases` key, but the SNAPSHOT is post-merge,
+    and `_add_alias` adds one there: measured, "Yssa the Elder" merged with
+    "Queen Yssa the Elder" stores aliases ['Queen Yssa the Elder']. Resolving
+    those by name only silently drops edges."""
+    doc["checkpoints"][0]["snapshot"]["historical_figures"][0]["aliases"] = ["Der Eroberer"]
+    kept, _warn = filter_relations(
+        [edge("Robb Stark", "Der Eroberer", "Ahn")], doc)
+    assert len(kept) == 1
+    assert kept[0]["to"] == "Aegon der Eroberer"
+
+
+def test_answer_with_prose_around_a_fence_still_parses(doc, tmp_path):
+    """The shape a subagent most often writes. Raising here would lose the pass
+    after its budget is spent -- the trap this fold exists to avoid."""
+    (tmp_path / "relations.json").write_text(
+        'Here are the relations:\n\n```json\n'
+        '{"relations": [{"from": "Robb Stark", "to": "Eddard Stark", "label": "Vater"}]}\n'
+        '```\n\nHope that helps!',
+        encoding="utf-8")
+    fold(doc, {"text_hash": doc["book_fingerprint"]["text_hash"],
+               "companion_name": "b.epub.xray.json"}, str(tmp_path))
+    assert len(doc["relations"]) == 1
+
+
+def test_unparseable_answer_fails_with_a_readable_message(doc, tmp_path):
+    (tmp_path / "relations.json").write_text("I could not do this.", encoding="utf-8")
+    with _pytest.raises(SystemExit, match="relations.json"):
+        fold(doc, {"text_hash": doc["book_fingerprint"]["text_hash"],
+                   "companion_name": "b.epub.xray.json"}, str(tmp_path))
+
+
+def test_an_empty_result_clears_stale_relations(doc, tmp_path):
+    """SKILL.md makes --doc and --out the same file, so a re-fold is
+    read-modify-write. Keeping the previous run's edges when the new answer
+    yields none reports them as fresh and hides that this run found nothing."""
+    doc["relations"] = [{"from": "Robb Stark", "to": "Eddard Stark", "label": "STALE"}]
+    (tmp_path / "relations.json").write_text(
+        json.dumps({"relations": [edge("Robb Stark", "Niemand")]}), encoding="utf-8")
+    fold(doc, {"text_hash": doc["book_fingerprint"]["text_hash"],
+               "companion_name": "b.epub.xray.json"}, str(tmp_path))
+    assert doc["relations"] == []
+
+
+def test_a_missing_answer_file_leaves_the_document_alone(doc, tmp_path):
+    """The other half of the case above: an interrupted wave must not wipe
+    what a previous run produced."""
+    doc["relations"] = [{"from": "Robb Stark", "to": "Eddard Stark", "label": "Vater"}]
+    fold(doc, {"text_hash": doc["book_fingerprint"]["text_hash"],
+               "companion_name": "b.epub.xray.json"}, str(tmp_path))
+    assert len(doc["relations"]) == 1
+
+
+def test_the_cap_applies_per_source_not_globally(doc):
+    """Two source figures must each get their own allowance; a global counter
+    would give the first figure everything and the second nothing."""
+    from xray_core.prompts import MAX_RELATIONS_PER_FIGURE
+
+    targets = [f"Fig {i}" for i in range(MAX_RELATIONS_PER_FIGURE)]
+    doc["checkpoints"][0]["snapshot"]["characters"].extend(
+        _character(n, 20 + i) for i, n in enumerate(targets))
+
+    raw = ([edge("Robb Stark", t, "kennt") for t in targets]
+           + [edge("Eddard Stark", t, "kennt") for t in targets])
+    kept, _warn = filter_relations(raw, doc)
+    assert len([r for r in kept if r["from"] == "Robb Stark"]) == MAX_RELATIONS_PER_FIGURE
+    assert len([r for r in kept if r["from"] == "Eddard Stark"]) == MAX_RELATIONS_PER_FIGURE
+
+
+def test_names_are_matched_case_insensitively(doc):
+    """A model re-typing names it was handed drifts in case; dropping the edge
+    for that would be silent loss."""
+    kept, _warn = filter_relations(
+        [{"from": "ROBB STARK", "to": "eddard stark", "label": "Vater"}], doc)
+    assert len(kept) == 1
+    assert (kept[0]["from"], kept[0]["to"]) == ("Robb Stark", "Eddard Stark")
+
+
+def test_padded_names_resolve_and_a_blank_label_does_not(doc):
+    kept, _warn = filter_relations(
+        [{"from": " Robb Stark ", "to": "Eddard Stark", "label": "Vater"},
+         {"from": "Eddard Stark", "to": "Robb Stark", "label": "   "}], doc)
+    assert len(kept) == 1
+    assert kept[0]["from"] == "Robb Stark"

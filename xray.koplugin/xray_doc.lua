@@ -492,12 +492,28 @@ function XRayDoc.egoNet(doc, idx, entry)
             and type(relation.to) == "string"
             and centre[normalize(relation.from)]
         then
-            local hits = XRayDoc.resolve(snapshot, relation.to)
-            local hit = hits[1]
             -- Only figures are valid targets; a name that resolves to a place
-            -- or a term is a generator slip, not a relationship.
-            if hit and (hit.category == "characters"
-                        or hit.category == "historical_figures") then
+            -- or a term is a generator slip, not a relationship. Scanned rather
+            -- than taking hits[1] and testing its category afterwards: resolve
+            -- walks characters, locations, terms, historical_figures in that
+            -- order and returns EVERY hit, so a term sharing a name with a
+            -- historical figure -- a routine extraction outcome for legendary
+            -- names -- would shadow it and drop the edge. An exact name match
+            -- beats another figure's alias for the same reason showPicker
+            -- exists: the collision is real.
+            local hit
+            local target = normalize(relation.to)
+            for _unused2, candidate in ipairs(XRayDoc.resolve(snapshot, relation.to)) do
+                if candidate.category == "characters"
+                    or candidate.category == "historical_figures" then
+                    if normalize(candidate.entry.name) == target then
+                        hit = candidate
+                        break
+                    end
+                    hit = hit or candidate
+                end
+            end
+            if hit then
                 local name = hit.entry.name or ""
                 if not seen[name] and normalize(name) ~= own then
                     seen[name] = true

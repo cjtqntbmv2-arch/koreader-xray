@@ -347,3 +347,41 @@ describe("XRayDoc.egoNet", function()
         assert.equals(0, #XRayDoc.egoNet(makeNetDoc(), 99, { name = "Robb Stark" }))
     end)
 end)
+
+describe("XRayDoc.egoNet target selection", function()
+    it("finds a figure whose name is also a term", function()
+        -- resolve() walks characters, locations, terms, historical_figures in
+        -- that order and returns every hit. Taking hits[1] and then testing its
+        -- category dropped the edge whenever a term shadowed the figure --
+        -- double-listing a legendary name as both is a routine extraction
+        -- outcome.
+        local doc = makeNetDoc()
+        doc.checkpoints[2].snapshot.terms = {
+            { name = "Aegon der Eroberer", definition = "Ein Titel." },
+        }
+        local net = XRayDoc.egoNet(doc, 2, { name = "Robb Stark" })
+        local found
+        for _unused, item in ipairs(net) do
+            if item.entry.name == "Aegon der Eroberer" then found = item end
+        end
+        assert.is_not_nil(found)
+        assert.equals("historical_figures", found.category)
+    end)
+
+    it("prefers an exact name match over another figure's alias", function()
+        local doc = makeNetDoc()
+        table.insert(doc.checkpoints[2].snapshot.characters,
+                     { name = "Ned", aliases = {} })
+        doc.relations = { { from = "Robb Stark", to = "Ned", label = "Freund" } }
+        local net = XRayDoc.egoNet(doc, 2, { name = "Robb Stark" })
+        assert.equals(1, #net)
+        assert.equals("Ned", net[1].entry.name)
+    end)
+
+    it("still drops an edge onto a place", function()
+        local doc = makeNetDoc()
+        doc.checkpoints[2].snapshot.locations = { { name = "Winterfell" } }
+        doc.relations = { { from = "Robb Stark", to = "Winterfell", label = "Heim" } }
+        assert.equals(0, #XRayDoc.egoNet(doc, 2, { name = "Robb Stark" }))
+    end)
+end)

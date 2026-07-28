@@ -22,6 +22,7 @@ import argparse
 import collections
 import json
 import os
+import re
 
 from xray_core.prompts import MAX_RELATIONS_PER_FIGURE, build_relations_prompt
 from xray_core.schema import validate
@@ -49,43 +50,74 @@ def _last_snapshot(doc) -> dict:
     return checkpoints[-1].get("snapshot") or {}
 
 
+FIGURE_CATEGORIES = ("characters", "historical_figures")
+
+
+def _figures(doc):
+    """Every figure of the last stage, both categories."""
+    snapshot = _last_snapshot(doc)
+    for category in FIGURE_CATEGORIES:
+        for entry in snapshot.get(category) or []:
+            if isinstance(entry, dict) and _text(entry.get("name")):
+                yield entry
+
+
 def _resolver(doc) -> dict:
     """lowercased spelling -> canonical name, built from the LAST stage.
 
-    Characters resolve by name AND alias; historical figures by name only,
-    because `clean_response` builds that category without an `aliases` key at
-    all (xray_core/merge.py, unlike the character branch). Offering an alias
-    rule there would promise a match the data cannot support.
+    Both categories resolve by name AND alias. The alias half used to be
+    characters-only, justified by `clean_response` building historical figures
+    without an `aliases` key (xray_core/merge.py) -- but the snapshot this pass
+    reads is POST-merge, and `_add_alias` does add one there. Measured: "Yssa
+    the Elder" merged with "Queen Yssa the Elder" stores
+    aliases ['Queen Yssa the Elder']. Name-only resolution silently dropped
+    every edge that used such a form.
 
     Names are indexed before aliases, and `setdefault` keeps the first writer:
     a figure's own name must never be shadowed by another figure's alias.
     """
-    snapshot = _last_snapshot(doc)
     index: dict[str, str] = {}
+    figures = list(_figures(doc))
 
-    for entry in snapshot.get("characters") or []:
-        if isinstance(entry, dict):
-            name = _text(entry.get("name"))
-            if name:
-                index.setdefault(name.lower(), name)
-    for entry in snapshot.get("historical_figures") or []:
-        if isinstance(entry, dict):
-            name = _text(entry.get("name"))
-            if name:
-                index.setdefault(name.lower(), name)
-
-    for entry in snapshot.get("characters") or []:
-        if not isinstance(entry, dict):
-            continue
-        name = _text(entry.get("name"))
-        if not name:
-            continue
+    for entry in figures:
+        name = _text(entry["name"])
+        index.setdefault(name.lower(), name)
+    for entry in figures:
+        name = _text(entry["name"])
         for alias in entry.get("aliases") or []:
             alias = _text(alias)
             if alias:
                 index.setdefault(alias.lower(), name)
 
     return index
+
+
+# The prompt asks for one or two words. Anything past this is a sentence, and a
+# sentence is where names and events hide.
+MAX_LABEL_WORDS = 4
+
+
+def _label_problem(label: str, endpoints: set, index: dict):
+    """Why this label must not be displayed, or None.
+
+    The label is the one string on the ego-net screen that the device's D4
+    filter never inspects: `XRayDoc.egoNet` checks that both endpoints resolve
+    inside the reader's snapshot, then renders `label` verbatim beside the
+    neighbour. So "Vater, auch von Jon Schnee" leaks a name from the end of the
+    book while both endpoints are perfectly legitimate. Only the desktop knows
+    the full cast, so the check belongs here.
+
+    Naming the two endpoints is fine -- both are on that screen anyway.
+    """
+    if len(label.split()) > MAX_LABEL_WORDS:
+        return "sentence-shaped"
+    lowered = label.lower()
+    for spelling, canonical in index.items():
+        if canonical in endpoints:
+            continue
+        if re.search(r"(?<!\w)" + re.escape(spelling) + r"(?!\w)", lowered):
+            return f"names {canonical}"
+    return None
 
 
 def filter_relations(raw, doc):
@@ -104,6 +136,7 @@ def filter_relations(raw, doc):
     resolve = _resolver(doc)
     kept = []
     seen = set()
+    warnings = []
     per_figure: collections.Counter = collections.Counter()
 
     for item in raw or []:
@@ -126,6 +159,12 @@ def filter_relations(raw, doc):
         if per_figure[canon_source] >= MAX_RELATIONS_PER_FIGURE:
             continue
 
+        problem = _label_problem(label, {canon_source, canon_target}, resolve)
+        if problem:
+            warnings.append(
+                f"dropped {canon_source} -> {canon_target}: label {label!r} {problem}")
+            continue
+
         seen.add(pair)
         per_figure[canon_source] += 1
         kept.append({"from": canon_source, "to": canon_target, "label": label})
@@ -133,12 +172,12 @@ def filter_relations(raw, doc):
     # Unreciprocated edges are reported, never dropped: the edge is correct in
     # one figure's net, it is only missing from the other's. Silently passing
     # them makes the net asymmetric with nobody the wiser.
-    warnings = [
+    warnings.extend(
         f"unreciprocated: {source} -> {target} has no counterpart edge "
         f"{target} -> {source}"
         for source, target in sorted(seen)
         if (target, source) not in seen
-    ]
+    )
     return kept, warnings
 
 
@@ -159,20 +198,40 @@ def _refuse_on_drift(doc, manifest):
         )
 
 
-def _parse_answer(text):
-    """Tolerate the two shapes a subagent actually writes.
+def _parse_answer(text, path=""):
+    """Tolerate the shapes a subagent actually writes.
 
-    A bare list instead of {"relations": [...]}, and a ```json fence around it.
-    Being strict here would mean losing the whole pass after its budget is
-    spent -- the same trap generate_xray's late validation has for the main run.
+    A bare list instead of {"relations": [...]}, a ```json fence, and prose
+    around either -- "Here are the relations:" before it and "Hope that helps!"
+    after it is the single most common subagent output. An earlier version only
+    stripped a fence when the text STARTED with one, so both prose cases raised
+    an uncaught JSONDecodeError mid-fold. Being strict here means losing the
+    whole pass after its budget is spent, the same trap generate_xray's late
+    validation has for the main run. (The recap pass sidesteps all of this by
+    taking plain prose -- see its module docstring.)
+
+    An answer that really cannot be parsed still fails, but by name.
     """
     text = text.strip()
-    if text.startswith("```"):
-        lines = [ln for ln in text.splitlines() if not ln.strip().startswith("```")]
-        text = "\n".join(lines).strip()
     if not text:
         return []
-    data = json.loads(text)
+
+    # Slice to the outermost JSON container, which drops fences and prose in
+    # one step regardless of where they sit.
+    starts = [i for i in (text.find("{"), text.find("[")) if i != -1]
+    ends = [text.rfind("}"), text.rfind("]")]
+    if starts and max(ends) > min(starts):
+        text = text[min(starts):max(ends) + 1]
+
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise SystemExit(
+            f"relations fold aborted -- could not parse {path or ANSWER_FILE}: "
+            f"{exc}. The answer must be a JSON object of the form "
+            '{"relations": [...]}.'
+        ) from exc
+
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
@@ -222,13 +281,16 @@ def fold(doc, manifest, workdir):
 
     path = os.path.join(workdir, manifest.get("answer_file") or ANSWER_FILE)
     if not os.path.exists(path):
-        return []
+        return []  # interrupted wave -- leave whatever a previous run produced
     with open(path, encoding="utf-8") as f:
-        raw = _parse_answer(f.read())
+        raw = _parse_answer(f.read(), path)
 
+    # Assigned unconditionally once an answer was read, empty result included.
+    # SKILL.md makes --doc and --out the same file, so a re-fold is
+    # read-modify-write: keeping the previous run's edges when this one yields
+    # none would report them as fresh and hide that this run found nothing.
     relations, warnings = filter_relations(raw, doc)
-    if relations:
-        doc["relations"] = relations
+    doc["relations"] = relations
     return warnings
 
 

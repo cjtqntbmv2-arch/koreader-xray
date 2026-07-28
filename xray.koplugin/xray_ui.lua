@@ -116,7 +116,11 @@ local function buildRow(entry, category, doc, cp_idx)
     }
     local preview = PREVIEW_FIELD[category] and entry[PREVIEW_FIELD[category]]
     if preview and preview ~= "" then
-        row.subtext = truncate(preview, 80)
+        -- `mandatory`, not `subtext`: Menu has no `subtext` field (0
+        -- occurrences in KOReader's menu.lua across master, v2023.05 and
+        -- v2025.04), so these previews were never drawn. Shortened to fit --
+        -- `mandatory` is right-aligned beside the row text, not a second line.
+        row.mandatory = truncate(preview, 40)
     end
     return row
 end
@@ -257,7 +261,13 @@ function XRayUI.showEgoNet(doc, cp_idx, entry)
             end
             table.insert(items, {
                 text = "\226\128\162 " .. name, -- U+2022 BULLET
-                subtext = neighbour.label,
+                -- `mandatory`, not `subtext`: Menu has no `subtext` field at
+                -- all (0 occurrences in KOReader's menu.lua in master,
+                -- v2023.05 and v2025.04), so a label put there is simply never
+                -- drawn -- and the label is this view's whole payload.
+                -- `mandatory` is the real field for a short, right-aligned
+                -- value next to the row text.
+                mandatory = neighbour.label,
                 keep_menu_open = true,
                 separator = true,
                 callback = function()
@@ -315,8 +325,12 @@ function XRayUI.showEntry(entry, category, doc, cp_idx)
         -- And add_default_buttons is required, because a caller's buttons_table
         -- otherwise REPLACES that row -- the Close button would vanish from
         -- exactly the cards this feature touches (textviewer.lua).
+        -- Only figures have relations. Without the category test a term or a
+        -- location whose name happens to match a `from` gets the button too,
+        -- and it opens a net titled after the term.
+        local is_figure = category == "characters" or category == "historical_figures"
         local buttons, add_defaults = nil, nil
-        if doc and cp_idx and #XRayDoc.egoNet(doc, cp_idx, entry) > 0 then
+        if is_figure and doc and cp_idx and #XRayDoc.egoNet(doc, cp_idx, entry) > 0 then
             buttons = {{
                 {
                     text = _("Relations"),

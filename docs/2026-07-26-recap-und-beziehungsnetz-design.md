@@ -415,9 +415,13 @@ busted grün**. Jeder Check unten trägt deshalb seine Gegenprobe.
 - `fold` verwirft, was in der letzten Stage nicht auflöst — mit Gegenprobe:
   eine Kante auf einen Namen, der dort nur als **Alias** steht, bleibt
   erhalten. Ohne diese zweite Hälfte besteht ein `fold`, der alles verwirft.
-  Für `historical_figures` gilt die Alias-Hälfte **nicht**: dort löst nur der
-  Name auf, weil `clean_response` diese Kategorie ohne `aliases` aufbaut
-  (`merge.py:391-401` gegen `:374`).
+  Das gilt für **beide** Figurenkategorien. (Bis 2026-07-28 war die
+  Alias-Hälfte auf `characters` beschränkt, begründet damit, dass
+  `clean_response` historische Figuren ohne `aliases`-Schlüssel aufbaut
+  (`merge.py:391-401` gegen `:374`). Die Begründung war zu eng: der Snapshot
+  ist **nach** dem Merge, und `_add_alias` legt den Schlüssel dort an —
+  nachgemessen ergibt „Yssa the Elder" + „Queen Yssa the Elder"
+  `aliases: ['Queen Yssa the Elder']`. Die Einschränkung verwarf still Kanten.)
 - `fold` meldet eine **unerwiderte** Kante: `A→B` ohne `B→A` erzeugt eine
   Warnung. Gegenprobe: ein vollständig erwidertes Paar erzeugt keine.
 - `fold` setzt die Obergrenze je `from` durch und verwirft Selbstkanten und
