@@ -107,8 +107,46 @@ package.loaded["ui/widget/confirmbox"] = {
 package.loaded["ui/widget/textviewer"] = {
     new = function(a, b) return { type = "TextViewer", args = b or a } end
 }
+-- The relations net drives KOReader's own Menu stack -- the push lives in
+-- XRayUI.showEgoNet, the pop is Menu:onClose -- so this double has to carry
+-- that behaviour instead of being a bag of constructor arguments. It returns
+-- the constructor table itself, the way the real Widget:new does, with `args`
+-- pointing back at it so the existing `last_shown.args.<field>` accesses keep
+-- working and can never drift from the widget's own fields.
+--
+-- THE TITLE SPLIT IS LOAD-BEARING, not tidiness: the real switchItemTable swaps
+-- item_table and paints the title into the TitleBar, but never assigns
+-- self.title -- that field is read-only at all three of its occurrences in
+-- menu.lua, in every version from v2015.11 to master. A double that sets
+-- `.title` as well would make a missing `menu.title = title` in showEgoNet look
+-- correct, and the way back would carry the wrong heading on a real device
+-- while the suite stayed green. So this one records `painted_title` and leaves
+-- `.title` to the caller, exactly as the widget does.
+--
+-- onClose is a transcription of menu.lua:1460-1468, not an invention: the pop
+-- is upstream's code, ours is only the push, and that is what the specs test.
 package.loaded["ui/widget/menu"] = {
-    new = function(a, b) return { type = "Menu", args = b or a } end
+    new = function(a, b)
+        local m = b or a
+        m.type = "Menu"
+        m.args = m
+        m.item_table_stack = {}
+        m.painted_title = m.title
+        m.switchItemTable = function(self, new_title, new_item_table)
+            if new_item_table then self.item_table = new_item_table end
+            if new_title then self.painted_title = new_title end
+        end
+        m.onClose = function(self)
+            if #self.item_table_stack == 0 then
+                table.insert(_G.ui_tracker.closed, self)
+            else
+                local parent = table.remove(self.item_table_stack)
+                self:switchItemTable(parent.title, parent)
+            end
+            return true
+        end
+        return m
+    end
 }
 package.loaded["ui/widget/verticalgroup"] = {
     new = function(a, b) return { type = "VerticalGroup", args = b or a } end

@@ -266,50 +266,20 @@ teurer als der Schaden.
 
 ### Darstellung
 
-**In zwei Phasen ausgeliefert** (Beschluss 2026-07-27, nach der Aufwandsmessung
-unten): Phase 1 zeigt die Nachbarn als `Menu` nach dem Muster der bestehenden
-Kategorielisten — ~25 Zeilen, nur erprobte Widgets, kein neues Modul. Daten,
-Spoilerfilter, Einstieg und Tap-Navigation sind damit vollständig und am Gerät
-abnehmbar. Phase 2 tauscht allein die Darstellung gegen das unten beschriebene
-gezeichnete Netz aus, wenn es echte Kanten zum Draufschauen gibt. Details in
-`docs/plans/2026-07-27-beziehungsnetz-plan.md`.
+Die Nachbarn stehen als `Menu` nach dem Muster der bestehenden Kategorielisten.
+Ein Tipp auf eine Zeile öffnet die **Karte** dieser Figur; deren Knopf
+„Beziehungen" schaltet das Netz darunter auf sie um. So ist jeder Sprung lesbar,
+statt nur den Graphen entlangzulaufen — „wer war das nochmal" ist die häufigere
+Frage als „zeig mir sein Netz".
 
-Das gezeichnete Netz (Phase 2): neues `xray_graph.lua`, eigenes Widget mit
-eigenem `paintTo`, Vorbild `frontend/ui/widget/bookmapwidget.lua` (dort
-`bb:paintRect` bei :610, :617, :2116).
+Dabei trägt KOReaders eigener `item_table_stack` die Navigation: **ein** Widget
+für beliebig viele Sprünge, und „zurück" landet auf der vorigen Figur statt zu
+schließen, weil `Menu:onClose` den Stapel selbst poppt.
 
-- **Layout:** gewählte Figur mittig, Nachbarn in je einer Spalte links und
-  rechts, abwechselnd befüllt.
-- **Kanten:** waagerechte Striche von der Mittelfigur zur jeweiligen Spalte —
-  reines `paintRect`. Kein Bresenham, keine selbst geschriebene Rasterlinie.
-  Belegt gegen `koreader-base/ffi/blitbuffer.lua`: `paintRect`,
-  `paintRoundedRect`, `setPixel`, `paintCircle`, `paintBorder` existieren,
-  `paintLine` tatsächlich nicht.
-- **Knoten:** `paintRoundedRect`, Beschriftung über
-  `RenderText:renderUtf8Text(bb, x, y + baseline, …)`; historische Figuren mit
-  abgesetztem Rahmen.
-- **Keine Kappung.** Fassung 2 kappte bei 8 und wollte die Grenze aus der
-  Schriftgröße messen; eine Zwischenfassung rechnete sie aus der
-  Bildschirmhöhe. Beides ist gegenstandslos: der `fold` begrenzt bereits auf
-  fünf Kanten je Figur, während eine Clara BW (1072 px, Knoten ~60 px) auf ~17
-  Plätze je Spalte käme. Die Grenze kann nicht greifen — mit ihr entfallen der
-  Parameter, die Frage wer ihn ausrechnet, die Überlaufzeile „+N weitere" und
-  zwei Abnahmefälle. Nähert sich die Kantengrenze je einer Spaltenhöhe, kommt
-  die Kappung zurück, dann im Widget gerechnet.
-- **Tap:** Trefferrechteck pro Knoten; Tap auf einen Nachbarn öffnet dessen
-  Ego-Netz, ein Historien-Stack macht „zurück" zum vorigen Netz statt zum Menü.
-  Soll zusätzlich die Detailkarte erreichbar sein, reicht `xray_ui` dafür ein
-  Callback hinein — `xray_graph` darf `xray_ui` **nicht** requiren, das wäre
-  ein Zyklus (`xray_ui` → `xray_doc`, `xray_lookup` → `xray_ui`, und `main.lua:24`
-  lädt `xray_lookup` zuerst).
-
-Aufwand: **250–350 Zeilen**. Die ~120 einer früheren Fassung waren nicht
-belegt. Gezählte Vergleichswerte: `HistogramWidget` 48 Zeilen für reine Balken
-ohne Text und Tap, `ProgressWidget:paintTo` 117 für *einen* Balken,
-`CalendarDay` 94 für **eine** antippbare beschriftete Box, `BookMapRow` — das
-Vorbild oben — 634. Dazu kommt, dass `xray.koplugin/` bisher **kein** einziges
-`paintTo`, `InputContainer` oder `GestureRange` enthält: es gibt kein
-hauseigenes Gerüst zum Abschreiben.
+Das war ursprünglich als Phase 1 gedacht, mit einem gezeichneten
+Zwei-Spalten-Netz als Phase 2. Nach der Geräteabnahme ist es die **Endform**;
+die Begründung steht unter „Verworfene Alternativen", der Umbau in
+`docs/plans/2026-07-28-beziehungsnetz-endform.md`.
 
 ### Einstieg: Knopf auf der Figurenkarte
 
@@ -374,9 +344,18 @@ Buchtext-Lauf nachrüstbar.
   Figur ein leeres Netz, und 43 Aufrufe sind der vierfache Recap-Aufwand.
 - **Radiales Layout** — sieht am ehesten nach „Graph" aus, verlangt aber
   Bresenham und lässt bei 8 Nachbarn die Labels auf den Diagonalen überlappen.
-- **Liste statt Bild** (`Menu` wie die Kategorien, ~25 Zeilen) — auf jedem
-  Display garantiert lesbar, aber ausdrücklich kein Bild mehr; das war der Kern
-  der ursprünglichen Idee.
+- **Das gezeichnete Netz** — `xray_graph.lua`, Zentrum mittig, Nachbarn in je
+  einer Spalte links und rechts, Kanten als waagerechte `paintRect`-Striche,
+  Knoten als `paintRoundedRect`, Beschriftung über `RenderText`, Historienstack
+  für „zurück". Verworfen am 2026-07-28, nachdem die Liste am Gerät getragen
+  hat. Es waren 250–350 Zeilen neuer Widget-Code ohne hauseigenes Vorbild:
+  `grep -rn "paintTo\|InputContainer\|GestureRange" xray.koplugin/` findet
+  **nichts**, und die gezählten Vergleichswerte reichen von `HistogramWidget`
+  48 Zeilen für reine Balken ohne Text und Tap über `ProgressWidget:paintTo`
+  117 für *einen* Balken und `CalendarDay` 94 für **eine** antippbare
+  beschriftete Box bis zu `BookMapRow` 634. Ein Bild war der Kern der
+  ursprünglichen Idee; die Liste gibt ihn auf und ist dafür auf jedem Display
+  garantiert lesbar.
 - **Symmetrische Labels** („Vater und Sohn") — halb so viele Einträge, aber bei
   Ned im Zentrum und Robb daneben nicht ablesbar, wer der Vater ist.
 - **Fertiges Bild vom Desktop einbetten** — scheitert an der Navigierbarkeit
@@ -449,12 +428,6 @@ busted grün**. Jeder Check unten trägt deshalb seine Gegenprobe.
   sich kein JSON-Modul (`rapidjson`/`json`/`dkjson`/`cjson` alle nicht
   vorhanden). Ersatz ist die Ortsassertion auf der Desktop-Seite, die festhält,
   dass `recap` neben `snapshot` landet und nicht darin.
-- Layout (**erst Phase 2**, mit dem gezeichneten Netz): `#nodes == n` für
-  n = 0, 1, 5 — **und** alle Rechtecke haben
-  `w > 0 and h > 0`, und keine zwei teilen sich dieselbe `(x, y)`. Die
-  Anzahl allein genügt nicht: ein `layout()`, das die richtige Zahl Rechtecke
-  der Größe null am Ursprung liefert, besteht sie (nachgemessen, 6/0) — und
-  dann trifft kein einziger Tap je einen Knoten.
 - **Der Anzeigefilter, gestaffelt und in beide Richtungen:** ein Dokument mit
   zwei Stages, eine Figur existiert erst in der späteren, eine Kante zeigt auf
   sie. An der frühen Stage erscheint sie **nicht**, an der späten **schon**;
@@ -511,7 +484,8 @@ der calibre-Einbettungsweg.
 
 Damit ist Feature A abgenommen.
 
-**Feature B, Phase 1 abgenommen (2026-07-28, Kobo Clara BW, „Die Gefährten").**
+**Feature B abgenommen (2026-07-28, Kobo Clara BW, „Die Gefährten").** Diese
+Abnahme ist es, die die Liste von der Phase 1 zur Endform gemacht hat.
 156 Kanten über 63 Figuren, erzeugt im Nachlauf über das fertige Dokument —
 ohne einen einzigen neu geholten Chunk, womit der Nachrüst-Weg belegt ist. Die
 elf Rückblicke blieben dabei unverändert erhalten.
@@ -530,17 +504,14 @@ Nicht beantwortet: ob ein Modell die Gegenrichtung zuverlässig liefert. Die
 Antwort dieses Laufs entstand programmatisch aus Paaren, die Reziprozität war
 also konstruktiv erfüllt. Bleibt für den nächsten echten Lauf offen.
 
-Am Gerät zu messen bleibt für Feature B (Phase 2):
+Am Gerät zu messen bleibt für Feature B:
 
-- Trefferquote bei n Taps auf Knoten am Rand des Layouts.
-- Verhalten langer Namen in einer Spalte — Umbruch, Kürzung oder Überlauf.
 - Ob fünf Kanten je Figur in der Praxis eine sinnvolle Grenze sind; das ist der
   einzige Prompt-Parameter, den erst ein echtes Buch beantwortet.
 
-Die beiden übrigen Posten der ursprünglichen Messliste sind entfallen:
-Linienbreite für Bresenham-Kanten (es gibt keine Diagonalen mehr) und
-Schriftgröße für 8 Labels (Spalten überlappen nicht, die Kappung wird
-gerechnet).
+Die übrigen Posten der ursprünglichen Messliste sind mit dem gezeichneten Netz
+entfallen: Trefferquote am Layoutrand, Verhalten langer Namen in einer Spalte,
+Linienbreite für Bresenham-Kanten und Schriftgröße für acht Labels.
 
 ---
 
