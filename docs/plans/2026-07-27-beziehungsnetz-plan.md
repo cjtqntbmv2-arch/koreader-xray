@@ -25,6 +25,10 @@ die bestehenden Kategorielisten schon tun.
 ausgetauscht — alles davor und danach bleibt unverändert. Begründung und
 Umfang stehen unten unter „Phase 2".
 
+> **Überholt (2026-07-28):** Phase 2 ist gestrichen, die Liste ist die Endform.
+> Alles über das gezeichnete Netz in diesem Plan ist damit historisch. Nachfolger:
+> `docs/plans/2026-07-28-beziehungsnetz-endform.md`.
+
 Der Zuschnitt folgt der Aufwandsmessung: die gezeichnete Variante ist mit
 250–350 Zeilen die einzige unerprobte Position (`xray.koplugin/` enthält bisher
 kein einziges `paintTo`), während die übrigen sieben Tasks nur vorhandene
@@ -302,30 +306,13 @@ Report wird §6. Zwei verpflichtende Hinweise, beide analog zum Recap:
 
 ---
 
-## Phase 2 — das gezeichnete Netz (eigener Plan, später)
+## Phase 2 — gestrichen
 
-Nur T5 wird ersetzt: `xray.koplugin/xray_graph.lua`, Zentrum mittig, Nachbarn
-in zwei Spalten, Kanten als waagerechte `paintRect`-Striche, Knoten als
-`paintRoundedRect`, Beschriftung über `RenderText:renderUtf8Text`, lange Namen
-über `truncateTextByWidth`. Getrennt in eine reine `layout()`-Funktion (trägt
-die Abnahme, liefert **alle** Geometrie inklusive Zentrum und Kantenbalken) und
-das Widget mit eigenem `paintTo` und Trefferrechtecken. Historienstack für
-„zurück". Kein `require("xray_ui")` — siehe Schichtung oben; die Detailkarte
-erreicht es über ein Callback, das `xray_ui` hineinreicht.
+Das gezeichnete Zwei-Spalten-Netz wird nicht gebaut. Beschluss 2026-07-28, nach
+der Geräteabnahme: die Liste trägt, das Bild wären 250–350 Zeilen neuer
+Widget-Code ohne hauseigenes Vorbild. Begründung im Design unter „Verworfene
+Alternativen", Nachfolgeplan `docs/plans/2026-07-28-beziehungsnetz-endform.md`.
 
-Aufwand **250–350 Zeilen**, gezählt gegen: `HistogramWidget` 48 für reine
-Balken ohne Text und Tap (`calendarview.lua:33-80`), `ProgressWidget:paintTo`
-117 für *einen* Balken (`progresswidget.lua:112-228`), `CalendarDay` 94 für
-**eine** antippbare beschriftete Box (`calendarview.lua:81-174`), `BookMapRow`
-634 (`bookmapwidget.lua:38-671`). `grep -rn "paintTo\|InputContainer\|
-GestureRange" xray.koplugin/` findet **nichts** — es gibt kein hauseigenes
-Gerüst zum Abschreiben.
-
-Dazu gehören die Layout-Abnahmefälle des Designs (`#nodes == n` **plus**
-`w > 0 and h > 0` und keine doppelten Koordinaten), die Spec-Registrierung in
-`tools/spec_runner.lua` und der `ui/rendertext`-Stub in `spec/spec_helper.lua`.
-Beide im Design offen gelassenen Gerätemessungen — lange Namen, Trefferquote am
-Rand — gehören ebenfalls hierher.
 
 ## Abnahme
 
@@ -334,8 +321,8 @@ einschließlich jeder Gegenprobe — mit den vier Korrekturen, die die Prüfung
 dieses Plans erzwungen hat und die dort eingearbeitet sind: der D4-Check muss
 **gestaffelt** sein, der Layout-Check braucht eine **Geometrie**-Assertion, das
 Schema braucht seinen **Positivfall**, und das Versions-Gate muss exportiert
-werden oder entfallen. Die Layout-Fälle gehören zu Phase 2; alles andere ist in
-Phase 1 zu erfüllen.
+werden oder entfallen. Die Layout-Fälle sind mit dem gezeichneten Netz
+entfallen; alles andere ist erfüllt.
 
 Der Grund für diese Strenge ist gemessen, nicht befürchtet: gegen die
 Abnahmeliste in ihrer bisherigen Fassung überlebten drei Mutanten grün — ein
@@ -362,8 +349,7 @@ radiales Layout, Kappung/Überlaufzeile, Gesamtübersicht, Zoom/Pan, Beziehungen
 für Orte und Begriffe. Begründungen im Design unter „Verworfene Alternativen"
 und „Was ersatzlos entfällt".
 
-Das gezeichnete Netz ist **nicht verworfen, sondern Phase 2** — mit demselben
-Zwei-Spalten-Entwurf, den das Design beschreibt.
+Das gezeichnete Netz ist am 2026-07-28 **verworfen** worden; siehe oben.
 
 Das `==`-Gate in `xray_doc.lua:166` bleibt unangetastet — es gehört auf einen
 eigenen Zweig mit eigenem Release, **vor** den nächsten echten Schema-Bump.

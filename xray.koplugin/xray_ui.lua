@@ -99,19 +99,22 @@ local PREVIEW_FIELD = {
 -- doc/cp_idx are threaded through purely so the detail card can offer the
 -- ego-net button; every consumer below tolerates them being nil, which is what
 -- a caller that has no document in scope passes.
+-- No `keep_menu_open` and no `separator` on these rows, here or anywhere else a
+-- `Menu` item is built: both are 0 occurrences in KOReader's menu.lua across
+-- every version from v2015.11 to master (8 and 5 in touchmenu.lua, which is a
+-- different widget -- main.lua:244 sits on a TouchMenu entry and keeps its
+-- separator). They never did anything: the rules were never drawn, and the list
+-- stays open after a tap only because onMenuSelect calls close_callback when it
+-- is set and this plugin sets none. Same species as the `subtext` note below.
 local function buildRow(entry, category, doc, cp_idx)
     if category == "timeline" then
         return {
             text = (entry.chapter or "") .. ": " .. (entry.event or ""),
-            keep_menu_open = true,
-            separator = true,
             callback = function() XRayUI.showEntry(entry, category) end,
         }
     end
     local row = {
         text = "\226\128\162 " .. (entry.name or "?"), -- U+2022 BULLET
-        keep_menu_open = true,
-        separator = true,
         callback = function() XRayUI.showEntry(entry, category, doc, cp_idx) end,
     }
     local preview = PREVIEW_FIELD[category] and entry[PREVIEW_FIELD[category]]
@@ -166,7 +169,6 @@ function XRayUI.showList(ui, doc, cp_idx, category)
         if #entries == 0 then
             table.insert(items, {
                 text = _("No entries in this category yet."),
-                keep_menu_open = true,
                 callback = function() end,
             })
         end
@@ -246,10 +248,24 @@ local DETAIL_BUILDERS = {
 -- drawn two-column net is phase 2 and replaces only this function; everything
 -- that decides WHICH figures appear -- and therefore the whole spoiler
 -- guarantee -- lives in XRayDoc.egoNet and is unaffected by that swap.
-function XRayUI.showEgoNet(doc, cp_idx, entry)
+-- `menu` is the Menu this net is already living in. Passed only when hopping
+-- from one figure to the next INSIDE an open net: that widget then switches its
+-- item_table instead of a second full-screen Menu stacking on top of it.
+-- Omitted everywhere else (card, word lookup, category list), which opens a
+-- fresh net as before.
+function XRayUI.showEgoNet(doc, cp_idx, entry, menu)
     local ok, err = pcall(function()
         local net = XRayDoc.egoNet(doc, cp_idx, entry)
         if #net == 0 then return end
+
+        local title = (entry.name or "") .. " \226\128\148 " .. _("Relations")
+
+        -- The rows need the Menu they belong to, and on the first call it does
+        -- not exist until after them. Captured as an upvalue, so the closures
+        -- see whatever it is assigned below -- Lua binds the variable, not the
+        -- value. Never reference the `menu` parameter from a row: it is nil on
+        -- exactly the call that creates the widget.
+        local target = menu
 
         local items = {}
         for _unused, neighbour in ipairs(net) do
@@ -268,21 +284,50 @@ function XRayUI.showEgoNet(doc, cp_idx, entry)
                 -- `mandatory` is the real field for a short, right-aligned
                 -- value next to the row text.
                 mandatory = neighbour.label,
-                keep_menu_open = true,
-                separator = true,
+                -- A tap opens the NEIGHBOUR's card, not the next net: without
+                -- it there is no way from here to a description at all, and
+                -- "who was that again" is the commoner question. Walking on is
+                -- still one tap away, through that card's own button.
                 callback = function()
-                    XRayUI.showEgoNet(doc, cp_idx, neighbour.entry)
+                    XRayUI.showEntry(neighbour.entry, neighbour.category, doc, cp_idx,
+                        function(viewer)
+                            -- Closing the card is the caller's job, not
+                            -- showEntry's: the switch underneath would be
+                            -- invisible otherwise, while the already-accepted
+                            -- list -> card -> net path must keep its card.
+                            UIManager:close(viewer)
+                            XRayUI.showEgoNet(doc, cp_idx, neighbour.entry, target)
+                        end)
                 end,
             })
         end
 
-        UIManager:show(Menu:new{
-            title = (entry.name or "") .. " \226\128\148 " .. _("Relations"),
-            item_table = items,
-            is_borderless = true,
-            width = Screen:getWidth(),
-            height = Screen:getHeight(),
-        })
+        if target then
+            -- Menu's own stack. onMenuSelect pushes by itself only for
+            -- sub_item_table (menu.lua:1364-1387), so the push is ours; the pop
+            -- is upstream's -- Menu:onClose returns to the parent table and
+            -- only really closes once the stack is empty (menu.lua:1460-1468),
+            -- which makes "back" land on the previous figure for free.
+            target.item_table.title = target.title
+            table.insert(target.item_table_stack, target.item_table)
+            target:switchItemTable(title, items)
+            -- switchItemTable paints the title into the TitleBar but never
+            -- assigns self.title -- that field is read-only at all three of its
+            -- occurrences in menu.lua, in every version from v2015.11 to
+            -- master. Without this line every push from depth 2 on records the
+            -- Menu's CONSTRUCTION title, and the way back shows the right rows
+            -- under the wrong name.
+            target.title = title
+        else
+            target = Menu:new{
+                title = title,
+                item_table = items,
+                is_borderless = true,
+                width = Screen:getWidth(),
+                height = Screen:getHeight(),
+            }
+            UIManager:show(target)
+        end
     end)
     if not ok then
         logger.warn("XRayUI.showEgoNet failed: " .. tostring(err))
@@ -294,7 +339,12 @@ end
 --
 -- doc/cp_idx are optional and only enable the "Relations" button. Callers that
 -- have no document in scope pass nothing and get the card unchanged.
-function XRayUI.showEntry(entry, category, doc, cp_idx)
+--
+-- on_relations(viewer) replaces what that button does. Only showEgoNet passes
+-- it, to switch the net it already has open instead of stacking a second one;
+-- it also decides whether this card closes on the way. Everyone else omits it
+-- and the button opens a fresh net, unchanged.
+function XRayUI.showEntry(entry, category, doc, cp_idx, on_relations)
     local ok, err = pcall(function()
         if not entry then return end
 
@@ -330,22 +380,32 @@ function XRayUI.showEntry(entry, category, doc, cp_idx)
         -- and it opens a net titled after the term.
         local is_figure = category == "characters" or category == "historical_figures"
         local buttons, add_defaults = nil, nil
+        -- Same upvalue trick as showEgoNet: the button needs the viewer it sits
+        -- in, and that is built after the buttons.
+        local viewer
         if is_figure and doc and cp_idx and #XRayDoc.egoNet(doc, cp_idx, entry) > 0 then
             buttons = {{
                 {
                     text = _("Relations"),
-                    callback = function() XRayUI.showEgoNet(doc, cp_idx, entry) end,
+                    callback = function()
+                        if on_relations then
+                            on_relations(viewer)
+                        else
+                            XRayUI.showEgoNet(doc, cp_idx, entry)
+                        end
+                    end,
                 },
             }}
             add_defaults = true
         end
 
-        UIManager:show(TextViewer:new{
+        viewer = TextViewer:new{
             title = entry.name or "",
             text = table.concat(lines, "\n"),
             buttons_table = buttons,
             add_default_buttons = add_defaults,
-        })
+        }
+        UIManager:show(viewer)
     end)
     if not ok then
         logger.warn("XRayUI.showEntry failed: " .. tostring(err))
