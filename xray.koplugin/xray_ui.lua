@@ -96,7 +96,10 @@ local PREVIEW_FIELD = {
     historical_figures = "biography",
 }
 
-local function buildRow(entry, category)
+-- doc/cp_idx are threaded through purely so the detail card can offer the
+-- ego-net button; every consumer below tolerates them being nil, which is what
+-- a caller that has no document in scope passes.
+local function buildRow(entry, category, doc, cp_idx)
     if category == "timeline" then
         return {
             text = (entry.chapter or "") .. ": " .. (entry.event or ""),
@@ -109,7 +112,7 @@ local function buildRow(entry, category)
         text = "\226\128\162 " .. (entry.name or "?"), -- U+2022 BULLET
         keep_menu_open = true,
         separator = true,
-        callback = function() XRayUI.showEntry(entry, category) end,
+        callback = function() XRayUI.showEntry(entry, category, doc, cp_idx) end,
     }
     local preview = PREVIEW_FIELD[category] and entry[PREVIEW_FIELD[category]]
     if preview and preview ~= "" then
@@ -164,7 +167,7 @@ function XRayUI.showList(ui, doc, cp_idx, category)
             })
         end
         for _unused, entry in ipairs(entries) do
-            table.insert(items, buildRow(entry, category))
+            table.insert(items, buildRow(entry, category, doc, cp_idx))
         end
 
         UIManager:show(Menu:new{
@@ -231,9 +234,57 @@ local DETAIL_BUILDERS = {
     end,
 }
 
+-- The ego net of one figure: its directly related figures, each tappable to
+-- open THEIR net. UIManager stacks the menus, so "back" walks the path the
+-- reader took without this having to keep a history of its own.
+--
+-- Displayed as a Menu, the same widget the category lists use. The design's
+-- drawn two-column net is phase 2 and replaces only this function; everything
+-- that decides WHICH figures appear -- and therefore the whole spoiler
+-- guarantee -- lives in XRayDoc.egoNet and is unaffected by that swap.
+function XRayUI.showEgoNet(doc, cp_idx, entry)
+    local ok, err = pcall(function()
+        local net = XRayDoc.egoNet(doc, cp_idx, entry)
+        if #net == 0 then return end
+
+        local items = {}
+        for _unused, neighbour in ipairs(net) do
+            local name = neighbour.entry.name or "?"
+            -- Historical figures are marked because a tap on one opens a card
+            -- from a different category than the reader expects.
+            if neighbour.category == "historical_figures" then
+                name = name .. " \226\128\148 " .. _("historical") -- U+2014 EM DASH
+            end
+            table.insert(items, {
+                text = "\226\128\162 " .. name, -- U+2022 BULLET
+                subtext = neighbour.label,
+                keep_menu_open = true,
+                separator = true,
+                callback = function()
+                    XRayUI.showEgoNet(doc, cp_idx, neighbour.entry)
+                end,
+            })
+        end
+
+        UIManager:show(Menu:new{
+            title = (entry.name or "") .. " \226\128\148 " .. _("Relations"),
+            item_table = items,
+            is_borderless = true,
+            width = Screen:getWidth(),
+            height = Screen:getHeight(),
+        })
+    end)
+    if not ok then
+        logger.warn("XRayUI.showEgoNet failed: " .. tostring(err))
+    end
+end
+
 -- category: same vocabulary as showList; entry: one item from a snapshot
 -- list (or a timeline event when category == "timeline").
-function XRayUI.showEntry(entry, category)
+--
+-- doc/cp_idx are optional and only enable the "Relations" button. Callers that
+-- have no document in scope pass nothing and get the card unchanged.
+function XRayUI.showEntry(entry, category, doc, cp_idx)
     local ok, err = pcall(function()
         if not entry then return end
 
@@ -255,9 +306,31 @@ function XRayUI.showEntry(entry, category)
             table.insert(lines, body)
         end
 
+        -- Only offered when this figure actually has neighbours the reader may
+        -- see. Checking costs nothing here -- the document is already loaded,
+        -- unlike in getSubMenuItems, which stays deliberately data-free.
+        --
+        -- Built fresh per call, never as a module constant: TextViewer appends
+        -- its default row with table.insert, mutating whatever it was handed.
+        -- And add_default_buttons is required, because a caller's buttons_table
+        -- otherwise REPLACES that row -- the Close button would vanish from
+        -- exactly the cards this feature touches (textviewer.lua).
+        local buttons, add_defaults = nil, nil
+        if doc and cp_idx and #XRayDoc.egoNet(doc, cp_idx, entry) > 0 then
+            buttons = {{
+                {
+                    text = _("Relations"),
+                    callback = function() XRayUI.showEgoNet(doc, cp_idx, entry) end,
+                },
+            }}
+            add_defaults = true
+        end
+
         UIManager:show(TextViewer:new{
             title = entry.name or "",
             text = table.concat(lines, "\n"),
+            buttons_table = buttons,
+            add_default_buttons = add_defaults,
         })
     end)
     if not ok then

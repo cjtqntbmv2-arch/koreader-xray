@@ -103,7 +103,7 @@ everything else so it never describes anything past their position. Skipping
 this step leaves a perfectly valid document — the device just does not offer
 the entry.
 
-**Decide before handing the book over in §5.** Adding recaps afterwards means
+**Decide before handing the book over in §6.** Adding recaps afterwards means
 embedding into a book that already carries `xray/xray.json`: the append path
 refuses that, the calibre plugin falls back to a full rewrite, and it warns —
 correctly — that KOReader may then see the book as a different one and reset
@@ -143,7 +143,55 @@ checkpoints from the chunk cache alone and overwrites both files, so a repeated
 assemble removes every recap without saying so. The prose is still in the
 workdir, so re-folding costs nothing.
 
-## 5. Report and hand over
+## 5. Relations (optional)
+
+Relationship edges between the figures, so tapping a character opens its ego
+net — that figure and its direct relations, each tappable to open theirs.
+Skipping this step leaves a perfectly valid document; the device simply does
+not offer the button.
+
+**Decide before handing the book over in §6**, for exactly the same reason as
+the recap: adding relations afterwards means embedding into a book that already
+carries `xray/xray.json`, which forces a full rewrite and can reset KOReader's
+reading statistics.
+
+One model call for the whole book, not one per stage — the pass reads the
+finished document rather than the book text, which also means **an existing
+book can be retrofitted without re-fetching a single chunk**.
+
+```
+python3 -m tools.claude_xray_relations plan "<EPUB>" --doc "<OUTDIR>/xray.json" --workdir "<WORKDIR>"
+```
+
+This writes `relations.prompt.txt` plus `relations_manifest.json`. Dispatch a
+single subagent (model `sonnet`, **absolute** workdir path):
+
+- Read `<ABSOLUTE-WORKDIR>/relations.prompt.txt`. It carries the instruction
+  and the full cast; nothing needs to be added.
+- Write the JSON answer, and nothing else, to
+  `<ABSOLUTE-WORKDIR>/relations.json`, **directly** with the write tool.
+- Use only the names the prompt lists, and give every relationship in **both**
+  directions. A missing counterpart makes the relationship vanish from one of
+  the two figures' nets.
+
+```
+python3 -m tools.claude_xray_relations fold --doc "<OUTDIR>/xray.json" --workdir "<WORKDIR>" --out "<OUTDIR>"
+```
+
+Folding validates and rewrites both filenames. It drops edges whose endpoints
+do not resolve against the finished book (hallucinated names), collapses alias
+spellings, and warns about any relationship given in one direction only.
+
+Note that spoiler safety for this feature is **not** established here — the
+model sees the whole cast while generating. The device shows an edge only when
+both of its endpoints appear in the snapshot the reader has already reached.
+
+**After any re-run of §3, run `fold` again.** `assemble` rebuilds the document
+from the chunk cache and overwrites both files, so a repeated assemble removes
+the relations without saying so. The answer is still in the workdir, so
+re-folding costs nothing.
+
+## 6. Report and hand over
 
 Give the user both paths and the route that fits them:
 

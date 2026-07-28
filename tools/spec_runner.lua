@@ -147,6 +147,7 @@ _G.assert.same = _G.assert.are.same
 local specs = {
     "spec/xray_doc_spec.lua",
     "spec/xray_lookup_spec.lua",
+    "spec/xray_ui_spec.lua",
 }
 
 print("=== Running KOReader X-Ray Unit Tests ===")

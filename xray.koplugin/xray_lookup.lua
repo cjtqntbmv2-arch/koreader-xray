@@ -71,7 +71,12 @@ end
 -- Multiple exact hits (e.g. a name shared across categories, or an alias
 -- that collides with another entry's name): let the reader disambiguate,
 -- same ButtonDialog-of-rows pattern as the old xray_lookupmanager.lua:186-222.
-local function showPicker(results, word)
+--
+-- doc/cp_idx are carried only to hand on to showEntry, which needs them for
+-- the ego-net button. Looking a name up in the text is the most-used way into
+-- a character card, so forgetting them here would drop the feature from the
+-- main path -- silently, because showEntry's body sits inside a pcall.
+local function showPicker(results, word, doc, cp_idx)
     local buttons = {}
     local dialog
     for _unused, result in ipairs(results) do
@@ -80,7 +85,7 @@ local function showPicker(results, word)
                 text = result.entry.name or "?",
                 callback = function()
                     UIManager:close(dialog)
-                    XRayUI.showEntry(result.entry, result.category)
+                    XRayUI.showEntry(result.entry, result.category, doc, cp_idx)
                 end,
             }
         })
@@ -125,9 +130,9 @@ local function performLookup(plugin, word)
         if #results == 0 then
             showInfo(string.format(_("No X-Ray data found for '%s'."), word:sub(1, 30)))
         elseif #results == 1 then
-            XRayUI.showEntry(results[1].entry, results[1].category)
+            XRayUI.showEntry(results[1].entry, results[1].category, doc, cp_idx)
         else
-            showPicker(results, word)
+            showPicker(results, word, doc, cp_idx)
         end
     end)
     if not ok then

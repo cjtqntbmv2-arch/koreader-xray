@@ -251,3 +251,9 @@ msgstr "Was bisher geschah"
 
 msgid "This book's X-Ray data contains no recap."
 msgstr "Die X-Ray-Daten dieses Buchs enthalten keinen Rückblick."
+
+msgid "Relations"
+msgstr "Beziehungen"
+
+msgid "historical"
+msgstr "historisch"
