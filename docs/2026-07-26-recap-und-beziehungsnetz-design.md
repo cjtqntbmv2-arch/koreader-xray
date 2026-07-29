@@ -484,6 +484,15 @@ der calibre-Einbettungsweg.
 
 Damit ist Feature A abgenommen.
 
+**Der Umbau zur Endform abgenommen (2026-07-29, 26.7.31, dasselbe Gerät und
+Buch).** Ein Menu statt N, Zeilentipp öffnet die Karte des Nachbarn, deren Knopf
+schaltet das Netz darunter um, „zurück" führt über zwei Ebenen mit der richtigen
+Überschrift zur Startfigur und schließt erst auf Ebene null. Damit ist auch der
+letzte Meßposten beantwortet: **fünf Kanten je Figur sind die richtige
+inhaltliche Grenze, aber nicht die Netzgröße.** Über die Gegenrichtung wächst
+Frodos Netz auf dreizehn, und in einer Liste stört das nicht — genau die Zahl,
+an der das verworfene Zwei-Spalten-Bild hätte rechnen müssen.
+
 **Feature B abgenommen (2026-07-28, Kobo Clara BW, „Die Gefährten").** Diese
 Abnahme ist es, die die Liste von der Phase 1 zur Endform gemacht hat.
 156 Kanten über 63 Figuren, erzeugt im Nachlauf über das fertige Dokument —
