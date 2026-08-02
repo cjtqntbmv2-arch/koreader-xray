@@ -5,8 +5,9 @@ Ports `xray_data.lua`'s dedup/promote/stamp/sort logic (`deduplicateByName`
 `sortByFirstAppearance`/`sortByName`/`sortDataByFrequency` ~130-172), the
 per-field defaulting from `AIHelper:validateAndCleanData` in
 `xray_aihelper.lua` (function starts ca. line 2008), and the
-checkpoint-merge field rules from `xray_fetch.lua` (description/definition
-= newest non-empty, terms union aliases instead of overwriting).
+checkpoint-merge field rules from `xray_fetch.lua` (terms union aliases
+instead of overwriting; prose fields keep the longest non-empty value
+instead of the newest -- see `BookState._merge`).
 
 Lua line numbers in this module are approximate ("ca.") and anchored to
 KOReader-repo commit `42074d9` -- they drift as that repo moves, so prefer
@@ -518,11 +519,21 @@ class BookState:
         self.book_type: str = "fiction"
         self._seq: int = 0
 
-    def _merge(self, existing, incoming, *, newest_wins, fill_if_empty, stamp, checkpoint_pct):
+    def _merge(self, existing, incoming, *, newest_wins=(), longest_wins=(),
+               fill_if_empty=(), stamp, checkpoint_pct):
         """Port of `deduplicateByName` (`xray_data.lua:223-289`) fused with
         the checkpoint-merge field rules (brief rules 3/4/6). Mutates
         `existing` in place; `incoming` items become the stored objects for
         whichever names are brand new this call.
+
+        `longest_wins` is the prose rule, a divergence from Lua's plain
+        newest-non-empty (`xray_fetch.lua:587` and the sibling call sites):
+        a late segment that mentions a long-running entity only in passing
+        would otherwise replace a dense earlier description with one thin
+        sentence. Spoiler-safe either way -- both values come from text up
+        to their own checkpoint -- but the shorter one is the poorer card.
+        Short labels stay in `newest_wins`: a `role` is not better for
+        being longer.
         """
         lang = self.language
         seen, alias_map = {}, {}
@@ -617,6 +628,13 @@ class BookState:
             for field in newest_wins:
                 if item.get(field):
                     match[field] = item[field]
+            for field in longest_wins:
+                # ponytail: length as a stand-in for richness. Ceiling: a
+                # newer, shorter but more current description loses. Upgrade
+                # path if that shows up in the field: keep the newest value
+                # unless it is markedly shorter (say < 60% of the kept one).
+                if len(item.get(field) or "") > len(match.get(field) or ""):
+                    match[field] = item[field]
             for field in fill_if_empty:
                 if not match.get(field) and item.get(field):
                     match[field] = item[field]
@@ -628,12 +646,13 @@ class BookState:
             # overwrites unconditionally; since we no longer default `role`
             # to a placeholder, an unconditional overwrite would let a
             # segment that never mentions the role erase a known one.
-            newest_wins=("description", "role"), fill_if_empty=("gender", "occupation"),
+            newest_wins=("role",), longest_wins=("description",),
+            fill_if_empty=("gender", "occupation"),
             stamp=True, checkpoint_pct=checkpoint_pct,
         )
         self._merge(
             self.locations, cleaned.get("locations") or [],
-            newest_wins=("description",), fill_if_empty=("importance",),
+            longest_wins=("description",), fill_if_empty=("importance",),
             stamp=True, checkpoint_pct=checkpoint_pct,
         )
         # Terms union aliases on an exact-name hit (brief rule 6) -- a
@@ -641,7 +660,7 @@ class BookState:
         # would drop an alias a later segment simply doesn't repeat.
         self._merge(
             self.terms, cleaned.get("terms") or [],
-            newest_wins=("definition",), fill_if_empty=("expanded", "category"),
+            longest_wins=("definition",), fill_if_empty=("expanded", "category"),
             stamp=False, checkpoint_pct=checkpoint_pct,
         )
         self._merge(
@@ -650,7 +669,7 @@ class BookState:
             # can blank a role: it defaults hist `role` to "" (AIHelper:
             # validateAndCleanData, xray_aihelper.lua, ca. line 2039) and
             # overwrites regardless. We keep the known value instead.
-            newest_wins=("biography", "role"),
+            newest_wins=("role",), longest_wins=("biography",),
             fill_if_empty=("importance_in_book", "context_in_book"),
             stamp=False, checkpoint_pct=checkpoint_pct,
         )

@@ -1,33 +1,44 @@
 # Future adjustments
 
-Low-priority, non-blocking quality items. Not correctness bugs — the data is
-schema-valid and spoiler-safe — but the generated prose could be better. Both
-concern the **X-Ray content**, whose prompts are shared in spirit between this
-repo's `xray.koplugin/prompts/*.lua` and the calibre generator's `prompts.py`
-(calibre-xray repo), so a prompt fix is a cross-repo change.
+Quality observations from the first real end-to-end test (2026-07-11,
+generated X-Ray for "Die Herren von Winterfell", target language `de`, on a
+Kobo). Both items are closed as of 2026-08-02; kept as the record of what was
+seen and what it turned out to be.
 
-Observed during the first real end-to-end test (2026-07-11, calibre-generated
-X-Ray for "Die Herren von Winterfell", target language `de`, on a Kobo).
-
-## 1. Timeline events occasionally come back in English
+## 1. Timeline events occasionally come back in English — FIXED 2026-08-02
 
 In a `de` document, ~9 of 65 `timeline[].event` strings were English (e.g.
-"Jon Schnee finds a sixth, albino direwolf pup left behind in the snow…"), while
-every character/location/term `description` was consistently German. So the
-drift is specific to the chronology/timeline generation, not the entity prompts.
+"Jon Schnee finds a sixth, albino direwolf pup left behind in the snow…"),
+while every character/location/term `description` was consistently German.
 
-Likely cause: the timeline/chronology prompt enforces the output language less
-strictly than the entity prompts. Fix direction: strengthen the explicit
-"write in <language>" instruction in the chronology prompt (and mirror it in
-calibre's `prompts.py`), or add a light post-generation language check.
+Cause found: `timeline[].event` was the one field in the German prompt whose
+instruction was English. The length/detail guidance was injected from code
+rather than from the per-language template — a faithful port of what the old
+Lua did — so the field was literally asked for in English and answered in
+English. The other English blocks that remain (`NAME_RULES`,
+`SEGMENT_ADDENDUM`) constrain *which* entities to extract rather than how to
+phrase a value, and never produced drift.
 
-## 2. `historical_figures` comes back empty
+Fix: `_TL_BUCKETS` / `_TL_LENGTH_RULE` in `xray_core/prompts.py` carry the
+guidance per language, and critical rule 3 of the German prompt now demands
+German values outright, which also covers anything still phrased in English.
+Guarded by `tests/test_prompts.py::test_de_timeline_guidance_is_german`.
+
+## 2. `historical_figures` comes back empty — NOT A DEFECT
 
 For the same book, `historical_figures` was empty across all 12 checkpoints,
-although the text has them (Aegon, Aerys, …); the model folded those into
-`characters`/`terms` instead. An empty category is schema-valid, so this is a
-classification/coverage nudge, not a defect.
+although the text has Aegon, Aerys and others.
 
-Fix direction: clarify in the prompt what distinguishes a historical figure
-(referenced-but-not-present, backstory) from an active character, or accept that
-the split is model-dependent and drop the separate category if it rarely fills.
+That is the intended outcome. The category asks for **real, widely recognized
+historical people** — presidents, authors, generals — and the prompt explicitly
+sends fictional figures to `characters` "even when they interact with real
+events". Aegon and Aerys are ancestors of an invented world, so `characters` is
+where they belong. The category fills only for books that refer to our own
+world: historical fiction, non-fiction, a novel that mentions Napoleon. A
+secondary-world fantasy yielding an empty list is the rule working.
+
+Worth knowing about the ceiling: `NUM_HIST = min(15, max(3, 800 // hist_cap))`
+gives **3 entries in `detailed` and 8 in `normal`** — the more detailed mode has
+the lower count, deliberately, because the cap is an output budget. If a
+history-heavy book ever comes out thin here, that formula is the thing to
+revisit, not the classification rule.

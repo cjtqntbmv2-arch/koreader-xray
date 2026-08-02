@@ -44,6 +44,26 @@ def test_de_prompt_is_german():
     assert f"{PERCENT}%" in user
 
 
+def test_de_timeline_guidance_is_german():
+    """Beobachtet 2026-07-11 ("Die Herren von Winterfell", de): ~9 von 65
+    `timeline[].event` kamen englisch zurueck, waehrend jede description
+    deutsch war. Ursache: die Laengen-Anweisung fuer genau dieses eine Feld
+    wurde sprachunabhaengig (englisch) in den deutschen Prompt gespritzt."""
+    for detail in ("normal", "detailed"):
+        _, user = build_prompt("de", detail, TITLE, AUTHOR, PERCENT, SEGMENT)
+
+        assert "Schreiben Sie" in user
+        assert "Write a" not in user
+        assert "Write between" not in user
+
+
+def test_de_prompt_demands_german_values():
+    _, user = build_prompt("de", "normal", TITLE, AUTHOR, PERCENT, SEGMENT)
+
+    assert "Sprache" in user
+    assert "auf Deutsch" in user
+
+
 def test_segment_addendum_present():
     _, user = build_prompt("en", "normal", TITLE, AUTHOR, PERCENT, SEGMENT)
 

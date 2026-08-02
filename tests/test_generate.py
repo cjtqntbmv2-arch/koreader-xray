@@ -112,14 +112,18 @@ def test_d4_no_future_entities(tmp_path):
 def test_snapshot_is_a_copy_not_a_live_view(tmp_path):
     """Every checkpoint freezes its own snapshot. If snapshot() handed out the
     live BookState lists instead of a deep copy, the last merge would be
-    visible in every earlier checkpoint -- the original spoiler-leak bug."""
+    visible in every earlier checkpoint -- the original spoiler-leak bug.
+
+    The late description is the longer one so that the prose merge rule
+    (longest non-empty wins, BookState._merge) lets it through at all --
+    what is under test here is the freezing, not the field rule."""
     ch1 = "Alice walks the CH1MARKER road with little to say about it today at all. " * 5
     ch2 = "Bob waits at the CH2MARKER gate for a message that never actually arrives. " * 5
     book = _two_chapter_book(ch1, ch2)
 
     doc = _run(book, tmp_path, [
         ("CH1MARKER", {"characters": [{"name": "Alice", "description": "early"}]}),
-        ("CH2MARKER", {"characters": [{"name": "Alice", "description": "late"}]}),
+        ("CH2MARKER", {"characters": [{"name": "Alice", "description": "late and fuller"}]}),
     ])
 
     descriptions = [
@@ -128,7 +132,7 @@ def test_snapshot_is_a_copy_not_a_live_view(tmp_path):
         if any(c["name"] == "Alice" for c in cp["snapshot"]["characters"])
     ]
     assert descriptions[0] == "early"
-    assert descriptions[-1] == "late"
+    assert descriptions[-1] == "late and fuller"
 
 
 # ---------------------------------------------------------------------------

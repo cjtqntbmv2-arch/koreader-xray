@@ -15,13 +15,15 @@ Two deliberate desktop-only divergences from the device version:
   are more prone to surfacing known-book facts from training data than the
   small on-device models the Lua prompts were tuned for.
 - `NAME_RULES_*` / `SEGMENT_ADDENDUM_*` hold the same English text under
-  both the `_EN` and `_DE` name: in the Lua source these two blocks (and the
-  timeline detail-guidance text ported into `_timeline_guidance` below) are
+  both the `_EN` and `_DE` name: in the Lua source these two blocks are
   appended by `xray_aihelper.lua` code unconditionally, not sourced from the
   per-language `prompts/*.lua` tables -- so they are English regardless of
-  `self.current_language` on device too (the Lua comment at the timeline
-  guidance call site literally calls it "language-agnostic guidance"). This
-  is a faithful port of that behavior, not a missed translation.
+  `self.current_language` on device too. This is a faithful port, not a
+  missed translation: they constrain WHICH entities to extract, and the
+  German runs kept returning German values under them. The timeline
+  detail-guidance did NOT survive that test and is now per-language (see
+  `_TL_BUCKETS`); critical rule 3 of the German prompt backs it up for
+  everything else that is still phrased in English.
 
 Stdlib-only on purpose (see `xray_core/epub.py`).
 """
@@ -103,7 +105,7 @@ Vollständige X-Ray-Analyse. Ausgabe: genau EIN JSON-Objekt nach dem Schema unte
 - Nur erzählende Kapitel verwenden. Vor- und Nachspann auslassen (Cover, Titelseite, Copyright, Inhaltsverzeichnis, Widmung, Danksagung, "Auch von").
 - Pro erzählendem Kapitel GENAU EIN Objekt, in Lesereihenfolge. Kapitel einzeln behandeln, niemals gruppieren oder überspringen.
 - "chapter" = exakte Kapitelüberschrift, wie sie im Text erscheint.
-- "event" = Zusammenfassung NUR dieses Kapitels, {TIMELINE_DETAIL_GUIDANCE} (max. {MAX_TIMELINE_EVENT} Zeichen).
+- "event" = Zusammenfassung NUR dieses Kapitels. {TIMELINE_DETAIL_GUIDANCE} (max. {MAX_TIMELINE_EVENT} Zeichen).
 
 ## 2. characters
 - Extrahieren Sie Charaktere aus dem "BOOK TEXT CONTEXT".
@@ -134,7 +136,8 @@ Genau ein JSON-Objekt mit den Schlüsseln: book_type, characters, historical_fig
 # KRITISCHE REGELN – ZULETZT PRÜFEN
 1. Spoiler-Grenze %d%%: keinerlei Informationen aus späteren Abschnitten; Beschreibungen spiegeln exakt den Stand an dieser Marke. Der Text oben ist bereits dort abgeschnitten.
 2. Quelle: Für alles Fiktive zählt nur der mitgelieferte Text – kein Serien-, Autoren- oder Trainingswissen (einzige Ausnahme: biography/role realer historischer Personen).
-3. Ausgabe: nur das JSON-Objekt, ohne Codezäune und ohne Begleittext."""
+3. Sprache: Alle Textwerte im JSON stehen auf Deutsch – auch "event", auch dann, wenn eine Anweisung oben englisch formuliert ist. Eigennamen bleiben unverändert; die JSON-Schlüssel und die Kategorienamen bleiben englisch.
+4. Ausgabe: nur das JSON-Objekt, ohne Codezäune und ohne Begleittext."""
 
 # Desktop divergence from en.lua (which had no footer): a post-data instruction
 # mirroring the DE one -- official Gemini guidance is to place instructions
@@ -283,38 +286,58 @@ def _apply_percent_args(template: str, title: str, author: str, percent: int) ->
     return template % args
 
 
-def _timeline_guidance(tl_len: int) -> tuple[str, str]:
-    """Port of the tl_len bucket ladder in createPrompt (xray_aihelper.lua
-    ~1524-1547). Guidance/example text is language-agnostic in the Lua
-    source (see module docstring) -- used for both en and de prompts."""
-    if tl_len <= 50:
-        guidance = "Write a brief one-phrase summary."
-        example = "The hero escapes the burning city."
-    elif tl_len <= 80:
-        guidance = "Write a concise single-sentence summary."
-        example = "The hero escapes the burning city and reunites with his companions at the river crossing."
-    elif tl_len <= 150:
-        guidance = "Write a detailed summary including context and key consequences."
-        example = (
-            "The hero escapes the burning city, pursued by guards, and reunites with "
-            "companions at the river crossing, where they plan their next move against the antagonist."
-        )
-    else:
-        guidance = "Write a rich, full narrative description including character actions, key events, and their consequences."
-        example = (
-            "The hero escapes the burning city under cover of darkness, pursued by the king's "
-            "guards. After a harrowing chase, he reunites with companions at the river crossing, "
-            "where they learn the antagonist has seized the eastern fortress and begin planning a counterattack."
-        )
-    min_len = tl_len * 3 // 4  # Lua: math.floor(tl_len * 0.75); *3//4 is exact for ints, no float rounding
-    guidance += (
-        f" Write between {min_len} and {tl_len} characters. Do NOT write a shorter "
+# Bucket ladder text per language. The Lua source injected the English
+# wording into the German prompt too (`xray_aihelper.lua` built this in code,
+# not from `prompts/de.lua`), and this module faithfully ported that -- until
+# the first real German book came back with ~9 of 65 `timeline[].event`
+# strings in English while every `description` was German. `event` was the
+# one field in the German prompt whose instruction was English, so the model
+# answered it in the language it was asked in. The device-side Lua prompts no
+# longer exist, so there is nothing left to stay faithful to.
+_TL_BUCKETS = {
+    "en": (
+        "Write a brief one-phrase summary.",
+        "Write a concise single-sentence summary.",
+        "Write a detailed summary including context and key consequences.",
+        "Write a rich, full narrative description including character actions, key events, and their consequences.",
+    ),
+    "de": (
+        "Schreiben Sie eine knappe Zusammenfassung in einem Satzteil.",
+        "Schreiben Sie eine knappe Zusammenfassung in genau einem Satz.",
+        "Schreiben Sie eine ausführliche Zusammenfassung mit Zusammenhang und wesentlichen Folgen.",
+        "Schreiben Sie eine dichte, vollständige Schilderung mit Handlungen der Figuren, den wesentlichen Ereignissen und deren Folgen.",
+    ),
+}
+_TL_LENGTH_RULE = {
+    "en": (
+        " Write between {min_len} and {tl_len} characters. Do NOT write a shorter "
         "summary unless the chapter has almost no content."
-    )
-    return guidance, example
+    ),
+    "de": (
+        " Schreiben Sie zwischen {min_len} und {tl_len} Zeichen. Fassen Sie sich NICHT "
+        "kürzer, es sei denn, das Kapitel hat fast keinen Inhalt."
+    ),
+}
 
 
-def _apply_caps(text: str, caps: dict) -> str:
+def _timeline_guidance(tl_len: int, language: str) -> str:
+    """Port of the tl_len bucket ladder in createPrompt (xray_aihelper.lua
+    ~1524-1547), per language (see `_TL_BUCKETS` above)."""
+    buckets = _TL_BUCKETS.get(language, _TL_BUCKETS["en"])
+    if tl_len <= 50:
+        guidance = buckets[0]
+    elif tl_len <= 80:
+        guidance = buckets[1]
+    elif tl_len <= 150:
+        guidance = buckets[2]
+    else:
+        guidance = buckets[3]
+    min_len = tl_len * 3 // 4  # Lua: math.floor(tl_len * 0.75); *3//4 is exact for ints, no float rounding
+    rule = _TL_LENGTH_RULE.get(language, _TL_LENGTH_RULE["en"])
+    return guidance + rule.format(min_len=min_len, tl_len=tl_len)
+
+
+def _apply_caps(text: str, caps: dict, language: str) -> str:
     """Replace the `{BRACE}` tags -- ported count formulas from
     xray_aihelper.lua:1516-1523 (floor via `//`, same as Lua's math.floor
     since all operands are positive)."""
@@ -325,15 +348,13 @@ def _apply_caps(text: str, caps: dict) -> str:
     num_locs = min(20, max(3, 8 * 100 // loc_len))
     num_hist = min(15, max(3, 8 * 100 // hist_len))
     num_terms = min(20, max(5, 15 * 100 // term_len))
-    tl_guidance, tl_example = _timeline_guidance(tl_len)
-
+    # No {TIMELINE_EXAMPLE} substitution: the tag appears in no template.
     for tag, value in {
         "{MAX_CHAR_DESC}": char_len,
         "{MAX_LOC_DESC}": loc_len,
         "{NUM_LOCS}": num_locs,
         "{MAX_TIMELINE_EVENT}": tl_len,
-        "{TIMELINE_DETAIL_GUIDANCE}": tl_guidance,
-        "{TIMELINE_EXAMPLE}": tl_example,
+        "{TIMELINE_DETAIL_GUIDANCE}": _timeline_guidance(tl_len, language),
         "{MAX_HIST_BIO}": hist_len,
         "{NUM_HIST}": num_hist,
         "{MAX_TERM_DEF}": term_len,
@@ -379,7 +400,7 @@ def build_prompt(language, detail_level, title, author, percent, segment_text,
     else:
         instr = _apply_percent_args(_COMPREHENSIVE[language], title, author, percent)
         instr += _NAME_RULES[language] + _SEGMENT_ADDENDUM[language]
-        instr = _apply_caps(instr, caps)
+        instr = _apply_caps(instr, caps, language)
 
     # Chunk-first: the book text leads so the extract and gleaning calls share a
     # byte-identical [system + chunk] prefix -> Gemini implicit-cache hit on the

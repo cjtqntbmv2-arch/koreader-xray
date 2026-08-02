@@ -498,6 +498,46 @@ def test_whitespace_only_description_does_not_overwrite_known_description():
     assert state.characters[0]["description"] == "echt"
 
 
+def test_thin_later_description_does_not_replace_a_richer_earlier_one():
+    # Ohne Phase C war 'neuester nicht-leerer Wert gewinnt' die Regel: erwaehnt
+    # ein spaetes Segment eine Figur nur beilaeufig, ersetzte der duenne Satz
+    # die dichte fruehere Beschreibung. Spoilerseitig sauber, aber eine
+    # Qualitaetsdelle -- jetzt gewinnt der laengere Wert.
+    rich = "Hauptmann der Wache, seit zwanzig Jahren im Dienst des Hauses."
+    thin = "Ein Mann am Tor."
+    state = BookState()
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "description": rich}]}), 10)
+    state.merge_segment(clean_response({"characters": [{"name": "Franz", "description": thin}]}), 50)
+
+    assert state.characters[0]["description"] == rich
+
+    # Dieselbe Regel fuer die drei anderen Prosafelder.
+    locs = BookState()
+    locs.merge_segment(clean_response({"locations": [{"name": "Ort", "description": rich}]}), 10)
+    locs.merge_segment(clean_response({"locations": [{"name": "Ort", "description": thin}]}), 50)
+    assert locs.locations[0]["description"] == rich
+
+    terms = BookState()
+    terms.merge_segment(clean_response({"terms": [{"name": "Begriff", "definition": rich}]}), 10)
+    terms.merge_segment(clean_response({"terms": [{"name": "Begriff", "definition": thin}]}), 50)
+    assert terms.terms[0]["definition"] == rich
+
+    hist = BookState()
+    hist.merge_segment(clean_response({"historical_figures": [{"name": "H", "biography": rich}]}), 10)
+    hist.merge_segment(clean_response({"historical_figures": [{"name": "H", "biography": thin}]}), 50)
+    assert hist.historical_figures[0]["biography"] == rich
+
+
+def test_role_still_takes_the_newest_value_not_the_longest():
+    # `role` bleibt bewusst newest-wins: ein Kurzetikett (max. 40 Zeichen) ist
+    # nicht besser, weil es laenger ist -- 'spymaster' loest 'innkeeper' ab.
+    state = BookState()
+    state.merge_segment(clean_response({"characters": [{"name": "Miriam", "role": "Wirtin und Besitzerin"}]}), 10)
+    state.merge_segment(clean_response({"characters": [{"name": "Miriam", "role": "Spionin"}]}), 50)
+
+    assert state.characters[0]["role"] == "Spionin"
+
+
 def test_whitespace_only_value_does_not_permanently_block_fill_if_empty_field():
     # Der Fix an der Quelle zahlt sich auch hier aus, ohne _merge anzufassen:
     # eine Whitespace-only occupation wuerde das leere Feld sonst dauerhaft

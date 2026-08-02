@@ -72,7 +72,7 @@ class XRayGeneratorPlugin(InterfaceActionBase):
     description = "Embed generated X-Ray data into an EPUB so it travels to the reader"
     supported_platforms = ["windows", "osx", "linux"]
     author = "Daniel Niehof"
-    version = (26, 7, 31)  # gestempelt von tools/release.py aus VERSION
+    version = (26, 8, 0)  # gestempelt von tools/release.py aus VERSION
     minimum_calibre_version = (6, 0, 0)
     # NB: calibre's real multi-file plugin namespace (confirmed against
     # calibre's own plugin dev manual) is
